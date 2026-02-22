@@ -170,6 +170,8 @@ jobs:
         run: |
           repo=$(mktemp -d)
           git init "$repo"
+          git -C "$repo" config user.email "ci@test"
+          git -C "$repo" config user.name "CI"
           cp "$HOME/.claude/templates/hooks/pre-commit" "$repo/.git/hooks/pre-commit"
           echo "hello world" > "$repo/clean.txt"
           git -C "$repo" add clean.txt
@@ -181,6 +183,8 @@ jobs:
         run: |
           repo=$(mktemp -d)
           git init "$repo"
+          git -C "$repo" config user.email "ci@test"
+          git -C "$repo" config user.name "CI"
           cp "$HOME/.claude/templates/hooks/pre-commit" "$repo/.git/hooks/pre-commit"
           echo "aws_key = AKIAIOSFODNN7EXAMPLE" > "$repo/creds.txt"
           git -C "$repo" add creds.txt
@@ -195,6 +199,8 @@ jobs:
         run: |
           repo=$(mktemp -d)
           git init "$repo"
+          git -C "$repo" config user.email "ci@test"
+          git -C "$repo" config user.name "CI"
           cp "$HOME/.claude/templates/hooks/pre-commit" "$repo/.git/hooks/pre-commit"
           echo "SECRET=foo" > "$repo/.env"
           git -C "$repo" add .env
@@ -209,6 +215,8 @@ jobs:
         run: |
           repo=$(mktemp -d)
           git init "$repo"
+          git -C "$repo" config user.email "ci@test"
+          git -C "$repo" config user.name "CI"
           cp "$HOME/.claude/templates/hooks/pre-commit" "$repo/.git/hooks/pre-commit"
           dd if=/dev/zero of="$repo/big.bin" bs=1M count=6 2>/dev/null
           git -C "$repo" add big.bin
