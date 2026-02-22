@@ -36,7 +36,16 @@ If no open investigations exist, say so and suggest `/investigate <id> new` to s
 
 Check for a project-level memory file:
 1. Look for `MEMORY.md` in the project's memory directory (under `~/.claude/projects/`)
-2. If not in a project, check `~/.claude/projects/C--Users-johnw-Documents/memory/MEMORY.md`
+2. If not in a project, scan `~/.claude/projects/*/memory/MEMORY.md` and pick the most recently modified one
+
+If no memory file was found, or it has no `## Current Work` section, say:
+
+```text
+No prior project session found.
+Suggestions:
+  - Run /investigate <id> new to start an investigation
+  - Start working on your task directly
+```
 
 If found, extract and present the "Current Work" section:
 

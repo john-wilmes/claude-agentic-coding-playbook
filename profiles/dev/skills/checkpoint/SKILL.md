@@ -60,9 +60,10 @@ Run `git status` to confirm the working tree is clean and the branch is up to da
 
 ### 4b. Suggest devil's advocate review (if applicable)
 
-Check how far ahead the current branch is from main:
+Check how far ahead the current branch is from the default branch:
 ```bash
-git rev-list --count main..HEAD 2>/dev/null
+base=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||') || base="main"
+git rev-list --count "$base"..HEAD 2>/dev/null
 ```
 
 If the branch is **5+ commits ahead** and any of the changed files are documentation or configuration (`.md`, `.yaml`, `.json`, `.toml`, `.mdc`), suggest a devil's advocate review:
