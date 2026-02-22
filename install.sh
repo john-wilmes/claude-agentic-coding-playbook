@@ -164,8 +164,12 @@ if [ "$WIZARD" = true ] && [ -f "$CLAUDE_DIR/CLAUDE.md" ]; then
   read -r -p "Choose [1/2/3]: " wiz_choice
   case $wiz_choice in
     1)
-      cp "$CLAUDE_DIR/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md.backup.$(date +%Y%m%d%H%M%S)"
-      echo "  -> Existing CLAUDE.md backed up."
+      if [ "$DRY_RUN" = true ]; then
+        echo "  -> [DRY RUN] Would back up existing CLAUDE.md."
+      else
+        cp "$CLAUDE_DIR/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md.backup.$(date +%Y%m%d%H%M%S)"
+        echo "  -> Existing CLAUDE.md backed up."
+      fi
       FORCE_CLAUDE=true
       ;;
     2)
@@ -188,8 +192,12 @@ echo "--- Installing CLAUDE.md ---"
 if [ "${FORCE_CLAUDE:-false}" = "skip" ]; then
   echo "SKIPPED: CLAUDE.md (wizard choice)"
 elif [ "${FORCE_CLAUDE:-false}" = true ]; then
-  cp "$SCRIPT_DIR/profiles/$PROFILE/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md"
-  echo "INSTALLED: CLAUDE.md"
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would install: CLAUDE.md"
+  else
+    cp "$SCRIPT_DIR/profiles/$PROFILE/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md"
+    echo "INSTALLED: CLAUDE.md"
+  fi
 else
   install_file "$SCRIPT_DIR/profiles/$PROFILE/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md" "CLAUDE.md"
 fi
@@ -262,7 +270,11 @@ echo ""
 echo "Next steps:"
 echo "  1. Review $CLAUDE_DIR/CLAUDE.md and customize for your workflow"
 echo "  2. Start a Claude Code session: claude"
-echo "  3. Run /playbook to configure for your environment"
+if [ "$PROFILE" = "dev" ]; then
+  echo "  3. Run /playbook to configure for your environment"
+else
+  echo "  3. Run /findings to capture research discoveries"
+fi
 echo "  4. Use /resume at session start, /checkpoint at session end"
 echo ""
 echo "Docs: docs/best-practices.md (practices) and docs/tool-comparison.md (Claude vs Cursor)"

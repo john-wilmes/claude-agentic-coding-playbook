@@ -8,9 +8,9 @@ its well-documented failure modes. The evidence:
 - **Quality gap**: AI code contains 1.7x more issues than human code; enterprise
   teams see 10x more security findings with AI-assisted development [CodeRabbit,
   Apiiro].
-- **Prompt injection**: Succeeds 94% of the time in controlled studies (n=216);
-  all 12 published defenses bypassed at 90%+ under adaptive attacks [PMC, "The
-  Attacker Moves Second"].
+- **Prompt injection**: Succeeds 94% of the time against lightweight commercial
+  models in controlled medical LLM studies (n=216); all 12 published defenses
+  bypassed at 90%+ under adaptive attacks [PMC, "The Attacker Moves Second"].
 - **Context economics**: Fresh sessions cost ~10x less per message than exhausted
   ones (5K vs 50K tokens) [Anthropic].
 - **Model routing**: Using Haiku for exploration vs Opus for planning reduces
@@ -26,7 +26,7 @@ its well-documented failure modes. The evidence:
 - **Flow state**: 73% of developers report flow state with AI tools; 87% preserve
   mental effort on repetitive tasks [GitHub].
 - **Review discipline**: Teams with AI code review see quality improvements 81% of
-  the time vs 55% without [Qodo].
+  the time vs 55% among fast-shipping teams without [Qodo].
 
 The practices in this document are derived from peer-reviewed research, large-scale
 industry data, and official vendor documentation. Every statistic includes its
@@ -69,9 +69,9 @@ This has two consequences:
    450 tokens. The rule pays for itself if it prevents even one 450-token retry
    loop.
 
-2. **Long sessions are exponentially more expensive.** As context grows, every
-   message costs more, and the model's performance degrades simultaneously. You
-   pay more for worse output.
+2. **Long sessions grow quadratically in cost.** As context grows, every message
+   costs more, and the model's performance degrades simultaneously. You pay more
+   for worse output.
 
 ### Pricing table (Claude models, per million tokens)
 
@@ -84,7 +84,7 @@ This has two consequences:
 
 Source: Anthropic Prompt Caching documentation [4].
 
-### Why long sessions are exponentially more expensive
+### Why long sessions grow quadratically in cost
 
 Each turn in a conversation sends the full conversation history. Turn 1 sends the
 system prompt (~5K tokens). Turn 10 sends the system prompt plus 9 turns of
@@ -689,8 +689,8 @@ Study at ISSRE 2025 across 500K+ code samples confirmed AI-generated code is
 "generally simpler and more repetitive" but contains "more high-risk security
 vulnerabilities" [32].
 
-Teams using AI for testing report 2.5x higher likelihood of merging code without
-review when hallucination rates are low [10].
+Developers who experience low AI hallucination rates (<20%) are 2.5x more likely
+to merge code without review [10].
 
 ### Browser automation for E2E testing
 
@@ -701,7 +701,7 @@ Take a screenshot of the result and compare it to the original.
 List differences and fix them.
 ```
 
-The Claude in Chrome extension can open browser tabs, test UI interactions, and
+Claude Code's Chrome integration can open browser tabs, test UI interactions, and
 iterate until the code works [1]. This provides a visual feedback loop equivalent
 to running unit tests for backend code.
 
@@ -773,8 +773,8 @@ installed via `/plugin` [31].
 
 Review quality degrades with PR size. AI reviewers -- like human reviewers --
 perform better on focused, small changes than on large, multi-concern PRs. Faros
-AI found that AI adoption led to 154% increase in average PR size, which in turn
-caused 91% increase in PR review time [9].
+AI found that AI adoption correlated with 154% increase in average PR size and
+91% increase in PR review time [9].
 
 Keep PRs small and focused. One concern per PR. This applies equally whether
 the reviewer is human, AI, or both.
@@ -819,7 +819,7 @@ input reaches an LLM:
   succeeded 91.7% of the time [19].
 - **All 12 published defenses bypassed at 90%+ success rate** under adaptive
   attacks. Defenses that reported near-zero attack success against static attacks
-  fell to 90-100% under adaptive evaluation. Human red-teaming achieved 100%
+  fell to 71-100% under adaptive evaluation. Human red-teaming achieved 100%
   success [18].
 - **Injected recommendations persisted in 69.4%** of follow-up interactions [19].
 
@@ -828,10 +828,12 @@ a sole security control.
 
 ### The Rule of Two
 
-NVIDIA's analysis of code execution risks in agentic systems highlights a safety
-framework applicable to coding agents: systems that simultaneously (1) process
-untrusted input, (2) access sensitive data, and (3) change state are inherently
-unsafe [21].
+The "Rule of Two" (originating from the Chromium security model) states that a
+system should never combine more than two of: untrusted input, unsafe
+implementation language, and elevated privilege. NVIDIA's analysis of agentic
+systems [21] applies an analogous principle: systems that simultaneously
+(1) process untrusted input, (2) access sensitive data, and (3) change state are
+inherently unsafe.
 
 Coding agents violate all three properties by design:
 1. They **read untrusted code** -- any repository, PR, or issue could contain
@@ -856,10 +858,10 @@ Apiiro's enterprise study of AI-assisted development teams found [23]:
 ### Real incidents
 
 - **IDEsaster (2025)**: Researchers discovered 30+ vulnerabilities across AI-
-  powered IDEs, resulting in 24 CVEs across 11 platforms including Cursor,
+  powered IDEs, resulting in 24 CVEs across 10+ platforms including Cursor,
   Windsurf, GitHub Copilot, and Zed.dev. Attack vectors included prompt injection
   via JSON schema poisoning, autonomous agent actions without user approval, and
-  configuration file manipulation for code execution [24, 25].
+  configuration file manipulation for code execution [24].
 - **Langflow RCE**: Actively exploited remote code execution vulnerability in an
   AI development framework.
 
@@ -1112,7 +1114,7 @@ Last updated: 2026-02-22
 
 9. **Faros AI -- The AI Productivity Paradox.** https://www.faros.ai/blog/ai-software-engineering -- 21% more tasks completed but zero organizational throughput gain; 154% PR size increase; 91% review time increase; data from 1,255 teams and 10,000+ developers.
 
-10. **Qodo -- State of AI Code Quality.** https://www.qodo.ai/reports/state-of-ai-code-quality/ -- 81% quality improvement with AI review (vs 55% without); 80% of PRs need zero human comments; 82% daily/weekly AI usage; 65% context issues during refactoring.
+10. **Qodo -- State of AI Code Quality.** https://www.qodo.ai/reports/state-of-ai-code-quality/ -- 81% quality improvement with AI review (vs 55% among fast-shipping teams without); 80% of PRs need zero human comments; 82% daily/weekly AI usage; 65% context issues during refactoring.
 
 11. **CodeRabbit -- State of AI vs Human Code Generation.** https://www.coderabbit.ai/blog/state-of-ai-vs-human-code-generation-report -- 1.7x more issues in AI PRs (10.83 vs 6.45); 75% more logic errors; 2.74x security issues; 8x excessive I/O; 470 PRs analyzed.
 
@@ -1140,9 +1142,9 @@ Last updated: 2026-02-22
 
 23. **Apiiro -- AI Coding Vulnerability Study.** https://apiiro.com/blog/4x-velocity-10x-vulnerabilities-ai-coding-assistants-are-shipping-more-risks/ -- 10x more security findings; 322% privilege escalation increase; 153% architectural flaw spike; Azure credentials 2x more exposed; enterprise-scale telemetry data.
 
-24. **IDEsaster -- 30+ CVEs in AI IDEs.** https://thehackernews.com/2025/12/researchers-uncover-30-flaws-in-ai.html -- 30+ vulnerabilities, 24 CVEs, 11 affected platforms; prompt injection via JSON schema poisoning; autonomous agent actions; configuration manipulation for code execution.
+24. **IDEsaster -- 30+ CVEs in AI IDEs.** https://thehackernews.com/2025/12/researchers-uncover-30-flaws-in-ai.html -- 30+ vulnerabilities, 24 CVEs, 10+ affected platforms; prompt injection via JSON schema poisoning; autonomous agent actions; configuration manipulation for code execution.
 
-25. **Fortune -- AI Coding Security Exploits.** https://fortune.com/2025/12/15/ai-coding-tools-security-exploit-software/ -- Coverage of IDEsaster and broader AI coding security landscape.
+25. **Fortune -- AI Coding Security Exploits.** https://fortune.com/2025/12/15/ai-coding-tools-security-exploit-software/ -- Coverage of major AI coding tool security incidents and broader AI coding security landscape.
 
 26. **Addy Osmani -- LLM Coding Workflow.** https://addyosmani.com/blog/ai-coding-workflow/ -- Planning before code, iterative chunking, human verification, version control discipline; ~90% of Claude Code written by Claude Code; model musical chairs for blind spot detection.
 
