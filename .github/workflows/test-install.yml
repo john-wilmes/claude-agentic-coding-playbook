@@ -79,6 +79,29 @@ jobs:
 
           exit $failed
 
+      - name: "Verify CLAUDE.md content"
+        shell: bash
+        run: |
+          file="$HOME/.claude/CLAUDE.md"
+          if [ "${{ matrix.profile }}" = "dev" ]; then
+            grep -q "Explore, Plan, Code, Verify, Commit" "$file"
+            echo "OK: dev workflow string found"
+          else
+            grep -q "Question, Collect, Synthesize, Close" "$file"
+            echo "OK: research workflow string found"
+          fi
+
+      - name: "Verify pre-commit hook is executable"
+        if: runner.os == 'Linux'
+        run: |
+          hook="$HOME/.claude/templates/hooks/pre-commit"
+          if [ ! -x "$hook" ]; then
+            echo "FAIL: $hook is not executable"
+            ls -l "$hook"
+            exit 1
+          fi
+          echo "OK: pre-commit hook is executable"
+
       - name: "Verify dev profile skills"
         if: matrix.profile == 'dev'
         shell: bash
@@ -119,3 +142,21 @@ jobs:
           check "$HOME/.claude/templates/investigation/brief.md"
 
           exit $failed
+
+      # ── Phase 3: Idempotency ─────────────────────────────────────
+
+      - name: "Re-install (idempotency check, bash)"
+        if: runner.os == 'Linux'
+        run: bash install.sh --profile ${{ matrix.profile }} --force
+
+      - name: "Re-install (idempotency check, PowerShell)"
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\install.ps1 -Profile ${{ matrix.profile }} -Force
+
+      - name: "Verify files still intact after re-install"
+        shell: bash
+        run: |
+          test -f "$HOME/.claude/CLAUDE.md" && echo "OK: CLAUDE.md"
+          test -f "$HOME/.claude/templates/project-CLAUDE.md" && echo "OK: project-CLAUDE.md"
+          test -f "$HOME/.claude/templates/hooks/pre-commit" && echo "OK: pre-commit"
