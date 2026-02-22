@@ -43,7 +43,7 @@ cd agentic-coding-playbook
 | Flag | Description |
 |------|-------------|
 | `--profile dev` | Development workflow (default) -- quality gates, code review, testing |
-| `--profile research` | Troubleshooting and research (coming soon) |
+| `--profile research` | Troubleshooting and research -- lighter-weight, read-focused |
 | `--wizard` | Interactive merge with your existing configuration |
 | `--force` | Overwrite existing files without prompting |
 | `--auto-exit` | Auto-exit session after `/checkpoint` completes |
@@ -57,6 +57,7 @@ cd agentic-coding-playbook
   skills/
     checkpoint/SKILL.md              # /checkpoint - save state and end session
     resume/SKILL.md                  # /resume - pick up where you left off
+    playbook/SKILL.md                # /playbook - analyze and improve your config
   templates/
     project-CLAUDE.md                # Template for new project CLAUDE.md files
 ```
@@ -69,6 +70,7 @@ The installer **will not overwrite** existing skills or configuration without pr
 
 - **`/checkpoint`** -- Save all work, update memory with Current Work section, run quality gates, commit, push. Designed for clean session handoffs.
 - **`/resume`** -- Read the Current Work section from memory and present what was done, current state, and next steps. Start every session here.
+- **`/playbook`** -- Analyze your CLAUDE.md configuration and suggest improvements. Modes: `global` (default), `project`, `cursor`, `check`. Uses LLM understanding to merge sections intelligently rather than simple file replacement.
 
 ### CLAUDE.md Rules
 
@@ -99,7 +101,7 @@ Claude Code has a global config layer; Cursor does not. See [docs/tool-compariso
 | Profile | Focus | Status |
 |---------|-------|--------|
 | **dev** | Full development workflow with quality gates, code review, testing, security | Available |
-| **research** | Lightweight exploration, troubleshooting, analysis | Planned |
+| **research** | Lightweight exploration, troubleshooting, analysis | Available |
 
 ## Existing Users
 

@@ -133,6 +133,7 @@ function Install-Skill {
 # --- Wizard ---
 
 $SkipClaude = $false
+$ForceClaude = $false
 if ($Wizard -and (Test-Path (Join-Path $ClaudeDir "CLAUDE.md"))) {
     Write-Host "=== Wizard: Analyzing existing configuration ===" -ForegroundColor Cyan
     $existing = Join-Path $ClaudeDir "CLAUDE.md"
@@ -153,7 +154,7 @@ if ($Wizard -and (Test-Path (Join-Path $ClaudeDir "CLAUDE.md"))) {
             $backup = "$existing.backup.$(Get-Date -Format 'yyyyMMddHHmmss')"
             Copy-Item $existing $backup
             Write-Host "  -> Backed up to $backup" -ForegroundColor Green
-            $Force = $true  # Force the CLAUDE.md install
+            $ForceClaude = $true
         }
         "2" {
             $SkipClaude = $true
@@ -172,6 +173,15 @@ Write-Host ""
 Write-Host "--- Installing CLAUDE.md ---" -ForegroundColor Cyan
 if ($SkipClaude) {
     Write-Host "SKIPPED: CLAUDE.md (wizard choice)" -ForegroundColor Gray
+} elseif ($ForceClaude) {
+    $src = Join-Path $ProfileDir "CLAUDE.md"
+    $dest = Join-Path $ClaudeDir "CLAUDE.md"
+    if ($DryRun) {
+        Write-Host "[DRY RUN] INSTALL: CLAUDE.md -> $dest (wizard backup+replace)" -ForegroundColor Green
+    } else {
+        Copy-Item $src $dest -Force
+        Write-Host "INSTALLED: CLAUDE.md" -ForegroundColor Green
+    }
 } else {
     Install-ConfigFile (Join-Path $ProfileDir "CLAUDE.md") (Join-Path $ClaudeDir "CLAUDE.md") "CLAUDE.md"
 }
