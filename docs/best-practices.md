@@ -786,6 +786,49 @@ Review staged changes before committing -- do not wait for the PR stage. A pre-
 commit review catch is cheaper than a PR-level catch, which is cheaper than a
 production catch.
 
+### Running code review from the CLI
+
+Tools like CodeRabbit offer a CLI that runs reviews locally, outside the PR
+workflow. This is useful for pre-commit review and for agent-driven workflows
+where the agent can act on findings immediately.
+
+Install:
+
+```bash
+curl -fsSL https://cli.coderabbit.ai/install.sh | sh
+```
+
+Authenticate (one-time):
+
+```bash
+coderabbit auth login
+```
+
+Review uncommitted changes (human-readable):
+
+```bash
+coderabbit review --plain --type uncommitted
+```
+
+Review uncommitted changes (agent-optimized -- smaller, structured output
+designed for LLM consumption):
+
+```bash
+coderabbit review --prompt-only --type uncommitted
+```
+
+Review a branch against main:
+
+```bash
+coderabbit review --plain --base main
+```
+
+The `--prompt-only` flag produces output optimized for LLM consumption -- less
+prose, more structured findings. Use it when the agent is the consumer. Use
+`--plain` when a human needs to read the output.
+
+The CLI is free to use for basic reviews. No Pro subscription is required.
+
 ### Baseline review on project creation
 
 When creating a new project or onboarding to an existing codebase, run a full

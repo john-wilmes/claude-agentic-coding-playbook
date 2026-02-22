@@ -36,6 +36,15 @@ Check if the project has type-check, lint, or test commands defined in its CLAUD
 
 If there is no project CLAUDE.md (e.g. Documents session), skip this step.
 
+### 2b. Run code review (if available)
+
+Check if `coderabbit` is on PATH (`which coderabbit` or `command -v coderabbit`). If available:
+- Run `coderabbit review --prompt-only --type uncommitted`
+- Apply actionable findings before committing
+- If a finding is not actionable or conflicts with project architecture, skip it
+
+If `coderabbit` is not on PATH, skip this step.
+
 ### 3. Commit and push
 
 Check `git status` for uncommitted changes. If there are changes:

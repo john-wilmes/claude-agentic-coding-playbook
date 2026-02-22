@@ -66,10 +66,12 @@ Verification is the single highest-leverage practice. Give the agent a way to ch
 
 ## Code Review
 
-- Use an automated code review tool (CodeRabbit, SonarQube, etc.) on every project.
-- On project creation, run a full review of the initial codebase. Fix all findings before continuing.
-- Before every commit, review staged changes. Apply all suggestions unless they introduce a regression or conflict with project architecture. Document the reason when declining a suggestion.
-- When the tool reviews a PR, address all findings before merging.
+If `coderabbit` CLI is available:
+- On project creation, run `coderabbit review --plain` on the full codebase. Fix all findings before continuing.
+- Before every commit, run `coderabbit review --prompt-only --type uncommitted`. Apply all suggestions unless they introduce a regression or conflict with project architecture. Document the reason when declining a suggestion.
+- When reviewing a PR, run `coderabbit review --plain --base main`. Address all findings before merging.
+
+If no CLI tool is available, use whatever automated review is configured (MCP, GitHub app, manual).
 
 ## Security
 
