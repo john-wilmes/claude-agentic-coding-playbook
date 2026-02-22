@@ -36,7 +36,11 @@ EOF
 # Parse arguments
 while [[ "$#" -gt 0 ]]; do
   case $1 in
-    --profile) PROFILE="$2"; shift ;;
+    --profile)
+      if [[ "$#" -lt 2 || "$2" == --* ]]; then
+        echo "ERROR: --profile requires a value (dev, research)"; exit 1
+      fi
+      PROFILE="$2"; shift ;;
     --wizard) WIZARD=true ;;
     --force) FORCE=true ;;
     --auto-exit) AUTO_EXIT=true ;;
@@ -47,11 +51,13 @@ while [[ "$#" -gt 0 ]]; do
   shift
 done
 
-# Validate profile
+# Validate profile (whitelist to prevent path traversal)
+case "$PROFILE" in
+  dev|research) ;;
+  *) echo "ERROR: Unknown profile '$PROFILE'. Available: dev, research"; exit 1 ;;
+esac
 if [ ! -d "$SCRIPT_DIR/profiles/$PROFILE" ]; then
-  echo "ERROR: Profile '$PROFILE' not found."
-  echo "Available profiles:"
-  ls -1 "$SCRIPT_DIR/profiles/"
+  echo "ERROR: Profile '$PROFILE' directory not found."
   exit 1
 fi
 
@@ -212,7 +218,9 @@ done
 
 echo ""
 echo "--- Installing templates ---"
-mkdir -p "$CLAUDE_DIR/templates"
+if [ "$DRY_RUN" != true ]; then
+  mkdir -p "$CLAUDE_DIR/templates"
+fi
 
 # Project CLAUDE.md template
 if [ -f "$SCRIPT_DIR/templates/project-CLAUDE.md" ]; then
@@ -223,7 +231,9 @@ fi
 if [ "$PROFILE" = "research" ] && [ -d "$SCRIPT_DIR/profiles/research/templates" ]; then
   echo ""
   echo "--- Installing investigation templates ---"
-  mkdir -p "$CLAUDE_DIR/templates/investigation/hooks"
+  if [ "$DRY_RUN" != true ]; then
+    mkdir -p "$CLAUDE_DIR/templates/investigation/hooks"
+  fi
   for tmpl_file in "$SCRIPT_DIR/profiles/research/templates"/*; do
     [ -f "$tmpl_file" ] || continue
     tmpl_name=$(basename "$tmpl_file")
@@ -249,7 +259,9 @@ fi
 if [ -d "$SCRIPT_DIR/templates/cursor" ]; then
   echo ""
   echo "--- Installing Cursor templates ---"
-  mkdir -p "$CLAUDE_DIR/templates/cursor/rules" "$CLAUDE_DIR/templates/cursor/commands"
+  if [ "$DRY_RUN" != true ]; then
+    mkdir -p "$CLAUDE_DIR/templates/cursor/rules" "$CLAUDE_DIR/templates/cursor/commands"
+  fi
   for rule_file in "$SCRIPT_DIR/templates/cursor/rules"/*; do
     [ -f "$rule_file" ] || continue
     rule_name=$(basename "$rule_file")
