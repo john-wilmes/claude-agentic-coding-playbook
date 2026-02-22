@@ -291,32 +291,43 @@ if [ -d "$SCRIPT_DIR/templates/cursor" ]; then
   done
 fi
 
-# --- Cleanup old research skills ---
+# --- Cleanup skills from other profile ---
 
-if [ "$PROFILE" = "research" ]; then
-  OLD_SKILLS=("findings" "checkpoint")
-  for old_skill in "${OLD_SKILLS[@]}"; do
-    old_dir="$CLAUDE_DIR/skills/$old_skill"
-    if [ -d "$old_dir" ]; then
-      if [ "$DRY_RUN" = true ]; then
-        echo "[DRY RUN] OLD SKILL: $old_skill (would offer removal)"
-      else
-        echo ""
-        echo "OLD SKILL: /$old_skill is no longer part of the investigation profile."
-        read -r -p "  Remove $old_dir? [y/N] " remove_choice
-        case $remove_choice in
-          y|Y)
-            rm -rf "$old_dir"
-            echo "  -> Removed."
-            ;;
-          *)
-            echo "  -> Kept."
-            ;;
-        esac
-      fi
-    fi
-  done
+# Skills exclusive to each profile (continue is shared)
+DEV_ONLY_SKILLS=("checkpoint" "create-project" "playbook")
+RESEARCH_ONLY_SKILLS=("investigate")
+LEGACY_SKILLS=("findings")
+
+if [ "$PROFILE" = "dev" ]; then
+  OTHER_SKILLS=("${RESEARCH_ONLY_SKILLS[@]}")
+elif [ "$PROFILE" = "research" ]; then
+  OTHER_SKILLS=("${DEV_ONLY_SKILLS[@]}" "${LEGACY_SKILLS[@]}")
 fi
+
+for other_skill in "${OTHER_SKILLS[@]}"; do
+  other_dir="$CLAUDE_DIR/skills/$other_skill"
+  if [ -d "$other_dir" ]; then
+    if [ "$DRY_RUN" = true ]; then
+      echo "[DRY RUN] OTHER PROFILE SKILL: /$other_skill (would offer removal)"
+    elif [ "$FORCE" = true ]; then
+      rm -rf "$other_dir"
+      echo "REMOVED: /$other_skill (not part of $PROFILE profile)"
+    else
+      echo ""
+      echo "OTHER PROFILE SKILL: /$other_skill is not part of the $PROFILE profile."
+      read -r -p "  Remove $other_dir? [y/N] " remove_choice
+      case $remove_choice in
+        y|Y)
+          rm -rf "$other_dir"
+          echo "  -> Removed."
+          ;;
+        *)
+          echo "  -> Kept."
+          ;;
+      esac
+    fi
+  fi
+done
 
 # --- Summary ---
 
@@ -333,6 +344,7 @@ done
 echo "  Templates        -> $CLAUDE_DIR/templates/"
 echo "    project-CLAUDE.md   (copy to new project roots)"
 echo "    hooks/pre-commit    (copy to .git/hooks/ in each project)"
+echo "      Note: If core.hooksPath is set globally, install the hook there instead of .git/hooks/"
 echo "    cursor/rules/       (copy to .cursor/rules/ in each project)"
 echo "    cursor/commands/    (copy to .cursor/commands/ in each project)"
 echo ""

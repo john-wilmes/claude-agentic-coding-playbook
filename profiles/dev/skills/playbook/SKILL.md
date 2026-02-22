@@ -141,12 +141,23 @@ Report gaps and offer to add missing sections.
 
 ### 4. Install pre-commit hook
 
-Check if `.git/hooks/pre-commit` exists in the project. If not, and `~/.claude/templates/hooks/pre-commit` exists:
-- Copy it to `.git/hooks/pre-commit`
-- Make it executable (`chmod +x`)
-- Report what it enforces (large file blocking, credential scanning, .env blocking)
+First, check if `core.hooksPath` is configured:
+```bash
+git config core.hooksPath
+```
 
-If a pre-commit hook already exists, skip (do not overwrite custom hooks).
+**If `core.hooksPath` is set** (e.g., `~/.git-hooks`):
+- Use that directory as the hooks location instead of `.git/hooks/`
+- If a pre-commit hook already exists there, do NOT overwrite — inform the user they need to manually merge the playbook hook into their existing global hook
+- If no pre-commit hook exists there, copy the template and make it executable
+- Warn the user that this is a global hook directory shared across all repos
+
+**If `core.hooksPath` is NOT set:**
+- Check if `.git/hooks/pre-commit` exists in the project. If not, and `~/.claude/templates/hooks/pre-commit` exists:
+  - Copy it to `.git/hooks/pre-commit`
+  - Make it executable (`chmod +x`)
+  - Report what it enforces (large file blocking, credential scanning, .env blocking)
+- If a pre-commit hook already exists, skip (do not overwrite custom hooks).
 
 ## Steps for `cursor` mode
 
