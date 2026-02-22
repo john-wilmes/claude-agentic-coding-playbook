@@ -202,7 +202,7 @@ if (Test-Path $skillsDir) {
 Write-Host ""
 Write-Host "--- Installing templates ---" -ForegroundColor Cyan
 $templatesDir = Join-Path $ClaudeDir "templates"
-if (-not (Test-Path $templatesDir)) { New-Item -ItemType Directory -Path $templatesDir -Force | Out-Null }
+if (-not $DryRun -and -not (Test-Path $templatesDir)) { New-Item -ItemType Directory -Path $templatesDir -Force | Out-Null }
 
 # Project CLAUDE.md template
 $projectTemplate = Join-Path $ScriptDir "templates\project-CLAUDE.md"
@@ -218,8 +218,8 @@ if ($Profile -eq "research") {
         Write-Host "--- Installing investigation templates ---" -ForegroundColor Cyan
         $invTmplDest = Join-Path $templatesDir "investigation"
         $invHooksDest = Join-Path $invTmplDest "hooks"
-        if (-not (Test-Path $invTmplDest)) { New-Item -ItemType Directory -Path $invTmplDest -Force | Out-Null }
-        if (-not (Test-Path $invHooksDest)) { New-Item -ItemType Directory -Path $invHooksDest -Force | Out-Null }
+        if (-not $DryRun -and -not (Test-Path $invTmplDest)) { New-Item -ItemType Directory -Path $invTmplDest -Force | Out-Null }
+        if (-not $DryRun -and -not (Test-Path $invHooksDest)) { New-Item -ItemType Directory -Path $invHooksDest -Force | Out-Null }
         Get-ChildItem $invTmplSrc -File -ErrorAction SilentlyContinue | ForEach-Object {
             Install-ConfigFile $_.FullName (Join-Path $invTmplDest $_.Name) "investigation template: $($_.Name)"
         }
@@ -247,8 +247,8 @@ if (Test-Path $cursorSrc) {
     Write-Host "--- Installing Cursor templates ---" -ForegroundColor Cyan
     $cursorRulesDir = Join-Path $templatesDir "cursor\rules"
     $cursorCmdsDir = Join-Path $templatesDir "cursor\commands"
-    if (-not (Test-Path $cursorRulesDir)) { New-Item -ItemType Directory -Path $cursorRulesDir -Force | Out-Null }
-    if (-not (Test-Path $cursorCmdsDir)) { New-Item -ItemType Directory -Path $cursorCmdsDir -Force | Out-Null }
+    if (-not $DryRun -and -not (Test-Path $cursorRulesDir)) { New-Item -ItemType Directory -Path $cursorRulesDir -Force | Out-Null }
+    if (-not $DryRun -and -not (Test-Path $cursorCmdsDir)) { New-Item -ItemType Directory -Path $cursorCmdsDir -Force | Out-Null }
     Get-ChildItem (Join-Path $cursorSrc "rules") -File -ErrorAction SilentlyContinue | ForEach-Object {
         Install-ConfigFile $_.FullName (Join-Path $cursorRulesDir $_.Name) "cursor rule: $($_.Name)"
     }
