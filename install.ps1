@@ -152,8 +152,12 @@ if ($Wizard -and (Test-Path (Join-Path $ClaudeDir "CLAUDE.md"))) {
     switch ($wizChoice) {
         "1" {
             $backup = "$existing.backup.$(Get-Date -Format 'yyyyMMddHHmmss')"
-            Copy-Item $existing $backup
-            Write-Host "  -> Backed up to $backup" -ForegroundColor Green
+            if ($DryRun) {
+                Write-Host "  -> [DRY RUN] Would back up to $backup" -ForegroundColor Green
+            } else {
+                Copy-Item $existing $backup
+                Write-Host "  -> Backed up to $backup" -ForegroundColor Green
+            }
             $ForceClaude = $true
         }
         "2" {
@@ -257,7 +261,11 @@ Write-Host ""
 Write-Host "Next steps:" -ForegroundColor White
 Write-Host "  1. Review $ClaudeDir\CLAUDE.md and customize for your workflow"
 Write-Host "  2. Start a Claude Code session: claude"
-Write-Host "  3. Run /playbook to configure for your environment"
+if ($Profile -eq "dev") {
+    Write-Host "  3. Run /playbook to configure for your environment"
+} else {
+    Write-Host "  3. Run /findings to capture research discoveries"
+}
 Write-Host "  4. Use /resume at session start, /checkpoint at session end"
 Write-Host ""
 Write-Host "Docs: docs\best-practices.md (practices) and docs\tool-comparison.md (Claude vs Cursor)"
