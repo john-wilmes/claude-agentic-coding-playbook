@@ -189,8 +189,28 @@ Write-Host ""
 Write-Host "--- Installing templates ---" -ForegroundColor Cyan
 $templatesDir = Join-Path $ClaudeDir "templates"
 if (-not (Test-Path $templatesDir)) { New-Item -ItemType Directory -Path $templatesDir -Force | Out-Null }
-Get-ChildItem (Join-Path $ScriptDir "templates") -File | ForEach-Object {
-    Install-ConfigFile $_.FullName (Join-Path $templatesDir $_.Name) "template: $($_.Name)"
+
+# Project CLAUDE.md template
+$projectTemplate = Join-Path $ScriptDir "templates\project-CLAUDE.md"
+if (Test-Path $projectTemplate) {
+    Install-ConfigFile $projectTemplate (Join-Path $templatesDir "project-CLAUDE.md") "template: project-CLAUDE.md"
+}
+
+# Cursor templates
+$cursorSrc = Join-Path $ScriptDir "templates\cursor"
+if (Test-Path $cursorSrc) {
+    Write-Host ""
+    Write-Host "--- Installing Cursor templates ---" -ForegroundColor Cyan
+    $cursorRulesDir = Join-Path $templatesDir "cursor\rules"
+    $cursorCmdsDir = Join-Path $templatesDir "cursor\commands"
+    if (-not (Test-Path $cursorRulesDir)) { New-Item -ItemType Directory -Path $cursorRulesDir -Force | Out-Null }
+    if (-not (Test-Path $cursorCmdsDir)) { New-Item -ItemType Directory -Path $cursorCmdsDir -Force | Out-Null }
+    Get-ChildItem (Join-Path $cursorSrc "rules") -File -ErrorAction SilentlyContinue | ForEach-Object {
+        Install-ConfigFile $_.FullName (Join-Path $cursorRulesDir $_.Name) "cursor rule: $($_.Name)"
+    }
+    Get-ChildItem (Join-Path $cursorSrc "commands") -File -ErrorAction SilentlyContinue | ForEach-Object {
+        Install-ConfigFile $_.FullName (Join-Path $cursorCmdsDir $_.Name) "cursor command: $($_.Name)"
+    }
 }
 
 # --- Auto-exit ---
@@ -209,10 +229,25 @@ Write-Host ""
 Write-Host "=== Installation complete ===" -ForegroundColor Cyan
 Write-Host "Profile: $Profile"
 Write-Host ""
+Write-Host "What was installed:" -ForegroundColor White
+Write-Host "  CLAUDE.md        -> $ClaudeDir\CLAUDE.md (global, loads every session)"
+Get-ChildItem (Join-Path $ProfileDir "skills") -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+    Write-Host "  /$($_.Name) skill  -> $ClaudeDir\skills\$($_.Name)\"
+}
+Write-Host "  Templates        -> $ClaudeDir\templates\"
+Write-Host "    project-CLAUDE.md   (copy to new project roots)"
+Write-Host "    cursor\rules\       (copy to .cursor\rules\ in each project)"
+Write-Host "    cursor\commands\    (copy to .cursor\commands\ in each project)"
+Write-Host ""
+Write-Host "Claude Code: ready to use globally (no per-project setup needed)." -ForegroundColor Green
+Write-Host "Cursor:      copy templates into each project:" -ForegroundColor Yellow
+Write-Host "  Copy-Item -Recurse $ClaudeDir\templates\cursor\rules\ .cursor\rules\"
+Write-Host "  Copy-Item -Recurse $ClaudeDir\templates\cursor\commands\ .cursor\commands\"
+Write-Host ""
 Write-Host "Next steps:" -ForegroundColor White
 Write-Host "  1. Review $ClaudeDir\CLAUDE.md and customize for your workflow"
 Write-Host "  2. Start a Claude Code session: claude"
-Write-Host "  3. Try /resume to see session continuity in action"
-Write-Host "  4. Use /checkpoint at natural breakpoints"
+Write-Host "  3. Run /playbook to configure for your environment"
+Write-Host "  4. Use /resume at session start, /checkpoint at session end"
 Write-Host ""
-Write-Host "Documentation: see docs\best-practices.md in this repo"
+Write-Host "Docs: docs\best-practices.md (practices) and docs\tool-comparison.md (Claude vs Cursor)"
