@@ -23,12 +23,12 @@ done < <(git diff --cached --name-only --diff-filter=ACM)
 while IFS= read -r file; do
   if [ -f "$file" ] && file "$file" | grep -q text; then
     # AWS access keys (AKIA...)
-    if grep -qP 'AKIA[0-9A-Z]{16}' "$file" 2>/dev/null; then
+    if grep -qE 'AKIA[0-9A-Z]{16}' "$file" 2>/dev/null; then
       echo "BLOCKED: $file appears to contain an AWS access key."
       errors=$((errors + 1))
     fi
     # Generic secret/password/token assignments
-    if grep -qPi '(password|secret|token|api_key|apikey)\s*[=:]\s*["\x27][^\s"'\'']{8,}' "$file" 2>/dev/null; then
+    if grep -qEi '(password|secret|token|api_key|apikey)[[:space:]]*[=:][[:space:]]*["'"'"'][^[:space:]"'"'"']{8,}' "$file" 2>/dev/null; then
       echo "WARNING: $file may contain a hardcoded secret. Review before committing."
     fi
   fi

@@ -77,7 +77,7 @@ If no CLI tool is available, use whatever automated review is configured (MCP, G
 
 ### Devil's advocate review
 
-When a branch is 5+ commits ahead of main and includes documentation or configuration changes, suggest a structured adversarial review before creating the PR. This means: verify external claims against live sources, check file paths and URLs, challenge assumptions, cite file:line for every finding. Do not run this on every commit -- it is high-value but high-cost. See `memory/devils-advocate-review.md` for the full research-backed heuristic.
+When a branch is 5+ commits ahead of main and includes documentation or configuration changes, suggest a structured adversarial review before creating the PR. This means: verify external claims against live sources, check file paths and URLs, challenge assumptions, cite file:line for every finding. Do not run this on every commit -- it is high-value but high-cost.
 
 ## Security
 

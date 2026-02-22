@@ -38,7 +38,7 @@ If there is no project CLAUDE.md (e.g. Documents session), skip this step.
 
 ### 2b. Run code review (if available)
 
-Check if `coderabbit` is on PATH (`which coderabbit` or `command -v coderabbit`). If available:
+Check if `coderabbit` is on PATH (`command -v coderabbit`). If available:
 - Run `coderabbit review --prompt-only --type uncommitted`
 - Apply actionable findings before committing
 - If a finding is not actionable or conflicts with project architecture, skip it
@@ -67,7 +67,7 @@ git rev-list --count main..HEAD 2>/dev/null
 
 If the branch is **5+ commits ahead** and any of the changed files are documentation or configuration (`.md`, `.yaml`, `.json`, `.toml`, `.mdc`), suggest a devil's advocate review:
 
-```
+```text
 This branch has <N> commits with doc/config changes. Consider a devil's advocate review before creating a PR:
 - Verify external claims (URLs, prices, versions) against live sources
 - Check file paths and cross-references

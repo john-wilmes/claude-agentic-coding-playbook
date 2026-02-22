@@ -823,6 +823,12 @@ Review a branch against main:
 coderabbit review --plain --base main
 ```
 
+Review the full codebase (useful for project creation or full audits):
+
+```bash
+coderabbit review --plain
+```
+
 The `--prompt-only` flag produces output optimized for LLM consumption -- less
 prose, more structured findings. Use it when the agent is the consumer. Use
 `--plain` when a human needs to read the output.
