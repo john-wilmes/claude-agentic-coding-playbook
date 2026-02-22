@@ -13,7 +13,7 @@ A structured profile for troubleshooting, root cause analysis, and building retr
 | Memory focus | Code changes, lessons learned | Evidence trails, tagged findings |
 | File discipline | Create and edit freely | Read-focused, confirm before editing |
 | Storage | Project repos | `~/.claude/investigations/` |
-| Skills | /checkpoint, /resume, /playbook | /investigate, /resume |
+| Skills | /checkpoint, /continue, /playbook | /investigate, /continue |
 
 ## What gets installed
 
@@ -22,7 +22,7 @@ A structured profile for troubleshooting, root cause analysis, and building retr
   CLAUDE.md                          # Investigation-focused global instructions
   skills/
     investigate/SKILL.md             # Full investigation lifecycle
-    resume/SKILL.md                  # List open investigations, resume work
+    continue/SKILL.md                  # List open investigations, resume work
   templates/
     investigation/
       brief.md                       # Investigation brief template

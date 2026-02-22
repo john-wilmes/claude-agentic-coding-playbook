@@ -1,12 +1,12 @@
 ---
-name: resume
-description: Resume work by listing open investigations and project memory state. Optionally resume or reopen a specific investigation.
+name: continue
+description: Continue work by listing open investigations and project memory state. Optionally resume or reopen a specific investigation.
 disable-model-invocation: false
 allowed-tools: Read, Glob, Grep, Bash
 argument-hint: "[investigation-id]"
 ---
 
-# Resume (Investigation Profile)
+# Continue (Investigation Profile)
 
 Pick up where the last session left off. Lists open investigations and project memory state.
 
@@ -22,7 +22,7 @@ Glob for `~/.claude/investigations/*/STATUS.md` (exclude `_patterns/`).
 
 For each, read the current phase from STATUS.md. Filter to non-closed investigations. Present:
 
-```
+```text
 Open investigations:
   <id>    <phase>    <handoff notes summary>
   <id>    <phase>    <handoff notes summary>
@@ -40,7 +40,7 @@ Check for a project-level memory file:
 
 If found, extract and present the "Current Work" section:
 
-```
+```text
 Project memory (last session):
   <summary from Current Work>
 ```
@@ -60,7 +60,7 @@ If an investigation ID was provided (from argument or user choice):
 5. Read FINDINGS.md if it has content beyond the template defaults.
 6. Present:
 
-```
+```text
 Resuming: <id>
   Question: <from brief>
   Phase: <current phase>

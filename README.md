@@ -57,7 +57,7 @@ Dev profile:
   CLAUDE.md                          # Global instruction file
   skills/
     checkpoint/SKILL.md              # /checkpoint - save state and end session
-    resume/SKILL.md                  # /resume - pick up where you left off
+    continue/SKILL.md                  # /continue - pick up where you left off
     playbook/SKILL.md                # /playbook - analyze and improve your config
   templates/
     project-CLAUDE.md                # Template for new project CLAUDE.md files
@@ -69,7 +69,7 @@ Research (investigation) profile:
   CLAUDE.md                          # Investigation-focused instruction file
   skills/
     investigate/SKILL.md             # /investigate - full investigation lifecycle
-    resume/SKILL.md                  # /resume - list open investigations, resume work
+    continue/SKILL.md                  # /continue - list open investigations, resume work
   templates/
     investigation/                   # Templates for investigation files
   investigations/                    # Investigation storage (created on first use)
@@ -82,7 +82,7 @@ The installer **will not overwrite** existing skills or configuration without pr
 ### Skills
 
 - **`/checkpoint`** -- Save all work, update memory with Current Work section, run quality gates, commit, push. Designed for clean session handoffs.
-- **`/resume`** -- Read the Current Work section from memory and present what was done, current state, and next steps. Start every session here.
+- **`/continue`** -- Read the Current Work section from memory and present what was done, current state, and next steps. Start every session here.
 - **`/playbook`** -- Analyze your CLAUDE.md configuration and suggest improvements. Modes: `global` (default), `project`, `cursor`, `check`. Uses LLM understanding to merge sections intelligently rather than simple file replacement.
 
 ### CLAUDE.md Rules

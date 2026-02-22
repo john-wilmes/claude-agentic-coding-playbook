@@ -1,12 +1,12 @@
 ---
-name: resume
-description: Resume work from where the last session left off. Reads Current Work from memory and presents context.
+name: continue
+description: Continue work from where the last session left off. Reads Current Work from memory and presents context.
 disable-model-invocation: false
 allowed-tools: Read, Glob, Grep
 argument-hint: ""
 ---
 
-# Resume
+# Continue
 
 Pick up where the last session left off by reading the Current Work section from memory.
 
@@ -23,7 +23,7 @@ Check for a project-level memory file first, then fall back to the global Docume
 
 Read the memory file and locate the `## Current Work` section. Present it to the user with clear formatting:
 
-```
+```text
 Last session: <date from Current Work>
 
 What was done:

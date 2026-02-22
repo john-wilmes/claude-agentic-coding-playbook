@@ -82,7 +82,7 @@ If the user chose to merge:
 
 After handling CLAUDE.md, check if recommended skills are installed:
 - `/checkpoint` at `~/.claude/skills/checkpoint/SKILL.md`
-- `/resume` at `~/.claude/skills/resume/SKILL.md`
+- `/continue` at `~/.claude/skills/continue/SKILL.md`
 
 Report any missing skills and offer to note them for the user to install via the install script.
 
@@ -175,7 +175,7 @@ Show what was installed and what was skipped.
 Run a quick audit without making changes:
 
 1. **Global CLAUDE.md**: Does it exist? How many sections match the playbook? What is missing?
-2. **Skills**: Are /checkpoint, /resume, and /playbook installed?
+2. **Skills**: Are /checkpoint, /continue, and /playbook installed?
 3. **Project CLAUDE.md** (if in a project): Does it exist? Does it have quality gates, review rules, test strategy?
 4. **Cursor** (if in a project): Are .cursor rules and commands set up?
 5. **Memory**: Does the project have a memory directory with a MEMORY.md file?
@@ -184,7 +184,7 @@ Present results as a checklist:
 ```
 [x] Global CLAUDE.md (12/12 sections)
 [x] /checkpoint skill installed
-[x] /resume skill installed
+[x] /continue skill installed
 [x] /playbook skill installed
 [ ] Project CLAUDE.md (no quality gates defined)
 [ ] Pre-commit hook (not installed)

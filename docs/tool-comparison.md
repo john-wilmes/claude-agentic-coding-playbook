@@ -82,7 +82,7 @@ The `/playbook` skill can automate this when setting up a new project.
 |---------|------------|--------|
 | **Always-on rules** | Everything in CLAUDE.md | `alwaysApply: true` in `.mdc` frontmatter |
 | **File-pattern rules** | Not supported natively (use project CLAUDE.md or skills) | `globs: "*.tsx"` in `.mdc` frontmatter -- rules activate only for matching files |
-| **On-demand rules** | Skills (`/checkpoint`, `/resume`) -- loaded only when invoked | Commands (`.cursor/commands/`) -- loaded on invocation |
+| **On-demand rules** | Skills (`/checkpoint`, `/continue`) -- loaded only when invoked | Commands (`.cursor/commands/`) -- loaded on invocation |
 | **Conditional loading** | Skills + hooks (deterministic triggers on events) | Agent-requested rules (`description` field, `alwaysApply: false`) |
 
 ### Key difference: Cursor's glob-based activation
