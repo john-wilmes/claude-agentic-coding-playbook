@@ -1193,11 +1193,6 @@ It includes:
 Customize it for your specific project rather than using it as-is. Remove anything
 the agent would do correctly without the instruction.
 
-### Auto-exit option
-
-For CI/CD integration, the installer supports `--auto-exit` to apply defaults
-without interactive prompts.
-
 ### Next steps
 
 1. Install the playbook using the quick install command above.

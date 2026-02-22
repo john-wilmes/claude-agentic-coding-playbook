@@ -7,7 +7,6 @@ CLAUDE_DIR="$HOME/.claude"
 PROFILE="dev"
 WIZARD=false
 FORCE=false
-AUTO_EXIT=false
 DRY_RUN=false
 
 usage() {
@@ -20,14 +19,13 @@ Options:
   --profile <name>    Installation profile: dev (default), research
   --wizard            Interactive wizard to merge with existing configuration
   --force             Overwrite existing files without prompting
-  --auto-exit         Enable auto-exit after /checkpoint completes
   --dry-run           Show what would be installed without making changes
   -h, --help          Show this help message
 
 Examples:
   ./install.sh                          # Install dev profile, prompt on conflicts
   ./install.sh --wizard                 # Interactive merge with existing config
-  ./install.sh --force --auto-exit      # Overwrite everything, enable auto-exit
+  ./install.sh --force                   # Overwrite everything
   ./install.sh --dry-run                # Preview what would be installed
 EOF
   exit 0
@@ -43,7 +41,6 @@ while [[ "$#" -gt 0 ]]; do
       PROFILE="$2"; shift ;;
     --wizard) WIZARD=true ;;
     --force) FORCE=true ;;
-    --auto-exit) AUTO_EXIT=true ;;
     --dry-run) DRY_RUN=true ;;
     -h|--help) usage ;;
     *) echo "Unknown parameter: $1"; usage ;;
@@ -319,15 +316,6 @@ if [ "$PROFILE" = "research" ]; then
       fi
     fi
   done
-fi
-
-# --- Auto-exit option ---
-
-if [ "$AUTO_EXIT" = true ] && [ "$DRY_RUN" != true ]; then
-  touch "$CLAUDE_DIR/.auto-exit-after-checkpoint"
-  echo ""
-  echo "AUTO-EXIT: Enabled. The /checkpoint skill will exit the session automatically."
-  echo "  To disable: rm $CLAUDE_DIR/.auto-exit-after-checkpoint"
 fi
 
 # --- Summary ---

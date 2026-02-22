@@ -4,7 +4,6 @@ param(
     [string]$Profile = "dev",
     [switch]$Wizard,
     [switch]$Force,
-    [switch]$AutoExit,
     [switch]$DryRun,
     [switch]$Help
 )
@@ -23,14 +22,13 @@ Options:
   -Profile <name>    Installation profile: dev (default), research
   -Wizard            Interactive wizard to merge with existing configuration
   -Force             Overwrite existing files without prompting
-  -AutoExit          Enable auto-exit after /checkpoint completes
   -DryRun            Show what would be installed without making changes
   -Help              Show this help message
 
 Examples:
   .\install.ps1                              # Install dev profile
   .\install.ps1 -Wizard                      # Interactive merge with existing config
-  .\install.ps1 -Force -AutoExit             # Overwrite everything, enable auto-exit
+  .\install.ps1 -Force                        # Overwrite everything
   .\install.ps1 -DryRun                      # Preview what would be installed
 "@
     exit 0
@@ -291,16 +289,6 @@ if ($Profile -eq "research") {
             }
         }
     }
-}
-
-# --- Auto-exit ---
-
-if ($AutoExit -and -not $DryRun) {
-    $marker = Join-Path $ClaudeDir ".auto-exit-after-checkpoint"
-    New-Item -ItemType File -Path $marker -Force | Out-Null
-    Write-Host ""
-    Write-Host "AUTO-EXIT: Enabled. /checkpoint will exit the session automatically." -ForegroundColor Green
-    Write-Host "  To disable: Remove-Item $marker"
 }
 
 # --- Summary ---
