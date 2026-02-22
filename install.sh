@@ -253,6 +253,20 @@ if [ "$PROFILE" = "research" ] && [ -d "$SCRIPT_DIR/profiles/research/templates"
     mkdir -p "$CLAUDE_DIR/investigations/_patterns"
     echo "CREATED: ~/.claude/investigations/_patterns/"
   fi
+
+  # Install investigation scripts
+  echo ""
+  echo "--- Installing investigation scripts ---"
+  if [ -f "$SCRIPT_DIR/profiles/research/scripts/sanitize.sh" ]; then
+    if [ "$DRY_RUN" = true ]; then
+      echo "[DRY RUN] INSTALL: sanitize.sh -> ~/.claude/scripts/sanitize.sh"
+    else
+      mkdir -p "$CLAUDE_DIR/scripts"
+      cp "$SCRIPT_DIR/profiles/research/scripts/sanitize.sh" "$CLAUDE_DIR/scripts/sanitize.sh"
+      chmod +x "$CLAUDE_DIR/scripts/sanitize.sh"
+      echo "INSTALLED: sanitize.sh -> $CLAUDE_DIR/scripts/sanitize.sh"
+    fi
+  fi
 fi
 
 # Git hook templates

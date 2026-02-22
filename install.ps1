@@ -235,6 +235,22 @@ if ($Profile -eq "research") {
             if (-not (Test-Path $invDir)) { New-Item -ItemType Directory -Path $invDir -Force | Out-Null }
             Write-Host "CREATED: ~/.claude/investigations/_patterns/" -ForegroundColor Green
         }
+
+        # Install investigation scripts
+        Write-Host ""
+        Write-Host "--- Installing investigation scripts ---" -ForegroundColor Cyan
+        $sanitizeSrc = Join-Path $ProfileDir "scripts\sanitize.sh"
+        if (Test-Path $sanitizeSrc) {
+            $scriptsDir = Join-Path $ClaudeDir "scripts"
+            $sanitizeDest = Join-Path $scriptsDir "sanitize.sh"
+            if ($DryRun) {
+                Write-Host "[DRY RUN] INSTALL: sanitize.sh -> $sanitizeDest" -ForegroundColor Green
+            } else {
+                if (-not (Test-Path $scriptsDir)) { New-Item -ItemType Directory -Path $scriptsDir -Force | Out-Null }
+                Copy-Item $sanitizeSrc $sanitizeDest -Force
+                Write-Host "INSTALLED: sanitize.sh -> $sanitizeDest" -ForegroundColor Green
+            }
+        }
     }
 }
 
