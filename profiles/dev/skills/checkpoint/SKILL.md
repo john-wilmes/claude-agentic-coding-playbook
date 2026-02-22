@@ -79,6 +79,12 @@ This is optional but high-value for documentation-heavy changes. Run it? [y/N]
 
 If the user declines or the conditions are not met, skip.
 
-### 5. Exit session
+### 5. Suggest new session
 
-Run `/exit` to end the session. A new session is better than `/clear` -- it re-runs hooks (fresh agent-comm registration, recent messages) and gets a fully clean context window.
+Tell the user:
+
+```text
+Checkpoint complete. Consider starting a new session (`/exit`) rather than `/clear` -- it re-runs hooks and gets a fully clean context window.
+```
+
+Do NOT invoke `/exit` -- it is a built-in CLI command that the user must run themselves.
