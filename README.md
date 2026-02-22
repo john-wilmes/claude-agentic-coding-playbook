@@ -15,7 +15,7 @@ Key findings from the research:
 | Prompt injection success rate | 94% | PMC controlled study |
 | AI code review defect detection | 44-82% | Greptile, Macroscope benchmarks |
 | Fresh session vs exhausted session cost | ~10x cheaper | Anthropic |
-| Model routing savings (Haiku vs Opus) | 3-60x | Anthropic pricing |
+| Model routing savings (Haiku vs Opus) | 5-20x | Anthropic pricing |
 | Prompt cache hit savings | 90% | Anthropic |
 | Teams with AI review seeing quality gains | 81% vs 55% | Qodo |
 
@@ -135,7 +135,7 @@ The wizard will:
 
 ## Documentation
 
-- **[Best Practices Guide](docs/best-practices.md)** -- the full evidence-backed guide with 33 verified citations
+- **[Best Practices Guide](docs/best-practices.md)** -- the full evidence-backed guide with 34 verified citations
 - **[Claude Code vs Cursor](docs/tool-comparison.md)** -- architectural differences, where agents can run, installation scope, pricing
 - **[Project CLAUDE.md Template](templates/project-CLAUDE.md)** -- starting point for per-project instructions
 - **[Cursor Rules Template](templates/cursor/rules/)** -- `.mdc` rules for Cursor projects
