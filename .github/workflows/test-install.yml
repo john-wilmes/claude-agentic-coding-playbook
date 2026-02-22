@@ -160,3 +160,112 @@ jobs:
           test -f "$HOME/.claude/CLAUDE.md" && echo "OK: CLAUDE.md"
           test -f "$HOME/.claude/templates/project-CLAUDE.md" && echo "OK: project-CLAUDE.md"
           test -f "$HOME/.claude/templates/hooks/pre-commit" && echo "OK: pre-commit"
+
+      # ── Phase 4: Pre-commit hook integration (Linux only) ────────
+      # The hook uses bash process substitution and the `file` command,
+      # which aren't portable to Windows Git Bash.
+
+      - name: "Pre-commit hook: clean commit passes"
+        if: runner.os == 'Linux'
+        run: |
+          repo=$(mktemp -d)
+          git init "$repo"
+          cp "$HOME/.claude/templates/hooks/pre-commit" "$repo/.git/hooks/pre-commit"
+          echo "hello world" > "$repo/clean.txt"
+          git -C "$repo" add clean.txt
+          git -C "$repo" commit -m "clean commit"
+          echo "OK: clean commit succeeded"
+
+      - name: "Pre-commit hook: blocks AWS keys"
+        if: runner.os == 'Linux'
+        run: |
+          repo=$(mktemp -d)
+          git init "$repo"
+          cp "$HOME/.claude/templates/hooks/pre-commit" "$repo/.git/hooks/pre-commit"
+          echo "aws_key = AKIAIOSFODNN7EXAMPLE" > "$repo/creds.txt"
+          git -C "$repo" add creds.txt
+          if git -C "$repo" commit -m "bad commit" 2>&1; then
+            echo "FAIL: hook should have blocked AWS key"
+            exit 1
+          fi
+          echo "OK: AWS key blocked"
+
+      - name: "Pre-commit hook: blocks .env files"
+        if: runner.os == 'Linux'
+        run: |
+          repo=$(mktemp -d)
+          git init "$repo"
+          cp "$HOME/.claude/templates/hooks/pre-commit" "$repo/.git/hooks/pre-commit"
+          echo "SECRET=foo" > "$repo/.env"
+          git -C "$repo" add .env
+          if git -C "$repo" commit -m "bad commit" 2>&1; then
+            echo "FAIL: hook should have blocked .env"
+            exit 1
+          fi
+          echo "OK: .env file blocked"
+
+      - name: "Pre-commit hook: blocks large files"
+        if: runner.os == 'Linux'
+        run: |
+          repo=$(mktemp -d)
+          git init "$repo"
+          cp "$HOME/.claude/templates/hooks/pre-commit" "$repo/.git/hooks/pre-commit"
+          dd if=/dev/zero of="$repo/big.bin" bs=1M count=6 2>/dev/null
+          git -C "$repo" add big.bin
+          if git -C "$repo" commit -m "bad commit" 2>&1; then
+            echo "FAIL: hook should have blocked 6MB file"
+            exit 1
+          fi
+          echo "OK: large file blocked"
+
+      # ── Phase 5: Project scaffolding ─────────────────────────────
+
+      - name: "Scaffold a new project from templates"
+        shell: bash
+        run: |
+          proj=$(mktemp -d)
+          git init "$proj"
+
+          # Copy project CLAUDE.md (what /playbook project does)
+          cp "$HOME/.claude/templates/project-CLAUDE.md" "$proj/CLAUDE.md"
+
+          # Verify expected sections exist
+          grep -q "## Quality Gates" "$proj/CLAUDE.md"
+          grep -q "## Code Review" "$proj/CLAUDE.md"
+          grep -q "## Testing Strategy" "$proj/CLAUDE.md"
+          grep -q "## Project Conventions" "$proj/CLAUDE.md"
+          echo "OK: project CLAUDE.md has all expected sections"
+
+          # Install pre-commit hook (what /playbook project does)
+          mkdir -p "$proj/.git/hooks"
+          cp "$HOME/.claude/templates/hooks/pre-commit" "$proj/.git/hooks/pre-commit"
+          chmod +x "$proj/.git/hooks/pre-commit"
+          test -x "$proj/.git/hooks/pre-commit"
+          echo "OK: pre-commit hook installed and executable"
+
+      - name: "Scaffold an investigation (research profile)"
+        if: matrix.profile == 'research'
+        shell: bash
+        run: |
+          inv_dir="$HOME/.claude/investigations/TEST-001"
+          mkdir -p "$inv_dir/EVIDENCE"
+
+          # Copy brief template (what /investigate new does)
+          cp "$HOME/.claude/templates/investigation/brief.md" "$inv_dir/BRIEF.md"
+
+          # Verify brief template structure
+          grep -q "## Question" "$inv_dir/BRIEF.md"
+          grep -q "## Scope" "$inv_dir/BRIEF.md"
+          grep -q "## Context" "$inv_dir/BRIEF.md"
+          echo "OK: investigation brief has expected sections"
+
+          # Simulate collecting evidence (numbered files)
+          echo "Source: test" > "$inv_dir/EVIDENCE/001-initial-finding.md"
+          echo "Source: test" > "$inv_dir/EVIDENCE/002-follow-up.md"
+          test -f "$inv_dir/EVIDENCE/001-initial-finding.md"
+          test -f "$inv_dir/EVIDENCE/002-follow-up.md"
+          echo "OK: evidence files created with sequential numbering"
+
+          # Verify investigation lives under _patterns parent
+          test -d "$HOME/.claude/investigations/_patterns"
+          echo "OK: _patterns directory exists for cross-investigation patterns"
