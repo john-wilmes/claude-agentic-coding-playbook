@@ -48,6 +48,8 @@ When spawning subagents, set the `model` parameter explicitly.
 - Use subagents for exploration-heavy work to protect parent context size.
 - Never read multiple image files in the same turn -- use a subagent for bulk image examination.
 - Use `/rewind` or double-Escape to undo actions and roll back context.
+- Proactively suggest `/compact` when you notice context growing large (many tool results, long exploration).
+- Proactively suggest `/checkpoint` at natural breakpoints: after completing a feature, fixing a bug, or finishing a refactor.
 
 ## Quality Gates
 
@@ -66,10 +68,16 @@ Verification is the single highest-leverage practice. Give the agent a way to ch
 
 ## Code Review
 
-- Use an automated code review tool (CodeRabbit, SonarQube, etc.) on every project.
-- On project creation, run a full review of the initial codebase. Fix all findings before continuing.
-- Before every commit, review staged changes. Apply all suggestions unless they introduce a regression or conflict with project architecture. Document the reason when declining a suggestion.
-- When the tool reviews a PR, address all findings before merging.
+If `coderabbit` CLI is available:
+- On project creation, run `coderabbit review --plain` on the full codebase. Fix all findings before continuing.
+- Before every commit, run `coderabbit review --prompt-only --type uncommitted`. Apply all suggestions unless they introduce a regression or conflict with project architecture. Document the reason when declining a suggestion.
+- When reviewing a PR, run `coderabbit review --plain --base main`. Address all findings before merging.
+
+If no CLI tool is available, use whatever automated review is configured (MCP, GitHub app, manual).
+
+### Devil's advocate review
+
+When a branch is 5+ commits ahead of main and includes documentation or configuration changes, suggest a structured adversarial review before creating the PR. This means: verify external claims against live sources, check file paths and URLs, challenge assumptions, cite file:line for every finding. Do not run this on every commit -- it is high-value but high-cost.
 
 ## Security
 

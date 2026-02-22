@@ -786,11 +786,123 @@ Review staged changes before committing -- do not wait for the PR stage. A pre-
 commit review catch is cheaper than a PR-level catch, which is cheaper than a
 production catch.
 
+### Running code review from the CLI
+
+Tools like CodeRabbit offer a CLI that runs reviews locally, outside the PR
+workflow. This is useful for pre-commit review and for agent-driven workflows
+where the agent can act on findings immediately.
+
+Install:
+
+```bash
+curl -fsSL https://cli.coderabbit.ai/install.sh | sh
+```
+
+Authenticate (one-time):
+
+```bash
+coderabbit auth login
+```
+
+Review uncommitted changes (human-readable):
+
+```bash
+coderabbit review --plain --type uncommitted
+```
+
+Review uncommitted changes (agent-optimized -- smaller, structured output
+designed for LLM consumption):
+
+```bash
+coderabbit review --prompt-only --type uncommitted
+```
+
+Review a branch against main:
+
+```bash
+coderabbit review --plain --base main
+```
+
+Review the full codebase (useful for project creation or full audits):
+
+```bash
+coderabbit review --plain
+```
+
+The `--prompt-only` flag produces output optimized for LLM consumption -- less
+prose, more structured findings. Use it when the agent is the consumer. Use
+`--plain` when a human needs to read the output.
+
+The CLI is free to use for basic reviews. No Pro subscription is required.
+
 ### Baseline review on project creation
 
 When creating a new project or onboarding to an existing codebase, run a full
 review. This establishes a quality baseline and catches existing issues before new
 code is layered on top.
+
+### Devil's advocate review for milestone changes
+
+Standard code review catches line-level issues -- bugs, style, missing error
+handling. It does not catch semantic drift: stale citations, broken URLs,
+contradictory claims across files, or prices that changed since the code was
+written. For that, you need an adversarial review pass.
+
+**When the research says it works.** LLMs cannot self-correct through intrinsic
+reflection alone -- asking "did I make a mistake?" without external signal often
+degrades output [Huang et al., ICLR 2024]. But when the reviewer is given
+concrete verification tasks (check this URL, confirm this file path, verify this
+price), self-correction becomes effective because verification is easier than
+generation [Kamoi et al., TACL 2025].
+
+**When to run one:**
+
+- A branch is 5+ commits ahead of main with documentation or configuration
+  changes. Accumulated drift across sessions creates consistency problems.
+- After completing or substantially updating any document with external
+  references (citations, URLs, version numbers, pricing claims).
+- After a major refactor that touches many files.
+
+**When not to bother:**
+
+- Every commit (that is what pre-commit review handles).
+- Single-file code changes with good test coverage.
+- The diminishing returns curve is steep: round 1 of reflection captures most
+  gains; rounds 3+ yield single-digit-percent improvement at up to 50x the
+  token cost of a single pass [Shinn et al., 2023].
+
+**Structural requirements for effectiveness:**
+
+1. **Forced disagreement.** The reviewer must raise a substantive concern each
+   round. Without this, LLMs converge prematurely toward agreement.
+2. **Priority ordering.** Correctness before style. Without ordering, reviews
+   gravitate toward shallow nitpicks.
+3. **Concrete evidence required.** Both parties must cite file:line or provide
+   diffs, not abstract suggestions.
+4. **External verification.** The reviewer must check claims against live
+   sources, run commands, and read files -- not just re-read its own output.
+5. **Early termination.** Stop when genuine consensus is reached rather than
+   padding to a round count.
+
+### Pre-commit hooks for mechanical enforcement
+
+Some rules should not depend on the agent following instructions. A pre-commit
+git hook can mechanically block:
+
+- Files larger than 5MB (which should be hosted externally)
+- AWS access keys and common credential patterns
+- `.env` files that should be in `.gitignore`
+
+The playbook includes a pre-commit hook template at `templates/hooks/pre-commit`.
+Install it per project:
+
+```bash
+cp ~/.claude/templates/hooks/pre-commit .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
+```
+
+The `/playbook project` skill and `/create-project` skill install this
+automatically.
 
 ---
 

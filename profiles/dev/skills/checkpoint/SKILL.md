@@ -36,6 +36,15 @@ Check if the project has type-check, lint, or test commands defined in its CLAUD
 
 If there is no project CLAUDE.md (e.g. Documents session), skip this step.
 
+### 2b. Run code review (if available)
+
+Check if `coderabbit` is on PATH (`command -v coderabbit`). If available:
+- Run `coderabbit review --prompt-only --type uncommitted`
+- Apply actionable findings before committing
+- If a finding is not actionable or conflicts with project architecture, skip it
+
+If `coderabbit` is not on PATH, skip this step.
+
 ### 3. Commit and push
 
 Check `git status` for uncommitted changes. If there are changes:
@@ -49,16 +58,26 @@ If there are no changes, skip. If not in a git repo, skip.
 
 Run `git status` to confirm the working tree is clean and the branch is up to date with remote.
 
-### 5. End session
+### 4b. Suggest devil's advocate review (if applicable)
 
-Tell the user:
-
-```
-Checkpoint complete. To continue with a fresh context, exit and start a new session:
-  cd <current-directory>
-  claude
+Check how far ahead the current branch is from main:
+```bash
+git rev-list --count main..HEAD 2>/dev/null
 ```
 
-Do not run `/clear`. A new session is better -- it re-runs hooks (fresh agent-comm registration, recent messages) and gets a fully clean context window.
+If the branch is **5+ commits ahead** and any of the changed files are documentation or configuration (`.md`, `.yaml`, `.json`, `.toml`, `.mdc`), suggest a devil's advocate review:
 
-If auto-exit is enabled (the file `~/.claude/.auto-exit-after-checkpoint` exists), exit the session automatically after displaying the checkpoint summary.
+```text
+This branch has <N> commits with doc/config changes. Consider a devil's advocate review before creating a PR:
+- Verify external claims (URLs, prices, versions) against live sources
+- Check file paths and cross-references
+- Challenge assumptions and cite file:line for findings
+
+This is optional but high-value for documentation-heavy changes. Run it? [y/N]
+```
+
+If the user declines or the conditions are not met, skip.
+
+### 5. Exit session
+
+Run `/exit` to end the session. A new session is better than `/clear` -- it re-runs hooks (fresh agent-comm registration, recent messages) and gets a fully clean context window.

@@ -255,6 +255,20 @@ if [ "$PROFILE" = "research" ] && [ -d "$SCRIPT_DIR/profiles/research/templates"
   fi
 fi
 
+# Git hook templates
+if [ -d "$SCRIPT_DIR/templates/hooks" ]; then
+  echo ""
+  echo "--- Installing git hook templates ---"
+  if [ "$DRY_RUN" != true ]; then
+    mkdir -p "$CLAUDE_DIR/templates/hooks"
+  fi
+  for hook_file in "$SCRIPT_DIR/templates/hooks"/*; do
+    [ -f "$hook_file" ] || continue
+    hook_name=$(basename "$hook_file")
+    install_file "$hook_file" "$CLAUDE_DIR/templates/hooks/$hook_name" "git hook: $hook_name"
+  done
+fi
+
 # Cursor templates (rules + commands)
 if [ -d "$SCRIPT_DIR/templates/cursor" ]; then
   echo ""
@@ -324,6 +338,7 @@ for skill_dir in "$SCRIPT_DIR/profiles/$PROFILE/skills"/*/; do
 done
 echo "  Templates        -> $CLAUDE_DIR/templates/"
 echo "    project-CLAUDE.md   (copy to new project roots)"
+echo "    hooks/pre-commit    (copy to .git/hooks/ in each project)"
 echo "    cursor/rules/       (copy to .cursor/rules/ in each project)"
 echo "    cursor/commands/    (copy to .cursor/commands/ in each project)"
 echo ""
