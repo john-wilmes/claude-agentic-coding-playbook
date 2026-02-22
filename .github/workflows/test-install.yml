@@ -1,0 +1,121 @@
+name: Test Install Scripts
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test-install:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        profile: [dev, research]
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.os }} / ${{ matrix.profile }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Phase 1: Dry-run ──────────────────────────────────────────
+
+      - name: "Dry-run install (bash)"
+        if: runner.os == 'Linux'
+        run: |
+          output=$(bash install.sh --profile ${{ matrix.profile }} --dry-run 2>&1)
+          echo "$output"
+          echo "$output" | grep -q '\[DRY RUN\] INSTALL'
+
+      - name: "Dry-run install (PowerShell)"
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $output = & .\install.ps1 -Profile ${{ matrix.profile }} -DryRun 2>&1 | Out-String
+          Write-Output $output
+          if ($output -notmatch '\[DRY RUN\] INSTALL') {
+            throw "Dry-run output missing expected [DRY RUN] INSTALL lines"
+          }
+
+      - name: "Verify dry-run created no files"
+        shell: bash
+        run: |
+          if [ -f "$HOME/.claude/CLAUDE.md" ]; then
+            echo "FAIL: dry-run should not create files"
+            exit 1
+          fi
+          echo "OK: no files created during dry-run"
+
+      # ── Phase 2: Real install ─────────────────────────────────────
+
+      - name: "Install (bash)"
+        if: runner.os == 'Linux'
+        run: bash install.sh --profile ${{ matrix.profile }} --force
+
+      - name: "Install (PowerShell)"
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\install.ps1 -Profile ${{ matrix.profile }} -Force
+
+      # ── Phase 2b: Verify installed files ──────────────────────────
+
+      - name: "Verify common files"
+        shell: bash
+        run: |
+          failed=0
+          check() {
+            if [ ! -e "$1" ]; then
+              echo "MISSING: $1"
+              failed=1
+            else
+              echo "OK: $1"
+            fi
+          }
+
+          check "$HOME/.claude/CLAUDE.md"
+          check "$HOME/.claude/templates/project-CLAUDE.md"
+          check "$HOME/.claude/templates/hooks/pre-commit"
+
+          exit $failed
+
+      - name: "Verify dev profile skills"
+        if: matrix.profile == 'dev'
+        shell: bash
+        run: |
+          failed=0
+          check() {
+            if [ ! -e "$1" ]; then
+              echo "MISSING: $1"
+              failed=1
+            else
+              echo "OK: $1"
+            fi
+          }
+
+          check "$HOME/.claude/skills/checkpoint/SKILL.md"
+          check "$HOME/.claude/skills/continue/SKILL.md"
+          check "$HOME/.claude/skills/playbook/SKILL.md"
+
+          exit $failed
+
+      - name: "Verify research profile skills and extras"
+        if: matrix.profile == 'research'
+        shell: bash
+        run: |
+          failed=0
+          check() {
+            if [ ! -e "$1" ]; then
+              echo "MISSING: $1"
+              failed=1
+            else
+              echo "OK: $1"
+            fi
+          }
+
+          check "$HOME/.claude/skills/investigate/SKILL.md"
+          check "$HOME/.claude/skills/continue/SKILL.md"
+          check "$HOME/.claude/investigations/_patterns/"
+          check "$HOME/.claude/templates/investigation/brief.md"
+
+          exit $failed
