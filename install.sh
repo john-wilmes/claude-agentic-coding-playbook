@@ -205,11 +205,28 @@ done
 echo ""
 echo "--- Installing templates ---"
 mkdir -p "$CLAUDE_DIR/templates"
-for template_file in "$SCRIPT_DIR/templates"/*; do
-  [ -f "$template_file" ] || continue
-  template_name=$(basename "$template_file")
-  install_file "$template_file" "$CLAUDE_DIR/templates/$template_name" "template: $template_name"
-done
+
+# Project CLAUDE.md template
+if [ -f "$SCRIPT_DIR/templates/project-CLAUDE.md" ]; then
+  install_file "$SCRIPT_DIR/templates/project-CLAUDE.md" "$CLAUDE_DIR/templates/project-CLAUDE.md" "template: project-CLAUDE.md"
+fi
+
+# Cursor templates (rules + commands)
+if [ -d "$SCRIPT_DIR/templates/cursor" ]; then
+  echo ""
+  echo "--- Installing Cursor templates ---"
+  mkdir -p "$CLAUDE_DIR/templates/cursor/rules" "$CLAUDE_DIR/templates/cursor/commands"
+  for rule_file in "$SCRIPT_DIR/templates/cursor/rules"/*; do
+    [ -f "$rule_file" ] || continue
+    rule_name=$(basename "$rule_file")
+    install_file "$rule_file" "$CLAUDE_DIR/templates/cursor/rules/$rule_name" "cursor rule: $rule_name"
+  done
+  for cmd_file in "$SCRIPT_DIR/templates/cursor/commands"/*; do
+    [ -f "$cmd_file" ] || continue
+    cmd_name=$(basename "$cmd_file")
+    install_file "$cmd_file" "$CLAUDE_DIR/templates/cursor/commands/$cmd_name" "cursor command: $cmd_name"
+  done
+fi
 
 # --- Auto-exit option ---
 
@@ -227,17 +244,25 @@ echo "=== Installation complete ==="
 echo "Profile: $PROFILE"
 echo ""
 echo "What was installed:"
-echo "  CLAUDE.md       -> $CLAUDE_DIR/CLAUDE.md"
+echo "  CLAUDE.md        -> $CLAUDE_DIR/CLAUDE.md (global, loads every session)"
 for skill_dir in "$SCRIPT_DIR/profiles/$PROFILE/skills"/*/; do
   [ -d "$skill_dir" ] || continue
-  echo "  /$(basename "$skill_dir") skill -> $CLAUDE_DIR/skills/$(basename "$skill_dir")/"
+  echo "  /$(basename "$skill_dir") skill  -> $CLAUDE_DIR/skills/$(basename "$skill_dir")/"
 done
-echo "  Templates       -> $CLAUDE_DIR/templates/"
+echo "  Templates        -> $CLAUDE_DIR/templates/"
+echo "    project-CLAUDE.md   (copy to new project roots)"
+echo "    cursor/rules/       (copy to .cursor/rules/ in each project)"
+echo "    cursor/commands/    (copy to .cursor/commands/ in each project)"
+echo ""
+echo "Claude Code: ready to use globally (no per-project setup needed)."
+echo "Cursor:      copy templates into each project:"
+echo "  cp -r $CLAUDE_DIR/templates/cursor/rules/ .cursor/rules/"
+echo "  cp -r $CLAUDE_DIR/templates/cursor/commands/ .cursor/commands/"
 echo ""
 echo "Next steps:"
 echo "  1. Review $CLAUDE_DIR/CLAUDE.md and customize for your workflow"
 echo "  2. Start a Claude Code session: claude"
-echo "  3. Try /resume to see session continuity in action"
-echo "  4. Use /checkpoint at natural breakpoints"
+echo "  3. Run /playbook to configure for your environment"
+echo "  4. Use /resume at session start, /checkpoint at session end"
 echo ""
-echo "Documentation: see docs/best-practices.md in this repo"
+echo "Docs: docs/best-practices.md (practices) and docs/tool-comparison.md (Claude vs Cursor)"

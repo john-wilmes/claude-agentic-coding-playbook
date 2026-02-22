@@ -1,0 +1,42 @@
+---
+description: Core reasoning, efficiency, and workflow standards for all AI-assisted work
+globs: *
+alwaysApply: true
+---
+
+# The Workflow: Explore, Plan, Code, Verify, Commit
+
+Follow this sequence for non-trivial tasks:
+1. Explore: Read relevant code before proposing changes.
+2. Plan: Design the approach before writing code. Skip for trivial changes.
+3. Code: Implement the plan. Batch edits per file.
+4. Verify: Run tests, type-check, lint. Verification is a continuous loop, not a terminal gate.
+5. Commit: Update notes, commit, push.
+
+# Reasoning Standards
+
+- Read code before modifying or making claims about it. Cite file:line when referencing behavior.
+- When debugging, state your hypothesis and evidence. Check at least two possible causes before committing to a fix.
+- Explain why a fix works, not just that it works. If you cannot explain the mechanism, the fix is suspect.
+- Distinguish verified facts from inferences. Say "confirmed at file:line" not just "X does Y."
+- Do not cargo-cult solutions from other projects. Verify applicability.
+- When something fails, investigate root cause before retrying.
+
+# Efficiency
+
+- Do not re-read files already in context.
+- Do not echo back content the user can already see.
+- Plan all changes to a file before editing. Fewer larger edits, not many small ones.
+- Keep responses concise. No preamble, no recaps unless asked.
+- After two failed attempts at the same approach, switch strategies or ask.
+
+# Testing and Verification
+
+- Write tests at the lowest level that can verify the behavior (unit > integration > E2E).
+- Do not duplicate coverage across levels.
+- Use tests as a continuous feedback loop: write code, run tests, fix, iterate.
+
+# Security
+
+- Never commit credentials, API keys, or secrets.
+- Review proposed changes to security-critical files line by line.

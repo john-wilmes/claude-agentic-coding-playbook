@@ -1,0 +1,29 @@
+---
+description: Quality gates, code review, git discipline, and repository standards
+globs: *
+alwaysApply: true
+---
+
+# Quality Gates
+
+- Run type-check and lint before committing.
+- Fix test failures -- do not bypass, skip, or suppress them.
+- All .skip additions to tests require a comment documenting root cause.
+
+# Code Review
+
+- Use an automated code review tool on every project.
+- Before every commit, review staged changes. Apply all suggestions unless they introduce a regression or conflict with project architecture.
+- When the tool reviews a PR, address all findings before merging.
+
+# Git Discipline
+
+- Never use --no-verify on git commit or push.
+- Never amend published commits without explicit approval.
+- Never force-push to main or master without explicit approval.
+
+# Repository Hygiene
+
+- Every project must have a .gitignore. At minimum: node_modules/, dist/, .env*, *.log, OS files.
+- Never create orphan files. Every file must be referenced by at least one other file.
+- Never commit files over 5MB.
