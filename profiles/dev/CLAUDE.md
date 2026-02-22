@@ -48,6 +48,8 @@ When spawning subagents, set the `model` parameter explicitly.
 - Use subagents for exploration-heavy work to protect parent context size.
 - Never read multiple image files in the same turn -- use a subagent for bulk image examination.
 - Use `/rewind` or double-Escape to undo actions and roll back context.
+- Proactively suggest `/compact` when you notice context growing large (many tool results, long exploration).
+- Proactively suggest `/checkpoint` at natural breakpoints: after completing a feature, fixing a bug, or finishing a refactor.
 
 ## Quality Gates
 
@@ -72,6 +74,10 @@ If `coderabbit` CLI is available:
 - When reviewing a PR, run `coderabbit review --plain --base main`. Address all findings before merging.
 
 If no CLI tool is available, use whatever automated review is configured (MCP, GitHub app, manual).
+
+### Devil's advocate review
+
+When a branch is 5+ commits ahead of main and includes documentation or configuration changes, suggest a structured adversarial review before creating the PR. This means: verify external claims against live sources, check file paths and URLs, challenge assumptions, cite file:line for every finding. Do not run this on every commit -- it is high-value but high-cost. See `memory/devils-advocate-review.md` for the full research-backed heuristic.
 
 ## Security
 

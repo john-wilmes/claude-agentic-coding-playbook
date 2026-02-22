@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# pre-commit hook: block large files and common credential patterns
+# Installed by the agentic-coding-playbook. Safe to customize per project.
+set -euo pipefail
+
+MAX_FILE_SIZE_KB=5120  # 5MB
+
+errors=0
+
+# --- Block large files ---
+while IFS= read -r file; do
+  if [ -f "$file" ]; then
+    size_kb=$(( $(wc -c < "$file") / 1024 ))
+    if [ "$size_kb" -gt "$MAX_FILE_SIZE_KB" ]; then
+      echo "BLOCKED: $file is ${size_kb}KB (max ${MAX_FILE_SIZE_KB}KB). Host large files externally."
+      errors=$((errors + 1))
+    fi
+  fi
+done < <(git diff --cached --name-only --diff-filter=ACM)
+
+# --- Block common credential patterns ---
+# Only scan text files staged for commit
+while IFS= read -r file; do
+  if [ -f "$file" ] && file "$file" | grep -q text; then
+    # AWS access keys (AKIA...)
+    if grep -qP 'AKIA[0-9A-Z]{16}' "$file" 2>/dev/null; then
+      echo "BLOCKED: $file appears to contain an AWS access key."
+      errors=$((errors + 1))
+    fi
+    # Generic secret/password/token assignments
+    if grep -qPi '(password|secret|token|api_key|apikey)\s*[=:]\s*["\x27][^\s"'\'']{8,}' "$file" 2>/dev/null; then
+      echo "WARNING: $file may contain a hardcoded secret. Review before committing."
+    fi
+  fi
+done < <(git diff --cached --name-only --diff-filter=ACM)
+
+# --- Block .env files ---
+while IFS= read -r file; do
+  case "$file" in
+    .env|.env.*|*.env)
+      echo "BLOCKED: $file looks like an environment file. Add it to .gitignore."
+      errors=$((errors + 1))
+      ;;
+  esac
+done < <(git diff --cached --name-only --diff-filter=ACM)
+
+if [ "$errors" -gt 0 ]; then
+  echo ""
+  echo "$errors file(s) blocked. Fix the issues above and try again."
+  exit 1
+fi

@@ -835,6 +835,69 @@ When creating a new project or onboarding to an existing codebase, run a full
 review. This establishes a quality baseline and catches existing issues before new
 code is layered on top.
 
+### Devil's advocate review for milestone changes
+
+Standard code review catches line-level issues -- bugs, style, missing error
+handling. It does not catch semantic drift: stale citations, broken URLs,
+contradictory claims across files, or prices that changed since the code was
+written. For that, you need an adversarial review pass.
+
+**When the research says it works.** LLMs cannot self-correct through intrinsic
+reflection alone -- asking "did I make a mistake?" without external signal often
+degrades output [Huang et al., ICLR 2024]. But when the reviewer is given
+concrete verification tasks (check this URL, confirm this file path, verify this
+price), self-correction becomes effective because verification is easier than
+generation [Kamoi et al., TACL 2025].
+
+**When to run one:**
+
+- A branch is 5+ commits ahead of main with documentation or configuration
+  changes. Accumulated drift across sessions creates consistency problems.
+- After completing or substantially updating any document with external
+  references (citations, URLs, version numbers, pricing claims).
+- After a major refactor that touches many files.
+
+**When not to bother:**
+
+- Every commit (that is what pre-commit review handles).
+- Single-file code changes with good test coverage.
+- The diminishing returns curve is steep: round 1 of reflection captures most
+  gains; rounds 3+ yield single-digit-percent improvement at up to 50x the
+  token cost of a single pass [Shinn et al., 2023].
+
+**Structural requirements for effectiveness:**
+
+1. **Forced disagreement.** The reviewer must raise a substantive concern each
+   round. Without this, LLMs converge prematurely toward agreement.
+2. **Priority ordering.** Correctness before style. Without ordering, reviews
+   gravitate toward shallow nitpicks.
+3. **Concrete evidence required.** Both parties must cite file:line or provide
+   diffs, not abstract suggestions.
+4. **External verification.** The reviewer must check claims against live
+   sources, run commands, and read files -- not just re-read its own output.
+5. **Early termination.** Stop when genuine consensus is reached rather than
+   padding to a round count.
+
+### Pre-commit hooks for mechanical enforcement
+
+Some rules should not depend on the agent following instructions. A pre-commit
+git hook can mechanically block:
+
+- Files larger than 5MB (which should be hosted externally)
+- AWS access keys and common credential patterns
+- `.env` files that should be in `.gitignore`
+
+The playbook includes a pre-commit hook template at `templates/hooks/pre-commit`.
+Install it per project:
+
+```bash
+cp ~/.claude/templates/hooks/pre-commit .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
+```
+
+The `/playbook project` skill and `/create-project` skill install this
+automatically.
+
 ---
 
 ## 10. Security and Trust Boundaries
