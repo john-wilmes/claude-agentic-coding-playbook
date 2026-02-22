@@ -1,58 +1,72 @@
 #!/usr/bin/env bash
-# Pre-commit hook: warn if investigation files may contain PII/PHI
-# Install: cp this file to .git/hooks/pre-commit in your investigations repo
-# Requires: presidio-analyzer (pip install presidio-analyzer)
-
 set -euo pipefail
 
-if ! python3 -c "import presidio_analyzer" 2>/dev/null; then
-  echo "WARNING: presidio-analyzer not installed. Skipping PII/PHI check."
-  echo "  Install: pip install presidio-analyzer presidio-anonymizer"
-  exit 0
-fi
+# Pre-commit hook: auto-sanitize investigation files for PII/PHI.
+# Principle: auto-sanitize on commit, never reject.
+#
+# 1. Blocks EVIDENCE/ files from staging (local-only raw data)
+# 2. Runs sanitize.sh on staged BRIEF.md, FINDINGS.md, STATUS.md
+# 3. Re-stages sanitized files automatically
 
-CONFIG="${HOME}/.claude/templates/investigation/presidio.yaml"
+SANITIZE_SCRIPT="${HOME}/.claude/scripts/sanitize.sh"
 
-if [ ! -f "$CONFIG" ]; then
-  echo "WARNING: No presidio.yaml found at $CONFIG. Skipping PII/PHI check."
-  exit 0
-fi
-
-STAGED=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(md|txt)$' || true)
+STAGED=$(git diff --cached --name-only --diff-filter=ACM)
 
 if [ -z "$STAGED" ]; then
-  exit 0
+    exit 0
 fi
 
-echo "Checking staged investigation files for PII/PHI..."
+# --- Block EVIDENCE/ files (local-only raw data) ---
 
-FOUND_PII=false
+EXIT_CODE=0
 while IFS= read -r file; do
-  [ -z "$file" ] && continue
-  RESULT=$(python3 -c "
-import sys
-from presidio_analyzer import AnalyzerEngine
-analyzer = AnalyzerEngine()
-with open(sys.argv[1], 'r') as f:
-    text = f.read()
-results = analyzer.analyze(text=text, language='en')
-for r in results:
-    print(f'  {r.entity_type} (score: {r.score:.2f}) at position {r.start}-{r.end}')
-" "$file" 2>/dev/null || true)
+    [ -z "$file" ] && continue
+    case "$file" in
+        */EVIDENCE/*)
+            echo "Error: $file must not be committed (local-only raw data)" >&2
+            EXIT_CODE=1
+            ;;
+    esac
+done <<EOF
+$STAGED
+EOF
 
-  if [ -n "$RESULT" ]; then
-    echo "PII/PHI detected in $file:"
-    echo "$RESULT"
-    FOUND_PII=true
-  fi
-done <<< "$STAGED"
-
-if [ "$FOUND_PII" = true ]; then
-  echo ""
-  echo "PII/PHI detected in staged files. Options:"
-  echo "  1. Run /investigate <id> close to auto-sanitize"
-  echo "  2. Manually redact the flagged content"
-  exit 1
+if [ "$EXIT_CODE" -ne 0 ]; then
+    echo "Unstage EVIDENCE/ files before committing." >&2
+    exit "$EXIT_CODE"
 fi
 
-echo "No PII/PHI detected."
+# --- PHI Sanitization ---
+
+# Collect investigation markdown files to sanitize
+FILES_TO_SANITIZE=()
+while IFS= read -r file; do
+    [ -z "$file" ] && continue
+    case "$file" in
+        */BRIEF.md|*/FINDINGS.md|*/STATUS.md)
+            FILES_TO_SANITIZE+=("$file")
+            ;;
+    esac
+done <<EOF
+$STAGED
+EOF
+
+if [ ${#FILES_TO_SANITIZE[@]} -eq 0 ]; then
+    exit 0
+fi
+
+if [ ! -x "$SANITIZE_SCRIPT" ]; then
+    echo "Note: sanitize.sh not found at $SANITIZE_SCRIPT. Skipping auto-sanitization." >&2
+    echo "  Review investigation files for PII/PHI before sharing." >&2
+    exit 0
+fi
+
+# Run sanitization
+"$SANITIZE_SCRIPT" "${FILES_TO_SANITIZE[@]}" || true
+
+# Re-stage sanitized files
+for file in "${FILES_TO_SANITIZE[@]}"; do
+    git add "$file"
+done
+
+exit 0
