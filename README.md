@@ -46,7 +46,6 @@ cd agentic-coding-playbook
 | `--profile research` | Investigation workflow -- structured evidence collection, tagging, PHI sanitization |
 | `--wizard` | Interactive merge with your existing configuration |
 | `--force` | Overwrite existing files without prompting |
-| `--auto-exit` | Auto-exit session after `/checkpoint` completes |
 | `--dry-run` | Preview what would be installed |
 
 ### What Gets Installed
