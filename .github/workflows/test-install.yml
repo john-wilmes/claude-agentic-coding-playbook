@@ -32,7 +32,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $output = & .\install.ps1 -Profile ${{ matrix.profile }} -DryRun 2>&1 | Out-String
+          $output = & .\install.ps1 -Profile ${{ matrix.profile }} -DryRun *>&1 | Out-String
           Write-Output $output
           if ($output -notmatch '\[DRY RUN\] INSTALL') {
             throw "Dry-run output missing expected [DRY RUN] INSTALL lines"
