@@ -244,6 +244,9 @@ if [ "$PROFILE" = "research" ] && [ -d "$SCRIPT_DIR/profiles/research/templates"
       [ -f "$hook_file" ] || continue
       hook_name=$(basename "$hook_file")
       install_file "$hook_file" "$CLAUDE_DIR/templates/investigation/hooks/$hook_name" "investigation hook: $hook_name"
+      if [ "$DRY_RUN" != true ] && [ -f "$CLAUDE_DIR/templates/investigation/hooks/$hook_name" ]; then
+        chmod +x "$CLAUDE_DIR/templates/investigation/hooks/$hook_name"
+      fi
     done
   fi
   # Create investigations directory structure
@@ -266,6 +269,9 @@ if [ -d "$SCRIPT_DIR/templates/hooks" ]; then
     [ -f "$hook_file" ] || continue
     hook_name=$(basename "$hook_file")
     install_file "$hook_file" "$CLAUDE_DIR/templates/hooks/$hook_name" "git hook: $hook_name"
+    if [ "$DRY_RUN" != true ] && [ -f "$CLAUDE_DIR/templates/hooks/$hook_name" ]; then
+      chmod +x "$CLAUDE_DIR/templates/hooks/$hook_name"
+    fi
   done
 fi
 
