@@ -1126,7 +1126,7 @@ Last updated: 2026-02-22
 
 16. **Frontiers in AI -- Test Pyramid 2.0.** https://www.frontiersin.org/journals/artificial-intelligence/articles/10.3389/frai.2025.1695965/full -- LLM-based testing achieves 59.6% coverage vs 38.2% for EvoSuite; 85% relevant test cases; five-layer security-integrated testing model.
 
-17. **OWASP Top 10 for LLMs.** https://owasp.org/www-project-top-10-for-large-language-model-applications/ -- Prompt Injection (#1), Sensitive Information Disclosure (#2), Excessive Agency (#6/#8); industry-standard LLM vulnerability classification.
+17. **OWASP Top 10 for LLMs (2025).** https://genai.owasp.org/resource/owasp-top-10-for-llm-applications-2025/ -- Prompt Injection (#1), Sensitive Information Disclosure (#2), Excessive Agency (#6); industry-standard LLM vulnerability classification.
 
 18. **"The Attacker Moves Second" (prompt injection defenses).** https://simonwillison.net/2025/Nov/2/new-prompt-injection-papers/ -- All 12 published defenses bypassed at 90%+ under adaptive attacks; human red-teaming achieved 100%; defenses that reported near-zero attack success fell to 71-100% under adaptive evaluation.
 

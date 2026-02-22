@@ -2,16 +2,34 @@
 
 A lighter-weight profile optimized for troubleshooting, investigation, and research tasks.
 
-**Status: Deferred** -- this profile is planned but not yet implemented.
+## How it differs from the dev profile
 
-## Planned differences from the dev profile
+| Aspect | Dev Profile | Research Profile |
+|--------|-------------|------------------|
+| Workflow | Explore, Plan, Code, Verify, Commit | Explore, Analyze, Document |
+| Code review | Enforced before every commit | Not included (read-only focus) |
+| Commit/push | Automated in /checkpoint | Not included |
+| Quality gates | Type-check, lint, test | Not included |
+| Memory focus | Code changes, lessons learned | Findings, evidence trails |
+| File discipline | Create and edit freely | Read-focused, confirm before editing |
+| Skills | /checkpoint, /resume | /checkpoint, /resume, /findings |
 
-- No code review enforcement (read-only workflows)
-- No commit/push automation
-- Memory optimized for findings and evidence trails rather than code changes
-- Skills focused on exploration, summarization, and reporting
-- Relaxed quality gates (no type-check/lint requirements)
+## What gets installed
 
-## Contributing
+```
+~/.claude/
+  CLAUDE.md                          # Research-focused global instructions
+  skills/
+    checkpoint/SKILL.md              # Save state and end session
+    resume/SKILL.md                  # Pick up where you left off
+    findings/SKILL.md                # Record investigation findings to memory
+```
 
-If you want to help build this profile, open an issue describing your research/troubleshooting workflow.
+## When to use this profile
+
+- Debugging production issues across multiple services
+- Investigating unfamiliar codebases
+- Researching libraries, APIs, or architectural patterns
+- Root cause analysis
+- Security audits and code review (read-only)
+- Any task where the primary output is knowledge, not code changes
