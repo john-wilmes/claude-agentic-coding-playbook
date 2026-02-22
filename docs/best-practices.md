@@ -862,8 +862,10 @@ Apiiro's enterprise study of AI-assisted development teams found [23]:
   Windsurf, GitHub Copilot, and Zed.dev. Attack vectors included prompt injection
   via JSON schema poisoning, autonomous agent actions without user approval, and
   configuration file manipulation for code execution [24].
-- **Langflow RCE**: Actively exploited remote code execution vulnerability in an
-  AI development framework.
+- **Langflow RCE (CVE-2025-3248)**: Critical (CVSS 9.8) remote code execution in
+  the Langflow AI workflow platform, added to CISA's Known Exploited Vulnerabilities
+  catalog in May 2025. Attackers exploited the lack of input validation and
+  sandboxing to execute arbitrary code on servers [34].
 
 ### Sandboxing: the only structural defense
 
@@ -1161,3 +1163,5 @@ Last updated: 2026-02-22
 32. **Human-Written vs AI-Generated Code (ISSRE 2025).** https://arxiv.org/abs/2508.21634 -- 500K+ code samples in Python and Java; AI code simpler but more security vulnerabilities; distinct defect profiles require specialized QA; Orthogonal Defect Classification methodology.
 
 33. **Stack Overflow 2025 Developer Survey -- AI.** https://survey.stackoverflow.co/2025/ai -- 84% use or plan to use AI tools; 46% distrust accuracy; 52% report productivity gains; 66% cite "almost right but not quite" as top frustration; 69% of agent users report increased productivity.
+
+34. **Langflow CVE-2025-3248 -- CISA KEV.** https://www.helpnetsecurity.com/2025/05/06/langflow-cve-2025-3248-exploited/ -- Critical (CVSS 9.8) RCE in Langflow < 1.3.0; no input validation or sandboxing; added to CISA KEV catalog May 5, 2025; actively exploited to deploy Flodrix botnet.
