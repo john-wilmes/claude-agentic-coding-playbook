@@ -251,6 +251,72 @@ jobs:
           test -x "$proj/.git/hooks/pre-commit"
           echo "OK: pre-commit hook installed and executable"
 
+      # ── Phase 6: Dogfood test (Linux only) ─────────────────────
+
+      - name: "Dogfood: full user journey"
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+
+          # Use isolated HOME so nothing touches the real system
+          export HOME=$(mktemp -d)
+          echo "Using isolated HOME=$HOME"
+
+          # Install fresh
+          bash install.sh --profile ${{ matrix.profile }} --force
+
+          # Create a sample project
+          proj=$(mktemp -d)
+          git init "$proj"
+          git -C "$proj" config user.email "ci@test"
+          git -C "$proj" config user.name "CI"
+
+          # Scaffold project (simulates /playbook project)
+          cp "$HOME/.claude/templates/project-CLAUDE.md" "$proj/CLAUDE.md"
+          mkdir -p "$proj/.git/hooks"
+          cp "$HOME/.claude/templates/hooks/pre-commit" "$proj/.git/hooks/pre-commit"
+          chmod +x "$proj/.git/hooks/pre-commit"
+
+          # Initial commit
+          echo "# Test Project" > "$proj/README.md"
+          git -C "$proj" add README.md CLAUDE.md
+          git -C "$proj" commit -m "initial commit"
+          echo "OK: initial commit succeeded"
+
+          # Make a code change and commit (hook should pass)
+          echo 'console.log("hello")' > "$proj/index.js"
+          git -C "$proj" add index.js
+          git -C "$proj" commit -m "add index.js"
+          echo "OK: code change commit passed hook"
+
+          # Verify no hardcoded paths in installed skills
+          if grep -r 'C--Users-johnw' "$HOME/.claude/skills/" 2>/dev/null; then
+            echo "FAIL: hardcoded user-specific path found in skills"
+            exit 1
+          fi
+          echo "OK: no hardcoded paths in skills"
+
+          # Verify YAML frontmatter of skills is parseable
+          for skill in "$HOME/.claude/skills"/*/SKILL.md; do
+            [ -f "$skill" ] || continue
+            # Check opening ---
+            head -1 "$skill" | grep -q '^---$' || {
+              echo "FAIL: $skill missing opening ---"
+              exit 1
+            }
+            # Check closing --- exists within first 10 lines
+            head -10 "$skill" | tail -n +2 | grep -q '^---$' || {
+              echo "FAIL: $skill missing closing ---"
+              exit 1
+            }
+            # Check allowed-tools is present
+            head -10 "$skill" | grep -q '^allowed-tools:' || {
+              echo "FAIL: $skill missing allowed-tools"
+              exit 1
+            }
+            echo "OK: $skill frontmatter valid"
+          done
+
       - name: "Scaffold an investigation (research profile)"
         if: matrix.profile == 'research'
         shell: bash
