@@ -27,22 +27,21 @@ Open a GitHub issue with a clear title and description. For factual corrections,
 Every citation in this repository must include:
 
 1. **Source URL** -- a stable, publicly accessible link.
-2. **Date accessed** -- the date you verified the source was live and accurate.
-3. **At least one key metric or finding** -- a concrete data point or conclusion from the source.
+2. **At least one key metric or finding** -- a concrete data point or conclusion from the source.
 
-**Format:**
+**Format** (numbered markdown list, matching `best-practices.md`):
 
-```
-[N] **Author/Org -- Title.** URL -- Key findings. (Accessed YYYY-MM-DD.)
+```markdown
+N. **Author/Org -- Title.** URL -- Key findings.
 ```
 
 **Example:**
 
-```
-[1] **McKinsey -- The economic potential of generative AI.** https://example.com -- Developers using AI assistants completed tasks 55% faster in controlled studies. (Accessed 2025-10-01.)
+```markdown
+35. **McKinsey -- The economic potential of generative AI.** https://example.com -- Developers using AI assistants completed tasks 55% faster in controlled studies.
 ```
 
-Citations are numbered sequentially in order of first appearance in `best-practices.md`. Do not reuse numbers. If a source is cited more than once, use the same number throughout.
+Citations are numbered sequentially in order of first appearance in `best-practices.md`. Do not reuse numbers. If a source is cited more than once, use the same number throughout. In body text, reference citations with bracket notation: `[N]`.
 
 Before submitting a PR that adds or modifies citations, verify each URL is live and the quoted finding accurately reflects the source.
 
@@ -104,7 +103,7 @@ bash install.sh --profile dev --dry-run
 
 **PowerShell:**
 ```powershell
-pwsh install.ps1 -Profile dev -DryRun
+.\install.ps1 -Profile dev -DryRun
 ```
 
 CI runs automatically on every push to `master` and validates that the install scripts complete without error in a clean environment.

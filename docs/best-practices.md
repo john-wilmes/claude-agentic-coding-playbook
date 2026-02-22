@@ -5,18 +5,17 @@
 LLM-assisted coding delivers real productivity gains -- but only when teams manage
 its well-documented failure modes. The evidence:
 
-- **Quality gap**: AI code contains 1.7x more issues than human code; enterprise
-  teams see 10x more security findings with AI-assisted development [CodeRabbit,
-  Apiiro].
+- **Quality gap**: AI code contains 1.7x more issues than human code [11]; enterprise
+  teams see 10x more security findings with AI-assisted development [23].
 - **Prompt injection**: Succeeds 94% of the time against lightweight commercial
-  models in controlled medical LLM studies (n=216); all 12 published defenses
-  bypassed at 90%+ under adaptive attacks [PMC, "The Attacker Moves Second"].
+  models in controlled medical LLM studies (n=216) [19]; all 12 published defenses
+  bypassed at 90%+ under adaptive attacks [18].
 - **Context economics**: Fresh sessions cost ~10x less per message than exhausted
-  ones (5K vs 50K tokens) [Anthropic].
+  ones (5K vs 50K tokens) [1].
 - **Model routing**: Using Haiku for exploration vs Opus for planning reduces
-  per-operation costs 5-20x [Anthropic pricing].
+  per-operation costs 5-20x [4].
 - **Prompt caching**: Reduces instruction overhead by 90% on cache hits
-  [Anthropic].
+  [4].
 - **Code review**: AI review catches 44-82% of defects depending on tool; reduces
   PR completion time 10-20% at scale [Greptile, Macroscope, Microsoft]. Developers
   using Copilot report 15% faster code reviews and 85% confidence in code quality [7].
@@ -25,11 +24,11 @@ its well-documented failure modes. The evidence:
   Stack Overflow's 2025 survey confirms broad adoption: 84% of developers use or
   plan to use AI tools, though 46% distrust accuracy [33].
 - **Instruction ceiling**: LLMs follow ~150-200 instructions reliably; Claude
-  Code's system prompt uses ~50 of that budget [HumanLayer].
+  Code's system prompt uses ~50 of that budget [5].
 - **Flow state**: 73% of developers report flow state with AI tools; 87% preserve
-  mental effort on repetitive tasks [GitHub].
+  mental effort on repetitive tasks [6].
 - **Review discipline**: Teams with AI code review see quality improvements 81% of
-  the time vs 55% among fast-shipping teams without [Qodo].
+  the time vs 55% among fast-shipping teams without [10].
 
 The practices in this document are derived from peer-reviewed research, large-scale
 industry data, and official vendor documentation. Every statistic includes its
@@ -83,7 +82,7 @@ This has two consequences:
 | Opus 4.6 / 4.5 | $5 | $25 | $0.50 |
 | Sonnet 4.6 / 4.5 / 4 | $3 | $15 | $0.30 |
 | Haiku 4.5 | $1 | $5 | $0.10 |
-| Haiku 3 | $0.25 | $1.25 | $0.03 |
+| Haiku 3 | $0.25 | $1.25 | $0.025 |
 
 Source: Anthropic Prompt Caching documentation [4].
 
@@ -277,13 +276,13 @@ This reduces round trips and avoids unnecessary context accumulation.
 - Do not use preamble phrases ("Let me...", "I'll now..."). Start with the
   action.
 
-These practices eliminate 200-500 tokens of waste per turn. Over a 30-turn
-session, that is 6,000-15,000 tokens saved.
+These practices eliminate an estimated 200-500 tokens of waste per turn. Over a
+30-turn session, that is 6,000-15,000 tokens saved.
 
 ### Two-attempt limit
 
 After two failed attempts at the same approach, switch strategies or ask for
-clarification. Retry spirals consume 3,000-10,000 tokens while making no
+clarification. Retry spirals can consume 3,000-10,000 tokens while making no
 progress. The agent's context fills with failed approaches, degrading performance
 on subsequent attempts.
 
@@ -358,7 +357,7 @@ model is not distracted by accumulated irrelevant context [1, 27].
 Start fresh sessions at natural breakpoints:
 - Between unrelated tasks (use `/clear`)
 - After completing a feature
-- When context reaches ~70% (check with `/context`)
+- When context reaches ~70% (visible in the Claude Code status bar)
 - After two or more failed correction attempts on the same issue
 
 Before clearing context, record current state and next steps in memory files so the
@@ -512,8 +511,9 @@ this section becomes the most valuable part of the memory file.
 
 Frontier thinking LLMs can follow approximately 150-200 instructions with
 reasonable consistency. Smaller models handle significantly fewer. Performance
-degrades uniformly across all instructions as count increases -- larger models show
-linear decay, while smaller models show exponential decay [5].
+degrades as instruction count increases. All instructions are equally affected by
+the overflow; larger models show linear decay, while smaller models show
+exponential decay [5].
 
 Claude Code's system prompt already consumes approximately 50 of those 150-200
 instructions. That leaves roughly 100-150 instructions for your CLAUDE.md, skills,
@@ -670,9 +670,9 @@ where it was applied [15]. Key metrics:
 - 57% passed reliably during execution
 - 25% achieved measurable coverage increases
 
-LLM-based test generation tools achieve **59.6% code coverage** compared to 38.2%
-for traditional evolutionary approaches like EvoSuite -- a 21.4 percentage point
-improvement [16]. Up to 85% of generated test cases proved relevant. Early results
+In one benchmark, the LLM-based tool ChatUniTest achieved **59.6% code coverage**
+on four Java projects, compared to 38.2% for the evolutionary approach EvoSuite --
+a 21.4 percentage point improvement [16]. Up to 85% of generated test cases proved relevant. Early results
 from applying generative AI within TDD workflows show further promise for combining
 these approaches [29].
 
@@ -765,7 +765,7 @@ From Qodo's State of AI Code Quality report [10]:
   moving teams without AI review)
 - 80% of PRs with AI review enabled had zero human review comments needed
 - 82% of developers use AI coding tools daily or weekly
-- 65% report at least 25% of commits influenced by AI
+- 65% report context issues during refactoring as a top AI challenge
 
 ### The Writer/Reviewer pattern
 
@@ -1278,7 +1278,7 @@ Last updated: 2026-02-21
 
 29. **GenAI for TDD Preliminary Results.** https://arxiv.org/abs/2405.10849 -- Early findings on using generative AI within TDD workflows.
 
-30. **Thoughtworks -- Agile + AI Anniversary Workshop.** https://www.theregister.com/2026/02/20/from_agile_to_ai_anniversary/ -- TDD prevents agents from writing tests that verify broken behavior; engineering discipline relocates rather than disappears; security practices "dangerously behind."
+30. **The Register -- Agile + AI Anniversary (Thoughtworks event).** https://www.theregister.com/2026/02/20/from_agile_to_ai_anniversary/ -- TDD prevents agents from writing tests that verify broken behavior; engineering discipline relocates rather than disappears; security practices "dangerously behind."
 
 31. **Anthropic Code Review Plugin.** https://github.com/anthropics/claude-code/blob/main/plugins/code-review/README.md -- Official code review plugin for Claude Code.
 
@@ -1286,4 +1286,4 @@ Last updated: 2026-02-21
 
 33. **Stack Overflow 2025 Developer Survey -- AI.** https://survey.stackoverflow.co/2025/ai -- 84% use or plan to use AI tools; 46% distrust accuracy; 52% report productivity gains; 66% cite "almost right but not quite" as top frustration; 69% of agent users report increased productivity.
 
-34. **Langflow CVE-2025-3248 -- CISA KEV.** https://www.helpnetsecurity.com/2025/05/06/langflow-cve-2025-3248-exploited/ -- Critical (CVSS 9.8) RCE in Langflow < 1.3.0; no input validation or sandboxing; added to CISA KEV catalog May 5, 2025; actively exploited to deploy Flodrix botnet.
+34. **Langflow CVE-2025-3248 -- CISA KEV.** https://www.helpnetsecurity.com/2025/05/06/langflow-cve-2025-3248-exploited/ -- Critical RCE in Langflow < 1.3.0; no input validation or sandboxing; added to CISA KEV catalog May 5, 2025; actively exploited in the wild.

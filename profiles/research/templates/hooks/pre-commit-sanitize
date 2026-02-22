@@ -14,7 +14,7 @@ fi
 CONFIG="${HOME}/.claude/templates/investigation/presidio.yaml"
 
 if [ ! -f "$CONFIG" ]; then
-  echo "WARNING: No .presidio.yaml found at $CONFIG. Skipping PII/PHI check."
+  echo "WARNING: No presidio.yaml found at $CONFIG. Skipping PII/PHI check."
   exit 0
 fi
 

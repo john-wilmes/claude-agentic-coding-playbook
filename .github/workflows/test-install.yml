@@ -51,12 +51,12 @@ jobs:
             fi
 
             status=$(curl --head --silent --fail --max-time 10 --write-out '%{http_code}' --output /dev/null "$url" 2>/dev/null || true)
-            if [ -z "$status" ] || [ "$status" -ge 400 ] 2>/dev/null; then
+            if [ -z "$status" ] || [ "$status" = "000" ] || [ "$status" -ge 400 ] 2>/dev/null; then
               # Retry with GET (some servers reject HEAD)
               status=$(curl --silent --fail --max-time 10 --write-out '%{http_code}' --output /dev/null "$url" 2>/dev/null || true)
             fi
 
-            if [ -z "$status" ] || [ "$status" -ge 400 ] 2>/dev/null; then
+            if [ -z "$status" ] || [ "$status" = "000" ] || [ "$status" -ge 400 ] 2>/dev/null; then
               echo "FAIL ($status): $url"
               echo "1" > "$fail_file"
             else
@@ -181,6 +181,7 @@ jobs:
           check "$HOME/.claude/skills/checkpoint/SKILL.md"
           check "$HOME/.claude/skills/continue/SKILL.md"
           check "$HOME/.claude/skills/playbook/SKILL.md"
+          check "$HOME/.claude/skills/create-project/SKILL.md"
 
           exit $failed
 

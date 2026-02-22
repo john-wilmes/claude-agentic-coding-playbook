@@ -58,6 +58,7 @@ Dev profile:
     checkpoint/SKILL.md              # /checkpoint - save state and end session
     continue/SKILL.md                  # /continue - pick up where you left off
     playbook/SKILL.md                # /playbook - analyze and improve your config
+    create-project/SKILL.md          # /create-project - scaffold a new project
   templates/
     project-CLAUDE.md                # Template for new project CLAUDE.md files
 ```
@@ -83,6 +84,7 @@ The installer **will not overwrite** existing skills or configuration without pr
 - **`/checkpoint`** -- Save all work, update memory with Current Work section, run quality gates, commit, push. Designed for clean session handoffs.
 - **`/continue`** -- Read the Current Work section from memory and present what was done, current state, and next steps. Start every session here.
 - **`/playbook`** -- Analyze your CLAUDE.md configuration and suggest improvements. Modes: `global` (default), `project`, `cursor`, `check`. Uses LLM understanding to merge sections intelligently rather than simple file replacement.
+- **`/create-project`** -- Scaffold a new project with git, .gitignore, CLAUDE.md, GitHub repo, and memory directory.
 
 ### CLAUDE.md Rules
 
@@ -141,7 +143,7 @@ The wizard will:
 
 ## Contributing
 
-Issues and PRs welcome. If you have evidence-based practices to add (with citations), open a PR against `docs/best-practices.md`.
+Issues and PRs welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for citation standards, style guide, and local testing instructions.
 
 ## License
 
