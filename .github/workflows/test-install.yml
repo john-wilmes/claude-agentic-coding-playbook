@@ -7,6 +7,68 @@ on:
     branches: [master]
 
 jobs:
+  lint-markdown:
+    runs-on: ubuntu-latest
+    name: Markdown lint
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install markdownlint-cli2
+        run: npm install -g markdownlint-cli2
+      - name: Lint markdown files
+        run: markdownlint-cli2 "**/*.md"
+
+  linkcheck:
+    runs-on: ubuntu-latest
+    name: Citation linkcheck
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check citation URLs
+        run: |
+          set -euo pipefail
+
+          # Allow-list: domains that reject HEAD requests or are flaky
+          ALLOW_LIST="arxiv.org doi.org"
+
+          is_allowed() {
+            local url="$1"
+            for domain in $ALLOW_LIST; do
+              if echo "$url" | grep -q "$domain"; then
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          fail_file=$(mktemp)
+          echo "0" > "$fail_file"
+
+          # Extract URLs from citations section
+          grep -oP 'https?://[^\s>)]+' docs/best-practices.md | sort -u | while read -r url; do
+            if is_allowed "$url"; then
+              echo "SKIP (allow-listed): $url"
+              continue
+            fi
+
+            status=$(curl --head --silent --fail --max-time 10 --write-out '%{http_code}' --output /dev/null "$url" 2>/dev/null || true)
+            if [ -z "$status" ] || [ "$status" -ge 400 ] 2>/dev/null; then
+              # Retry with GET (some servers reject HEAD)
+              status=$(curl --silent --fail --max-time 10 --write-out '%{http_code}' --output /dev/null "$url" 2>/dev/null || true)
+            fi
+
+            if [ -z "$status" ] || [ "$status" -ge 400 ] 2>/dev/null; then
+              echo "FAIL ($status): $url"
+              echo "1" > "$fail_file"
+            else
+              echo "OK ($status): $url"
+            fi
+          done
+
+          if [ "$(cat "$fail_file")" = "1" ]; then
+            echo "::error::One or more citation URLs are broken"
+            exit 1
+          fi
+
   test-install:
     strategy:
       fail-fast: false

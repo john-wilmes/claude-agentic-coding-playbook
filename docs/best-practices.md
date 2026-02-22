@@ -18,9 +18,12 @@ its well-documented failure modes. The evidence:
 - **Prompt caching**: Reduces instruction overhead by 90% on cache hits
   [Anthropic].
 - **Code review**: AI review catches 44-82% of defects depending on tool; reduces
-  PR completion time 10-20% at scale [Greptile, Macroscope, Microsoft].
+  PR completion time 10-20% at scale [Greptile, Macroscope, Microsoft]. Developers
+  using Copilot report 15% faster code reviews and 85% confidence in code quality [7].
 - **Productivity**: Developer gains range from -19% to +55% depending on
   experience level and measurement method [METR, GitHub Copilot, Faros AI].
+  Stack Overflow's 2025 survey confirms broad adoption: 84% of developers use or
+  plan to use AI tools, though 46% distrust accuracy [33].
 - **Instruction ceiling**: LLMs follow ~150-200 instructions reliably; Claude
   Code's system prompt uses ~50 of that budget [HumanLayer].
 - **Flow state**: 73% of developers report flow state with AI tools; 87% preserve
@@ -155,7 +158,7 @@ What's the session flow? Create a plan.
 sentence (fixing a typo, adding a log line, renaming a variable), ask the agent to
 do it directly. Planning adds overhead that is only justified when the approach is
 uncertain, the change spans multiple files, or you are unfamiliar with the code
-being modified [1].
+being modified [1] [26].
 
 ### Phase 3: Code
 
@@ -645,6 +648,7 @@ Write tests at the lowest level that verifies the behavior:
 
 ### TDD as force multiplier for agents
 
+Research confirms that TDD significantly improves LLM code generation quality [28].
 TDD prevents a specific failure mode unique to AI-assisted development:
 
 > "TDD prevents a failure mode where agents write tests that verify broken
@@ -668,7 +672,9 @@ where it was applied [15]. Key metrics:
 
 LLM-based test generation tools achieve **59.6% code coverage** compared to 38.2%
 for traditional evolutionary approaches like EvoSuite -- a 21.4 percentage point
-improvement [16]. Up to 85% of generated test cases proved relevant.
+improvement [16]. Up to 85% of generated test cases proved relevant. Early results
+from applying generative AI within TDD workflows show further promise for combining
+these approaches [29].
 
 ### AI code quality: the evidence
 
@@ -979,6 +985,9 @@ Apiiro's enterprise study of AI-assisted development teams found [23]:
   the Langflow AI workflow platform, added to CISA's Known Exploited Vulnerabilities
   catalog in May 2025. Attackers exploited the lack of input validation and
   sandboxing to execute arbitrary code on servers [34].
+
+These incidents reflect a broader trend of security exploits targeting AI coding
+tools as adoption accelerates [25].
 
 ### Sandboxing: the only structural defense
 
