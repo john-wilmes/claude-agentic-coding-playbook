@@ -352,10 +352,10 @@ echo "  1. Review $CLAUDE_DIR/CLAUDE.md and customize for your workflow"
 echo "  2. Start a Claude Code session: claude"
 if [ "$PROFILE" = "dev" ]; then
   echo "  3. Run /playbook to configure for your environment"
-  echo "  4. Use /resume at session start, /checkpoint at session end"
+  echo "  4. Use /continue at session start, /checkpoint at session end"
 else
   echo "  3. Run /investigate <id> new to start an investigation"
-  echo "  4. Use /resume at session start to see open investigations"
+  echo "  4. Use /continue at session start to see open investigations"
 fi
 echo ""
 echo "Docs: docs/best-practices.md (practices) and docs/tool-comparison.md (Claude vs Cursor)"

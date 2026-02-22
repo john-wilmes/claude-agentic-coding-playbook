@@ -52,7 +52,7 @@ When spawning subagents, set the `model` parameter explicitly.
 - Run `/compact` when context reaches ~70%.
 - Use subagents for exploration-heavy work to protect parent context size.
 - Never read multiple image files in the same turn -- use a subagent for bulk image examination.
-- Use `/resume` at session start to see open investigations and project state.
+- Use `/continue` at session start to see open investigations and project state.
 
 ## PII/PHI Protection
 

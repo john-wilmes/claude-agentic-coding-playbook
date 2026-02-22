@@ -330,10 +330,10 @@ Write-Host "  1. Review $ClaudeDir\CLAUDE.md and customize for your workflow"
 Write-Host "  2. Start a Claude Code session: claude"
 if ($Profile -eq "dev") {
     Write-Host "  3. Run /playbook to configure for your environment"
-    Write-Host "  4. Use /resume at session start, /checkpoint at session end"
+    Write-Host "  4. Use /continue at session start, /checkpoint at session end"
 } else {
     Write-Host "  3. Run /investigate <id> new to start an investigation"
-    Write-Host "  4. Use /resume at session start to see open investigations"
+    Write-Host "  4. Use /continue at session start to see open investigations"
 }
 Write-Host ""
 Write-Host "Docs: docs\best-practices.md (practices) and docs\tool-comparison.md (Claude vs Cursor)"
