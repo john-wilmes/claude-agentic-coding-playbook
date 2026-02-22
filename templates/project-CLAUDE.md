@@ -10,7 +10,7 @@
 
 ## Code Review
 
-- Run CodeRabbit (or your review tool) on staged changes before every commit.
+- Review: `coderabbit review --prompt-only --type uncommitted` (or your review tool)
 - Apply all suggestions unless they introduce a regression or conflict with project architecture.
 
 ## Testing Strategy

@@ -240,6 +240,18 @@ if ($Profile -eq "research") {
     }
 }
 
+# Git hook templates
+$hooksSrc = Join-Path $ScriptDir "templates\hooks"
+if (Test-Path $hooksSrc) {
+    Write-Host ""
+    Write-Host "--- Installing git hook templates ---" -ForegroundColor Cyan
+    $hooksDir = Join-Path $templatesDir "hooks"
+    if (-not $DryRun -and -not (Test-Path $hooksDir)) { New-Item -ItemType Directory -Path $hooksDir -Force | Out-Null }
+    Get-ChildItem $hooksSrc -File -ErrorAction SilentlyContinue | ForEach-Object {
+        Install-ConfigFile $_.FullName (Join-Path $hooksDir $_.Name) "git hook: $($_.Name)"
+    }
+}
+
 # Cursor templates
 $cursorSrc = Join-Path $ScriptDir "templates\cursor"
 if (Test-Path $cursorSrc) {
@@ -304,6 +316,7 @@ Get-ChildItem (Join-Path $ProfileDir "skills") -Directory -ErrorAction SilentlyC
 }
 Write-Host "  Templates        -> $ClaudeDir\templates\"
 Write-Host "    project-CLAUDE.md   (copy to new project roots)"
+Write-Host "    hooks\pre-commit    (copy to .git\hooks\ in each project)"
 Write-Host "    cursor\rules\       (copy to .cursor\rules\ in each project)"
 Write-Host "    cursor\commands\    (copy to .cursor\commands\ in each project)"
 Write-Host ""

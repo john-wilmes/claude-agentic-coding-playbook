@@ -139,6 +139,15 @@ Analyze it against the template. Check for:
 
 Report gaps and offer to add missing sections.
 
+### 4. Install pre-commit hook
+
+Check if `.git/hooks/pre-commit` exists in the project. If not, and `~/.claude/templates/hooks/pre-commit` exists:
+- Copy it to `.git/hooks/pre-commit`
+- Make it executable (`chmod +x`)
+- Report what it enforces (large file blocking, credential scanning, .env blocking)
+
+If a pre-commit hook already exists, skip (do not overwrite custom hooks).
+
 ## Steps for `cursor` mode
 
 ### 1. Check for Cursor config
@@ -178,6 +187,7 @@ Present results as a checklist:
 [x] /resume skill installed
 [x] /playbook skill installed
 [ ] Project CLAUDE.md (no quality gates defined)
+[ ] Pre-commit hook (not installed)
 [ ] Cursor rules (not installed)
 [x] Memory file exists
 ```
