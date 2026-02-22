@@ -5,9 +5,10 @@ in the Agentic Coding Playbook.
 
 ## Structure
 
-The primary translatable document is `docs/best-practices.md`, located at the
-repository root. A copy (or symlink) of that file belongs here as the canonical
-source for translation work.
+The primary translatable document is `docs/best-practices.md` at the repository
+root. That file is the canonical English source -- it is not duplicated here.
+Translators should copy `docs/best-practices.md` into their locale directory
+(e.g., `locales/es/best-practices.md`) and translate from there.
 
 ## Adding a Translation
 
