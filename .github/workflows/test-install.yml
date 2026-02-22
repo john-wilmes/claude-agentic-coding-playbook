@@ -28,7 +28,7 @@ jobs:
           set -euo pipefail
 
           # Allow-list: domains that reject HEAD requests or are flaky
-          ALLOW_LIST="arxiv.org doi.org"
+          ALLOW_LIST="arxiv.org doi.org fortune.com"
 
           is_allowed() {
             local url="$1"
