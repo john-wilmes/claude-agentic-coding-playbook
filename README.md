@@ -43,7 +43,7 @@ cd agentic-coding-playbook
 | Flag | Description |
 |------|-------------|
 | `--profile dev` | Development workflow (default) -- quality gates, code review, testing |
-| `--profile research` | Troubleshooting and research -- lighter-weight, read-focused |
+| `--profile research` | Investigation workflow -- structured evidence collection, tagging, PHI sanitization |
 | `--wizard` | Interactive merge with your existing configuration |
 | `--force` | Overwrite existing files without prompting |
 | `--auto-exit` | Auto-exit session after `/checkpoint` completes |
@@ -51,6 +51,7 @@ cd agentic-coding-playbook
 
 ### What Gets Installed
 
+Dev profile:
 ```
 ~/.claude/
   CLAUDE.md                          # Global instruction file
@@ -60,6 +61,18 @@ cd agentic-coding-playbook
     playbook/SKILL.md                # /playbook - analyze and improve your config
   templates/
     project-CLAUDE.md                # Template for new project CLAUDE.md files
+```
+
+Research (investigation) profile:
+```
+~/.claude/
+  CLAUDE.md                          # Investigation-focused instruction file
+  skills/
+    investigate/SKILL.md             # /investigate - full investigation lifecycle
+    resume/SKILL.md                  # /resume - list open investigations, resume work
+  templates/
+    investigation/                   # Templates for investigation files
+  investigations/                    # Investigation storage (created on first use)
 ```
 
 The installer **will not overwrite** existing skills or configuration without prompting. Use `--wizard` to analyze your current setup and merge intelligently.
@@ -101,7 +114,7 @@ Claude Code has a global config layer; Cursor does not. See [docs/tool-compariso
 | Profile | Focus | Status |
 |---------|-------|--------|
 | **dev** | Full development workflow with quality gates, code review, testing, security | Available |
-| **research** | Lightweight exploration, troubleshooting, analysis | Available |
+| **research** | Structured investigations with evidence collection, tagging, and PHI sanitization | Available |
 
 ## Existing Users
 

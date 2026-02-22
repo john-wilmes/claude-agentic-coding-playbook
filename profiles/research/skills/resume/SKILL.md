@@ -1,51 +1,82 @@
 ---
 name: resume
-description: Resume work from where the last session left off. Reads Current Work and Findings from memory and presents context.
+description: Resume work by listing open investigations and project memory state. Optionally resume or reopen a specific investigation.
 disable-model-invocation: false
-allowed-tools: Read, Glob, Grep
-argument-hint: ""
+allowed-tools: Read, Glob, Grep, Bash
+argument-hint: "[investigation-id]"
 ---
 
-# Resume (Research)
+# Resume (Investigation Profile)
 
-Pick up where the last session left off by reading the Current Work and Findings sections from memory.
+Pick up where the last session left off. Lists open investigations and project memory state.
 
 ## Steps
 
-### 1. Find the memory file
+### 1. Check for arguments
 
-Check for a project-level memory file first, then fall back to the global Documents memory:
+If `$ARGUMENTS` contains an investigation ID, jump to step 4 (resume specific investigation).
 
-1. Look for `MEMORY.md` in the project's memory directory (the path Claude Code auto-creates under `~/.claude/projects/`)
-2. If not in a project, read `~/.claude/projects/C--Users-johnw-Documents/memory/MEMORY.md`
+### 2. List open investigations
 
-### 2. Extract Current Work and recent Findings
+Glob for `~/.claude/investigations/*/STATUS.md` (exclude `_patterns/`).
 
-Read the memory file and locate the `## Current Work` section. Also check for recent entries in the `## Findings` section. Present to the user:
+For each, read the current phase from STATUS.md. Filter to non-closed investigations. Present:
 
 ```
-Last session: <date from Current Work>
-
-What was investigated:
-  <summary>
-
-Current state:
-  <state>
-
-Recent findings:
-  <most recent 2-3 findings, summarized>
-
-Next steps:
-  <next steps>
+Open investigations:
+  <id>    <phase>    <handoff notes summary>
+  <id>    <phase>    <handoff notes summary>
 ```
 
-### 3. Scan for context
+Also show a count of closed investigations if any exist.
 
-Check for additional context that might be relevant:
-- Run `git status` to see if there are uncommitted changes from the previous session
+If no open investigations exist, say so and suggest `/investigate <id> new` to start one.
+
+### 3. Check project memory
+
+Check for a project-level memory file:
+1. Look for `MEMORY.md` in the project's memory directory (under `~/.claude/projects/`)
+2. If not in a project, check `~/.claude/projects/C--Users-johnw-Documents/memory/MEMORY.md`
+
+If found, extract and present the "Current Work" section:
+
+```
+Project memory (last session):
+  <summary from Current Work>
+```
+
+Scan for additional context:
+- Run `git status` to check for uncommitted changes
 - Run `git log --oneline -3` to see recent commits
-- If the project has a task list, check for in-progress or blocked tasks
 
-### 4. Propose action
+### 4. Resume specific investigation
 
-Based on the Current Work section and the context scan, propose what to investigate next. Ask the user to confirm or redirect.
+If an investigation ID was provided (from argument or user choice):
+
+1. Read `~/.claude/investigations/<id>/STATUS.md`
+2. If phase is "closed": ask if user wants to reopen. If yes, update phase to "collecting" and add history entry: `| <today> | reopen | Reopened by user |`
+3. Read BRIEF.md for the investigation question.
+4. Read the most recent evidence files (last 3).
+5. Read FINDINGS.md if it has content beyond the template defaults.
+6. Present:
+
+```
+Resuming: <id>
+  Question: <from brief>
+  Phase: <current phase>
+  Evidence collected: <count>
+  Last activity: <date and summary from most recent history entry>
+
+Handoff notes:
+  <from STATUS.md>
+```
+
+7. Suggest next action based on phase:
+   - `new` -> "Fill in the brief, then start collecting evidence"
+   - `collecting` -> "Continue collecting evidence or synthesize what you have"
+   - `synthesizing` -> "Review and refine findings, then close"
+   - `closed` (reopened) -> "Continue collecting new evidence"
+
+### 5. Propose action
+
+Based on available context (open investigations + project memory), propose what to do next. Ask the user to confirm or redirect.

@@ -210,6 +210,36 @@ if (Test-Path $projectTemplate) {
     Install-ConfigFile $projectTemplate (Join-Path $templatesDir "project-CLAUDE.md") "template: project-CLAUDE.md"
 }
 
+# Investigation templates (research profile only)
+if ($Profile -eq "research") {
+    $invTmplSrc = Join-Path $ProfileDir "templates"
+    if (Test-Path $invTmplSrc) {
+        Write-Host ""
+        Write-Host "--- Installing investigation templates ---" -ForegroundColor Cyan
+        $invTmplDest = Join-Path $templatesDir "investigation"
+        $invHooksDest = Join-Path $invTmplDest "hooks"
+        if (-not (Test-Path $invTmplDest)) { New-Item -ItemType Directory -Path $invTmplDest -Force | Out-Null }
+        if (-not (Test-Path $invHooksDest)) { New-Item -ItemType Directory -Path $invHooksDest -Force | Out-Null }
+        Get-ChildItem $invTmplSrc -File -ErrorAction SilentlyContinue | ForEach-Object {
+            Install-ConfigFile $_.FullName (Join-Path $invTmplDest $_.Name) "investigation template: $($_.Name)"
+        }
+        $invHooksSrc = Join-Path $invTmplSrc "hooks"
+        if (Test-Path $invHooksSrc) {
+            Get-ChildItem $invHooksSrc -File -ErrorAction SilentlyContinue | ForEach-Object {
+                Install-ConfigFile $_.FullName (Join-Path $invHooksDest $_.Name) "investigation hook: $($_.Name)"
+            }
+        }
+        # Create investigations directory structure
+        $invDir = Join-Path $env:USERPROFILE ".claude\investigations\_patterns"
+        if ($DryRun) {
+            Write-Host "[DRY RUN] MKDIR: ~/.claude/investigations/_patterns/" -ForegroundColor Green
+        } else {
+            if (-not (Test-Path $invDir)) { New-Item -ItemType Directory -Path $invDir -Force | Out-Null }
+            Write-Host "CREATED: ~/.claude/investigations/_patterns/" -ForegroundColor Green
+        }
+    }
+}
+
 # Cursor templates
 $cursorSrc = Join-Path $ScriptDir "templates\cursor"
 if (Test-Path $cursorSrc) {
@@ -224,6 +254,30 @@ if (Test-Path $cursorSrc) {
     }
     Get-ChildItem (Join-Path $cursorSrc "commands") -File -ErrorAction SilentlyContinue | ForEach-Object {
         Install-ConfigFile $_.FullName (Join-Path $cursorCmdsDir $_.Name) "cursor command: $($_.Name)"
+    }
+}
+
+# --- Cleanup old research skills ---
+
+if ($Profile -eq "research") {
+    $oldSkills = @("findings", "checkpoint")
+    foreach ($oldSkill in $oldSkills) {
+        $oldDir = Join-Path $ClaudeDir "skills\$oldSkill"
+        if (Test-Path $oldDir) {
+            if ($DryRun) {
+                Write-Host "[DRY RUN] OLD SKILL: $oldSkill (would offer removal)" -ForegroundColor Yellow
+            } else {
+                Write-Host ""
+                Write-Host "OLD SKILL: /$oldSkill is no longer part of the investigation profile." -ForegroundColor Yellow
+                $removeChoice = Read-Host "  Remove $oldDir? [y/N]"
+                if ($removeChoice -eq "y" -or $removeChoice -eq "Y") {
+                    Remove-Item -Recurse -Force $oldDir
+                    Write-Host "  -> Removed." -ForegroundColor Green
+                } else {
+                    Write-Host "  -> Kept." -ForegroundColor Gray
+                }
+            }
+        }
     }
 }
 
@@ -263,9 +317,10 @@ Write-Host "  1. Review $ClaudeDir\CLAUDE.md and customize for your workflow"
 Write-Host "  2. Start a Claude Code session: claude"
 if ($Profile -eq "dev") {
     Write-Host "  3. Run /playbook to configure for your environment"
+    Write-Host "  4. Use /resume at session start, /checkpoint at session end"
 } else {
-    Write-Host "  3. Run /findings to capture research discoveries"
+    Write-Host "  3. Run /investigate <id> new to start an investigation"
+    Write-Host "  4. Use /resume at session start to see open investigations"
 }
-Write-Host "  4. Use /resume at session start, /checkpoint at session end"
 Write-Host ""
 Write-Host "Docs: docs\best-practices.md (practices) and docs\tool-comparison.md (Claude vs Cursor)"

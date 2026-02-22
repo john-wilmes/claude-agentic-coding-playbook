@@ -219,6 +219,32 @@ if [ -f "$SCRIPT_DIR/templates/project-CLAUDE.md" ]; then
   install_file "$SCRIPT_DIR/templates/project-CLAUDE.md" "$CLAUDE_DIR/templates/project-CLAUDE.md" "template: project-CLAUDE.md"
 fi
 
+# Investigation templates (research profile only)
+if [ "$PROFILE" = "research" ] && [ -d "$SCRIPT_DIR/profiles/research/templates" ]; then
+  echo ""
+  echo "--- Installing investigation templates ---"
+  mkdir -p "$CLAUDE_DIR/templates/investigation/hooks"
+  for tmpl_file in "$SCRIPT_DIR/profiles/research/templates"/*; do
+    [ -f "$tmpl_file" ] || continue
+    tmpl_name=$(basename "$tmpl_file")
+    install_file "$tmpl_file" "$CLAUDE_DIR/templates/investigation/$tmpl_name" "investigation template: $tmpl_name"
+  done
+  if [ -d "$SCRIPT_DIR/profiles/research/templates/hooks" ]; then
+    for hook_file in "$SCRIPT_DIR/profiles/research/templates/hooks"/*; do
+      [ -f "$hook_file" ] || continue
+      hook_name=$(basename "$hook_file")
+      install_file "$hook_file" "$CLAUDE_DIR/templates/investigation/hooks/$hook_name" "investigation hook: $hook_name"
+    done
+  fi
+  # Create investigations directory structure
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] MKDIR: ~/.claude/investigations/_patterns/"
+  else
+    mkdir -p "$CLAUDE_DIR/investigations/_patterns"
+    echo "CREATED: ~/.claude/investigations/_patterns/"
+  fi
+fi
+
 # Cursor templates (rules + commands)
 if [ -d "$SCRIPT_DIR/templates/cursor" ]; then
   echo ""
@@ -233,6 +259,33 @@ if [ -d "$SCRIPT_DIR/templates/cursor" ]; then
     [ -f "$cmd_file" ] || continue
     cmd_name=$(basename "$cmd_file")
     install_file "$cmd_file" "$CLAUDE_DIR/templates/cursor/commands/$cmd_name" "cursor command: $cmd_name"
+  done
+fi
+
+# --- Cleanup old research skills ---
+
+if [ "$PROFILE" = "research" ]; then
+  OLD_SKILLS=("findings" "checkpoint")
+  for old_skill in "${OLD_SKILLS[@]}"; do
+    old_dir="$CLAUDE_DIR/skills/$old_skill"
+    if [ -d "$old_dir" ]; then
+      if [ "$DRY_RUN" = true ]; then
+        echo "[DRY RUN] OLD SKILL: $old_skill (would offer removal)"
+      else
+        echo ""
+        echo "OLD SKILL: /$old_skill is no longer part of the investigation profile."
+        read -r -p "  Remove $old_dir? [y/N] " remove_choice
+        case $remove_choice in
+          y|Y)
+            rm -rf "$old_dir"
+            echo "  -> Removed."
+            ;;
+          *)
+            echo "  -> Kept."
+            ;;
+        esac
+      fi
+    fi
   done
 fi
 
@@ -272,9 +325,10 @@ echo "  1. Review $CLAUDE_DIR/CLAUDE.md and customize for your workflow"
 echo "  2. Start a Claude Code session: claude"
 if [ "$PROFILE" = "dev" ]; then
   echo "  3. Run /playbook to configure for your environment"
+  echo "  4. Use /resume at session start, /checkpoint at session end"
 else
-  echo "  3. Run /findings to capture research discoveries"
+  echo "  3. Run /investigate <id> new to start an investigation"
+  echo "  4. Use /resume at session start to see open investigations"
 fi
-echo "  4. Use /resume at session start, /checkpoint at session end"
 echo ""
 echo "Docs: docs/best-practices.md (practices) and docs/tool-comparison.md (Claude vs Cursor)"
