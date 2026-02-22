@@ -267,25 +267,36 @@ if (Test-Path $cursorSrc) {
     }
 }
 
-# --- Cleanup old research skills ---
+# --- Cleanup skills from other profile ---
 
-if ($Profile -eq "research") {
-    $oldSkills = @("findings", "checkpoint")
-    foreach ($oldSkill in $oldSkills) {
-        $oldDir = Join-Path $ClaudeDir "skills\$oldSkill"
-        if (Test-Path $oldDir) {
-            if ($DryRun) {
-                Write-Host "[DRY RUN] OLD SKILL: $oldSkill (would offer removal)" -ForegroundColor Yellow
+# Skills exclusive to each profile (continue is shared)
+$devOnlySkills = @("checkpoint", "create-project", "playbook")
+$researchOnlySkills = @("investigate")
+$legacySkills = @("findings")
+
+if ($Profile -eq "dev") {
+    $otherSkills = $researchOnlySkills
+} else {
+    $otherSkills = $devOnlySkills + $legacySkills
+}
+
+foreach ($otherSkill in $otherSkills) {
+    $otherDir = Join-Path $ClaudeDir "skills\$otherSkill"
+    if (Test-Path $otherDir) {
+        if ($DryRun) {
+            Write-Host "[DRY RUN] OTHER PROFILE SKILL: /$otherSkill (would offer removal)" -ForegroundColor Yellow
+        } elseif ($Force) {
+            Remove-Item -Recurse -Force $otherDir
+            Write-Host "REMOVED: /$otherSkill (not part of $Profile profile)" -ForegroundColor Green
+        } else {
+            Write-Host ""
+            Write-Host "OTHER PROFILE SKILL: /$otherSkill is not part of the $Profile profile." -ForegroundColor Yellow
+            $removeChoice = Read-Host "  Remove $otherDir? [y/N]"
+            if ($removeChoice -eq "y" -or $removeChoice -eq "Y") {
+                Remove-Item -Recurse -Force $otherDir
+                Write-Host "  -> Removed." -ForegroundColor Green
             } else {
-                Write-Host ""
-                Write-Host "OLD SKILL: /$oldSkill is no longer part of the investigation profile." -ForegroundColor Yellow
-                $removeChoice = Read-Host "  Remove $oldDir? [y/N]"
-                if ($removeChoice -eq "y" -or $removeChoice -eq "Y") {
-                    Remove-Item -Recurse -Force $oldDir
-                    Write-Host "  -> Removed." -ForegroundColor Green
-                } else {
-                    Write-Host "  -> Kept." -ForegroundColor Gray
-                }
+                Write-Host "  -> Kept." -ForegroundColor Gray
             }
         }
     }
@@ -305,6 +316,7 @@ Get-ChildItem (Join-Path $ProfileDir "skills") -Directory -ErrorAction SilentlyC
 Write-Host "  Templates        -> $ClaudeDir\templates\"
 Write-Host "    project-CLAUDE.md   (copy to new project roots)"
 Write-Host "    hooks\pre-commit    (copy to .git\hooks\ in each project)"
+Write-Host "      Note: If core.hooksPath is set globally, install the hook there instead of .git\hooks\"
 Write-Host "    cursor\rules\       (copy to .cursor\rules\ in each project)"
 Write-Host "    cursor\commands\    (copy to .cursor\commands\ in each project)"
 Write-Host ""

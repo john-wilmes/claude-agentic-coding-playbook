@@ -71,7 +71,20 @@ Use `npm init -y` for Node projects. Set name, description, and version. For Pyt
 
 ### 7. Install pre-commit hook
 
+First, check if `core.hooksPath` is configured:
+```bash
+git config core.hooksPath
+```
+
 If `~/.claude/templates/hooks/pre-commit` exists:
+
+**If `core.hooksPath` is set** (e.g., `~/.git-hooks`):
+- Use that directory instead of `.git/hooks/`
+- If a pre-commit hook already exists there, do NOT overwrite — inform the user they need to manually merge
+- Otherwise, copy the template there and make it executable
+- Warn the user that this is a global hook directory
+
+**If `core.hooksPath` is NOT set:**
 ```bash
 cp ~/.claude/templates/hooks/pre-commit ~/Documents/<project-name>/.git/hooks/pre-commit
 chmod +x ~/Documents/<project-name>/.git/hooks/pre-commit
