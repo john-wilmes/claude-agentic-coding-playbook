@@ -251,7 +251,7 @@ Finalize the investigation: classify, tag, extract patterns, sanitize.
    - If no clear pattern, skip. Not every investigation produces a pattern.
 
 4. **PHI sanitization**:
-   - Check if `$INVESTIGATIONS_DIR/.presidio.yaml` exists
+   - Check if `~/.claude/templates/investigation/presidio.yaml` exists
    - If yes, check if `presidio-analyzer` is available: run `python3 -c "import presidio_analyzer" 2>/dev/null`
    - If both available: run Presidio on BRIEF.md, FINDINGS.md, STATUS.md, and all evidence files. Report what was found and sanitized.
    - If Presidio config exists but analyzer is not installed: print "Presidio not installed. Install with: pip install presidio-analyzer presidio-anonymizer"

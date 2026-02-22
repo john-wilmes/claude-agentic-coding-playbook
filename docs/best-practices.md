@@ -14,7 +14,7 @@ its well-documented failure modes. The evidence:
 - **Context economics**: Fresh sessions cost ~10x less per message than exhausted
   ones (5K vs 50K tokens) [Anthropic].
 - **Model routing**: Using Haiku for exploration vs Opus for planning reduces
-  per-operation costs 3-60x [Anthropic pricing].
+  per-operation costs 5-20x [Anthropic pricing].
 - **Prompt caching**: Reduces instruction overhead by 90% on cache hits
   [Anthropic].
 - **Code review**: AI review catches 44-82% of defects depending on tool; reduces
@@ -89,9 +89,10 @@ Source: Anthropic Prompt Caching documentation [4].
 Each turn in a conversation sends the full conversation history. Turn 1 sends the
 system prompt (~5K tokens). Turn 10 sends the system prompt plus 9 turns of
 accumulated context. Turn 30 may send 50K+ tokens. The cost per message at turn 30
-is 10x the cost at turn 1 -- and the model is simultaneously more likely to
-"forget" earlier instructions or make mistakes because the context window is
-saturated [Anthropic Best Practices, 1].
+is 10x the cost at turn 1. Since per-message cost grows linearly with turn
+number, total session cost grows quadratically -- and the model simultaneously
+becomes more likely to "forget" earlier instructions or make mistakes because
+the context window is saturated [Anthropic Best Practices, 1].
 
 ### Break-even math for instruction file rules
 
@@ -336,7 +337,7 @@ is written.
 | Parallel tool calls | 500-2,000 | Every multi-read turn | High |
 | No preamble/echo | 200-500 | Every turn | High |
 | Two-attempt limit | 3,000-10,000 | Per retry spiral avoided | Very high |
-| Model routing (Haiku vs Opus) | 80% cost reduction | Per exploration task | Very high |
+| Model routing (Haiku vs Opus) | 80-95% cost reduction | Per exploration task | Very high |
 | Prompt caching | 90% on cached prefix | Every turn after first | Very high |
 | Fresh sessions at breakpoints | 45K tokens saved per message | Per exhausted session | Critical |
 
@@ -1039,14 +1040,19 @@ task [3].
 
 ### Quick install
 
-**Bash (macOS/Linux/WSL)**:
+**macOS / Linux:**
 ```bash
-curl -sL https://raw.githubusercontent.com/<org>/agentic-coding-playbook/main/install.sh | bash
+git clone https://github.com/john-wilmes/agentic-coding-playbook.git
+cd agentic-coding-playbook
+chmod +x install.sh
+./install.sh
 ```
 
-**PowerShell (Windows)**:
+**Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/<org>/agentic-coding-playbook/main/install.ps1 | iex
+git clone https://github.com/john-wilmes/agentic-coding-playbook.git
+cd agentic-coding-playbook
+.\install.ps1
 ```
 
 ### Profile descriptions
@@ -1055,8 +1061,8 @@ The install script supports multiple profiles:
 
 | Profile | Description |
 |---|---|
-| `dev` | Full development setup: CLAUDE.md, hooks, skills, security config |
-| `research` | Lightweight setup for exploration: CLAUDE.md and memory files only |
+| `dev` | Full development setup: CLAUDE.md, skills, templates, security config |
+| `research` | Structured investigation workflow: evidence collection, tagging, PHI sanitization |
 
 ### Wizard mode for existing users
 
@@ -1092,7 +1098,7 @@ without interactive prompts.
 
 ---
 
-Last updated: 2026-02-22
+Last updated: 2026-02-21
 
 ---
 
