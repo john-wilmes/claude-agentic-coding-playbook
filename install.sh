@@ -66,6 +66,33 @@ if [ ! -d "$SCRIPT_DIR/profiles/$PROFILE" ]; then
   exit 1
 fi
 
+# --- Pre-install validation ---
+
+check_command() {
+  if ! command -v "$1" &>/dev/null; then
+    echo "ERROR: '$1' is required but not found on PATH."
+    echo "  Install with: $2"
+    return 1
+  fi
+}
+
+missing=0
+check_command git "sudo apt install git  (Linux) / brew install git (macOS)" || missing=1
+check_command node "sudo apt install nodejs  (Linux) / brew install node (macOS)" || missing=1
+
+if [ "$missing" -eq 1 ]; then
+  echo ""
+  echo "Required: git, node (v18+). Install the missing tools and re-run."
+  exit 1
+fi
+
+if [ "$PROFILE" = "research" ] && ! command -v python3 &>/dev/null; then
+  echo "WARNING: python3 not found. The research profile's sanitize.sh requires python3 for Presidio integration."
+  echo "  Install with: sudo apt install python3  (Linux) / brew install python3 (macOS)"
+  echo "  Continuing without python3 (sanitize.sh will degrade gracefully)."
+  echo ""
+fi
+
 echo "=== Agentic Coding Playbook Installer ==="
 echo "Profile: $PROFILE"
 echo "Target:  $CLAUDE_DIR"

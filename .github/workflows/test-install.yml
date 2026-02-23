@@ -715,3 +715,61 @@ jobs:
               Write-Output "OK: PowerShell rejects unknown profile: $($_.Exception.Message)"
             }
           }
+
+      # ── Phase 9: Knowledge repo integration (Linux only) ──────────
+
+      - name: "Knowledge repo: install with --knowledge-repo"
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+
+          # Use isolated HOME
+          export HOME=$(mktemp -d)
+          echo "Using isolated HOME=$HOME"
+
+          # Create a bare git repo as a dummy knowledge source
+          bare_repo=$(mktemp -d)
+          git init --bare "$bare_repo"
+
+          # Seed it with a sample entry
+          work=$(mktemp -d)
+          git clone "$bare_repo" "$work"
+          git -C "$work" config user.email "ci@test"
+          git -C "$work" config user.name "CI"
+          mkdir -p "$work/entries/20260222-test-entry"
+          cat > "$work/entries/20260222-test-entry/entry.md" << 'ENTRY'
+          ---
+          id: "20260222-test-entry"
+          tool: "git"
+          category: "gotcha"
+          tags: ["test"]
+          confidence: "high"
+          ---
+          # Test Entry
+          This is a test knowledge entry for CI.
+          ENTRY
+          git -C "$work" add .
+          git -C "$work" commit -m "seed entry"
+          git -C "$work" push
+
+          # Run install with --knowledge-repo pointing to local bare repo
+          bash install.sh --profile dev --force --knowledge-repo "$bare_repo"
+
+          # Verify knowledge directory exists and has entries
+          test -d "$HOME/.claude/knowledge/.git" && echo "OK: knowledge repo cloned (.git exists)"
+          test -d "$HOME/.claude/knowledge/entries" && echo "OK: entries directory exists"
+          test -f "$HOME/.claude/knowledge/entries/20260222-test-entry/entry.md" && echo "OK: seeded entry present"
+
+      - name: "Pre-install validation: missing node detected"
+        if: runner.os == 'Linux'
+        run: |
+          # Temporarily hide node from PATH
+          export PATH=$(echo "$PATH" | tr ':' '\n' | grep -v node | tr '\n' ':')
+          output=$(bash install.sh --profile dev --dry-run 2>&1 || true)
+          echo "$output"
+          if echo "$output" | grep -q "node.*required"; then
+            echo "OK: install.sh detects missing node"
+          else
+            echo "FAIL: expected node missing error"
+            exit 1
+          fi

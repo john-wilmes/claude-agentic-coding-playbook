@@ -44,6 +44,29 @@ if (-not (Test-Path $ProfileDir)) {
     exit 1
 }
 
+# --- Pre-install validation ---
+
+$missing = $false
+foreach ($cmd in @("git", "node")) {
+    if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) {
+        Write-Host "ERROR: '$cmd' is required but not found on PATH." -ForegroundColor Red
+        $missing = $true
+    }
+}
+if ($missing) {
+    Write-Host ""
+    Write-Host "Required: git, node (v18+). Install the missing tools and re-run." -ForegroundColor Red
+    Write-Host "  Install Node.js: https://nodejs.org/"
+    Write-Host "  Install Git:     https://git-scm.com/"
+    exit 1
+}
+
+if ($Profile -eq "research" -and -not (Get-Command python3 -ErrorAction SilentlyContinue) -and -not (Get-Command python -ErrorAction SilentlyContinue)) {
+    Write-Host "WARNING: python3 not found. The research profile's sanitize.sh requires python3 for Presidio integration." -ForegroundColor Yellow
+    Write-Host "  Continuing without python3 (sanitize.sh will degrade gracefully)."
+    Write-Host ""
+}
+
 Write-Host "=== Agentic Coding Playbook Installer ===" -ForegroundColor Cyan
 Write-Host "Profile: $Profile"
 Write-Host "Target:  $ClaudeDir"
