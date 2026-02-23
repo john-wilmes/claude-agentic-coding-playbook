@@ -929,18 +929,16 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          # Save original PATH
-          $origPath = $env:PATH
-          try {
-            # Set PATH to only Windows system directory (excludes node)
-            $env:PATH = "C:\Windows\System32"
-            $output = & .\install.ps1 -Profile dev -DryRun *>&1 | Out-String
-            Write-Output $output
-            if ($output -match 'not found on PATH') {
-              Write-Output "OK: install.ps1 detects missing node"
-            } else {
-              throw "FAIL: expected 'not found on PATH' error"
-            }
-          } finally {
-            $env:PATH = $origPath
+          # Run install.ps1 in a child process with restricted PATH so its
+          # exit 1 doesn't fail this step
+          $scriptPath = Resolve-Path ".\install.ps1"
+          $output = & pwsh -NoProfile -Command "
+            `$env:PATH = 'C:\Windows\System32'
+            & '$scriptPath' -Profile dev -DryRun *>&1 | Out-String
+          " 2>&1 | Out-String
+          Write-Output $output
+          if ($output -match 'not found on PATH') {
+            Write-Output "OK: install.ps1 detects missing node"
+          } else {
+            throw "FAIL: expected 'not found on PATH' error"
           }
