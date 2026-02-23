@@ -4,7 +4,7 @@ A structured checklist for manually testing the agentic coding playbook in a rea
 
 Run this in a **temp HOME** to avoid touching your real config. Expect ~30 minutes for a full run.
 
-For automated E2E testing using `claude -p` (headless mode), see [`scripts/dogfood-e2e.sh`](../scripts/dogfood-e2e.sh). That script must run from a **normal terminal** (not inside Claude Code) because nested sessions are not supported.
+For automated E2E testing using `claude -p` (headless mode), see [`scripts/dogfood-e2e.sh`](../scripts/dogfood-e2e.sh). That script simulates a realistic investigation: a trouble ticket about images being cropped too tightly in a livestock auction app, with a multi-file project to trace through. It must run from a **normal terminal** (not inside Claude Code) because nested sessions are not supported.
 
 ## Prerequisites
 
