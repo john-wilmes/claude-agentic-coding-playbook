@@ -936,6 +936,8 @@ jobs:
             `$env:PATH = 'C:\Windows\System32'
             & '$scriptPath' -Profile dev -DryRun *>&1 | Out-String
           " 2>&1 | Out-String
+          # Reset LASTEXITCODE — the child process exits 1 by design
+          $global:LASTEXITCODE = 0
           Write-Output $output
           if ($output -match 'not found on PATH') {
             Write-Output "OK: install.ps1 detects missing node"
