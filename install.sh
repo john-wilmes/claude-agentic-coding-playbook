@@ -333,6 +333,49 @@ for hook_file in "$SCRIPT_DIR/templates/hooks"/session-*.js; do
   install_file "$hook_file" "$CLAUDE_DIR/hooks/$hook_name" "session hook: $hook_name"
 done
 
+# Model router hook (PreToolUse -- auto-selects model for Task tool calls)
+if [ -f "$SCRIPT_DIR/templates/hooks/model-router.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/model-router.js" "$CLAUDE_DIR/hooks/model-router.js" "model router hook: model-router.js"
+
+  # Merge PreToolUse hook entry into settings.json
+  echo ""
+  echo "--- Configuring model-router in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  HOOK_CMD="node $CLAUDE_DIR/hooks/model-router.js"
+  HOOK_ENTRY="{\"matcher\":\"Task\",\"hooks\":[{\"type\":\"command\",\"command\":\"$HOOK_CMD\"}]}"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add PreToolUse hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    # Check if model-router is already configured
+    if grep -q "model-router" "$SETTINGS_FILE" 2>/dev/null; then
+      echo "ALREADY CONFIGURED: model-router hook in settings.json"
+    else
+      # Use node (guaranteed available) to merge the hook entry.
+      # Pass paths via argv to handle Windows/Unix path differences.
+      node -e "
+        const fs = require('fs');
+        const path = require('path');
+        const settingsPath = path.resolve(process.argv[1]);
+        const hookCmd = process.argv[2];
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (!settings.hooks) settings.hooks = {};
+        if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+        settings.hooks.PreToolUse.push({
+          matcher: 'Task',
+          hooks: [{ type: 'command', command: hookCmd }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      " "$SETTINGS_FILE" "$HOOK_CMD"
+      echo "CONFIGURED: model-router hook in settings.json"
+    fi
+  fi
+fi
+
 # Cursor templates (rules + commands)
 if [ -d "$SCRIPT_DIR/templates/cursor" ]; then
   echo ""

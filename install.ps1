@@ -301,6 +301,50 @@ Get-ChildItem $hooksSrc -File -Filter "session-*.js" -ErrorAction SilentlyContin
     Install-ConfigFile $_.FullName (Join-Path $hooksInstallDir $_.Name) "session hook: $($_.Name)"
 }
 
+# Model router hook (PreToolUse -- auto-selects model for Task tool calls)
+$modelRouterSrc = Join-Path $hooksSrc "model-router.js"
+if (Test-Path $modelRouterSrc) {
+    Install-ConfigFile $modelRouterSrc (Join-Path $hooksInstallDir "model-router.js") "model router hook: model-router.js"
+
+    # Merge PreToolUse hook entry into settings.json
+    Write-Host ""
+    Write-Host "--- Configuring model-router in settings.json ---" -ForegroundColor Cyan
+    $settingsFile = Join-Path $ClaudeDir "settings.json"
+    $hookCmd = "node $hooksInstallDir/model-router.js"
+
+    if ($DryRun) {
+        Write-Host "[DRY RUN] Would add PreToolUse hook to $settingsFile" -ForegroundColor Green
+    } else {
+        if (-not (Test-Path $settingsFile)) {
+            '{}' | Set-Content $settingsFile -Encoding UTF8
+        }
+
+        $settingsContent = Get-Content $settingsFile -Raw
+        if ($settingsContent -match 'model-router') {
+            Write-Host "ALREADY CONFIGURED: model-router hook in settings.json" -ForegroundColor Gray
+        } else {
+            $settings = $settingsContent | ConvertFrom-Json
+            if (-not $settings.hooks) {
+                $settings | Add-Member -NotePropertyName "hooks" -NotePropertyValue ([PSCustomObject]@{}) -Force
+            }
+            $hookEntry = [PSCustomObject]@{
+                matcher = "Task"
+                hooks = @([PSCustomObject]@{
+                    type = "command"
+                    command = $hookCmd
+                })
+            }
+            if (-not $settings.hooks.PreToolUse) {
+                $settings.hooks | Add-Member -NotePropertyName "PreToolUse" -NotePropertyValue @($hookEntry) -Force
+            } else {
+                $settings.hooks.PreToolUse = @($settings.hooks.PreToolUse) + $hookEntry
+            }
+            $settings | ConvertTo-Json -Depth 10 | Set-Content $settingsFile -Encoding UTF8
+            Write-Host "CONFIGURED: model-router hook in settings.json" -ForegroundColor Green
+        }
+    }
+}
+
 # Cursor templates
 $cursorSrc = Join-Path $ScriptDir "templates\cursor"
 if (Test-Path $cursorSrc) {

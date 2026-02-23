@@ -34,12 +34,17 @@ Skip Explore/Plan for trivial changes (typos, single-line fixes).
 
 ### Model Routing
 
-Use the cheapest model that can handle the task:
-- **Haiku**: Exploration, search, file reads, linting, simple transforms.
-- **Sonnet**: Implementation, test writing, refactoring, code review.
-- **Opus**: Architecture, planning, complex debugging, multi-file coordination.
+When spawning subagents via the Task tool, ALWAYS set the `model` parameter.
+Never rely on inheritance — it defaults to the parent model (usually the most
+expensive). Cost ratios are 1x (haiku) : 3x (sonnet) : 5x (opus).
 
-When spawning subagents, set the `model` parameter explicitly.
+Decision tree:
+1. Task ONLY reads, searches, or explores? -> `model: "haiku"`
+2. Task writes code, tests, or refactors? -> `model: "sonnet"`
+3. Task requires cross-file reasoning, architecture, or complex debugging? -> `model: "opus"`
+
+When in doubt, choose the cheaper option. A model-router hook auto-selects
+when you forget, but explicit is better than implicit.
 
 ## Context and Session Management
 
