@@ -8,6 +8,7 @@ PROFILE="dev"
 WIZARD=false
 FORCE=false
 DRY_RUN=false
+KNOWLEDGE_REPO=""
 
 usage() {
   cat <<EOF
@@ -16,17 +17,19 @@ Usage: install.sh [OPTIONS]
 Install agentic coding practices for Claude Code.
 
 Options:
-  --profile <name>    Installation profile: dev (default), research
-  --wizard            Interactive wizard to merge with existing configuration
-  --force             Overwrite existing files without prompting
-  --dry-run           Show what would be installed without making changes
-  -h, --help          Show this help message
+  --profile <name>         Installation profile: dev (default), research
+  --wizard                 Interactive wizard to merge with existing configuration
+  --force                  Overwrite existing files without prompting
+  --dry-run                Show what would be installed without making changes
+  --knowledge-repo <url>   Clone (or pull) a git repo into ~/.claude/knowledge
+  -h, --help               Show this help message
 
 Examples:
   ./install.sh                          # Install dev profile, prompt on conflicts
   ./install.sh --wizard                 # Interactive merge with existing config
   ./install.sh --force                   # Overwrite everything
   ./install.sh --dry-run                # Preview what would be installed
+  ./install.sh --knowledge-repo https://github.com/org/knowledge
 EOF
   exit 0
 }
@@ -42,6 +45,11 @@ while [[ "$#" -gt 0 ]]; do
     --wizard) WIZARD=true ;;
     --force) FORCE=true ;;
     --dry-run) DRY_RUN=true ;;
+    --knowledge-repo)
+      if [[ "$#" -lt 2 || "$2" == --* ]]; then
+        echo "ERROR: --knowledge-repo requires a URL"; exit 1
+      fi
+      KNOWLEDGE_REPO="$2"; shift ;;
     -h|--help) usage ;;
     *) echo "Unknown parameter: $1"; usage ;;
   esac
@@ -286,6 +294,18 @@ if [ -d "$SCRIPT_DIR/templates/hooks" ]; then
   done
 fi
 
+# Claude session hooks (SessionStart, SessionEnd -- installed to ~/.claude/hooks/)
+echo ""
+echo "--- Installing Claude session hooks ---"
+if [ "$DRY_RUN" != true ]; then
+  mkdir -p "$CLAUDE_DIR/hooks"
+fi
+for hook_file in "$SCRIPT_DIR/templates/hooks"/session-*.js; do
+  [ -f "$hook_file" ] || continue
+  hook_name=$(basename "$hook_file")
+  install_file "$hook_file" "$CLAUDE_DIR/hooks/$hook_name" "session hook: $hook_name"
+done
+
 # Cursor templates (rules + commands)
 if [ -d "$SCRIPT_DIR/templates/cursor" ]; then
   echo ""
@@ -305,10 +325,32 @@ if [ -d "$SCRIPT_DIR/templates/cursor" ]; then
   done
 fi
 
+# --- Knowledge repo setup ---
+if [ -n "$KNOWLEDGE_REPO" ]; then
+  echo ""
+  echo "--- Setting up knowledge repository ---"
+  KNOWLEDGE_DIR="$CLAUDE_DIR/knowledge"
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would clone $KNOWLEDGE_REPO -> $KNOWLEDGE_DIR"
+  elif [ -d "$KNOWLEDGE_DIR/.git" ]; then
+    echo "Knowledge repo already exists at $KNOWLEDGE_DIR"
+    echo "Pulling latest..."
+    git -C "$KNOWLEDGE_DIR" pull --rebase 2>/dev/null || echo "  Pull failed (may need manual resolution)"
+  else
+    echo "Cloning knowledge repo..."
+    git clone "$KNOWLEDGE_REPO" "$KNOWLEDGE_DIR"
+    echo "INSTALLED: knowledge repo -> $KNOWLEDGE_DIR"
+  fi
+  # Ensure entries directory exists
+  if [ "$DRY_RUN" != true ]; then
+    mkdir -p "$KNOWLEDGE_DIR/entries"
+  fi
+fi
+
 # --- Cleanup skills from other profile ---
 
 # Skills exclusive to each profile (continue is shared)
-DEV_ONLY_SKILLS=("checkpoint" "create-project" "playbook")
+DEV_ONLY_SKILLS=("checkpoint" "create-project" "learn" "playbook" "promote")
 RESEARCH_ONLY_SKILLS=("investigate")
 LEGACY_SKILLS=("findings")
 
