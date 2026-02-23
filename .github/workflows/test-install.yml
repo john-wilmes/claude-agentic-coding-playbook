@@ -206,6 +206,63 @@ jobs:
 
           exit $failed
 
+      # ── Phase 2c: Research profile template verification ─────────
+
+      - name: "Verify research profile templates"
+        if: matrix.profile == 'research'
+        shell: bash
+        run: |
+          failed=0
+          check() {
+            if [ ! -e "$1" ]; then
+              echo "MISSING: $1"
+              failed=1
+            else
+              echo "OK: $1"
+            fi
+          }
+
+          check "$HOME/.claude/templates/investigation/evidence.md"
+          check "$HOME/.claude/templates/investigation/findings.md"
+          check "$HOME/.claude/templates/investigation/status.md"
+          check "$HOME/.claude/templates/investigation/presidio.yaml"
+          check "$HOME/.claude/templates/investigation/hooks/pre-commit-sanitize"
+          check "$HOME/.claude/scripts/sanitize.sh"
+
+          exit $failed
+
+      - name: "Verify sanitize.sh is executable"
+        if: matrix.profile == 'research' && runner.os == 'Linux'
+        run: |
+          script="$HOME/.claude/scripts/sanitize.sh"
+          if [ ! -x "$script" ]; then
+            echo "FAIL: $script is not executable"
+            ls -l "$script"
+            exit 1
+          fi
+          echo "OK: sanitize.sh is executable"
+
+      # ── Phase 2d: Cursor template verification ───────────────────
+
+      - name: "Verify Cursor templates"
+        shell: bash
+        run: |
+          failed=0
+          check() {
+            if [ ! -e "$1" ]; then
+              echo "MISSING: $1"
+              failed=1
+            else
+              echo "OK: $1"
+            fi
+          }
+
+          check "$HOME/.claude/templates/cursor/rules/standards.mdc"
+          check "$HOME/.claude/templates/cursor/rules/quality.mdc"
+          check "$HOME/.claude/templates/cursor/commands/checkpoint.md"
+
+          exit $failed
+
       # ── Phase 3: Idempotency ─────────────────────────────────────
 
       - name: "Re-install (idempotency check, bash)"
@@ -289,6 +346,71 @@ jobs:
           fi
           echo "OK: large file blocked"
 
+      # ── Phase 4b: Generic secret pattern ─────────────────────────
+
+      - name: "Pre-commit hook: blocks generic secrets"
+        if: runner.os == 'Linux'
+        run: |
+          repo=$(mktemp -d)
+          git init "$repo"
+          git -C "$repo" config user.email "ci@test"
+          git -C "$repo" config user.name "CI"
+          cp "$HOME/.claude/templates/hooks/pre-commit" "$repo/.git/hooks/pre-commit"
+          echo "password=supersecretvalue123" > "$repo/config.txt"
+          git -C "$repo" add config.txt
+          if git -C "$repo" commit -m "bad commit" 2>&1; then
+            echo "FAIL: hook should have blocked generic secret"
+            exit 1
+          fi
+          echo "OK: generic secret (password=...) blocked"
+
+      - name: "Pre-commit hook: allows short values (no false positive)"
+        if: runner.os == 'Linux'
+        run: |
+          repo=$(mktemp -d)
+          git init "$repo"
+          git -C "$repo" config user.email "ci@test"
+          git -C "$repo" config user.name "CI"
+          cp "$HOME/.claude/templates/hooks/pre-commit" "$repo/.git/hooks/pre-commit"
+          echo "token=short7" > "$repo/config.txt"
+          git -C "$repo" add config.txt
+          git -C "$repo" commit -m "clean commit"
+          echo "OK: short value (under 8 chars) not blocked"
+
+      # ── Phase 4c: .env variant patterns ──────────────────────────
+
+      - name: "Pre-commit hook: blocks .env.local"
+        if: runner.os == 'Linux'
+        run: |
+          repo=$(mktemp -d)
+          git init "$repo"
+          git -C "$repo" config user.email "ci@test"
+          git -C "$repo" config user.name "CI"
+          cp "$HOME/.claude/templates/hooks/pre-commit" "$repo/.git/hooks/pre-commit"
+          echo "SECRET=foo" > "$repo/.env.local"
+          git -C "$repo" add .env.local
+          if git -C "$repo" commit -m "bad commit" 2>&1; then
+            echo "FAIL: hook should have blocked .env.local"
+            exit 1
+          fi
+          echo "OK: .env.local blocked"
+
+      - name: "Pre-commit hook: blocks secrets.env"
+        if: runner.os == 'Linux'
+        run: |
+          repo=$(mktemp -d)
+          git init "$repo"
+          git -C "$repo" config user.email "ci@test"
+          git -C "$repo" config user.name "CI"
+          cp "$HOME/.claude/templates/hooks/pre-commit" "$repo/.git/hooks/pre-commit"
+          echo "SECRET=foo" > "$repo/secrets.env"
+          git -C "$repo" add secrets.env
+          if git -C "$repo" commit -m "bad commit" 2>&1; then
+            echo "FAIL: hook should have blocked secrets.env"
+            exit 1
+          fi
+          echo "OK: secrets.env blocked"
+
       # ── Phase 5: Project scaffolding ─────────────────────────────
 
       - name: "Scaffold a new project from templates"
@@ -313,6 +435,42 @@ jobs:
           chmod +x "$proj/.git/hooks/pre-commit"
           test -x "$proj/.git/hooks/pre-commit"
           echo "OK: pre-commit hook installed and executable"
+
+      # ── Phase 5b: sanitize.sh smoke test ────────────────────────
+
+      - name: "sanitize.sh: no arguments exits with error"
+        if: matrix.profile == 'research' && runner.os == 'Linux'
+        run: |
+          script="$HOME/.claude/scripts/sanitize.sh"
+          if "$script" 2>/dev/null; then
+            echo "FAIL: sanitize.sh should exit non-zero with no arguments"
+            exit 1
+          fi
+          echo "OK: sanitize.sh exits non-zero with no arguments"
+
+      - name: "sanitize.sh: missing presidio.yaml degrades gracefully"
+        if: matrix.profile == 'research' && runner.os == 'Linux'
+        run: |
+          # Use isolated HOME so there's no presidio.yaml
+          export HOME=$(mktemp -d)
+          script_src="$GITHUB_WORKSPACE/profiles/research/scripts/sanitize.sh"
+          tmp_file=$(mktemp)
+          echo "test content" > "$tmp_file"
+          "$script_src" "$tmp_file"
+          echo "OK: sanitize.sh exits 0 when presidio.yaml is missing"
+
+      - name: "sanitize.sh: no Presidio installed degrades gracefully"
+        if: matrix.profile == 'research' && runner.os == 'Linux'
+        run: |
+          # Config exists but Presidio Python packages are not installed
+          export HOME=$(mktemp -d)
+          mkdir -p "$HOME/.claude/templates/investigation"
+          echo "analyzer: {}" > "$HOME/.claude/templates/investigation/presidio.yaml"
+          script_src="$GITHUB_WORKSPACE/profiles/research/scripts/sanitize.sh"
+          tmp_file=$(mktemp)
+          echo "test content" > "$tmp_file"
+          "$script_src" "$tmp_file"
+          echo "OK: sanitize.sh exits 0 when Presidio is not installed"
 
       # ── Phase 6: Dogfood test (Linux only) ─────────────────────
 
@@ -406,3 +564,99 @@ jobs:
           # Verify investigation lives under _patterns parent
           test -d "$HOME/.claude/investigations/_patterns"
           echo "OK: _patterns directory exists for cross-investigation patterns"
+
+      # ── Phase 7: Cross-profile switching (Linux only) ────────────
+
+      - name: "Cross-profile: dev → research → dev"
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+
+          # Use isolated HOME
+          export HOME=$(mktemp -d)
+          echo "CROSS_PROFILE_HOME=$HOME" >> "$GITHUB_ENV"
+          echo "Using isolated HOME=$HOME"
+
+          # Step 1: Install dev profile
+          bash install.sh --profile dev --force
+          echo "--- Dev profile installed ---"
+
+          # Verify dev skills present
+          test -d "$HOME/.claude/skills/checkpoint"  && echo "OK: checkpoint present"
+          test -d "$HOME/.claude/skills/create-project" && echo "OK: create-project present"
+          test -d "$HOME/.claude/skills/playbook"    && echo "OK: playbook present"
+          test -d "$HOME/.claude/skills/continue"    && echo "OK: continue present"
+
+          # Step 2: Switch to research profile
+          bash install.sh --profile research --force
+          echo "--- Switched to research profile ---"
+
+          # Verify dev-only skills removed
+          for skill in checkpoint create-project playbook; do
+            if [ -d "$HOME/.claude/skills/$skill" ]; then
+              echo "FAIL: dev-only skill /$skill should have been removed"
+              exit 1
+            fi
+            echo "OK: /$skill removed"
+          done
+
+          # Verify research skills present
+          test -d "$HOME/.claude/skills/investigate" && echo "OK: investigate present"
+          test -d "$HOME/.claude/skills/continue"    && echo "OK: continue still present"
+
+          # Verify CLAUDE.md switched to research
+          grep -q "Question, Collect, Synthesize, Close" "$HOME/.claude/CLAUDE.md"
+          echo "OK: CLAUDE.md has research workflow"
+
+          # Step 3: Switch back to dev profile
+          bash install.sh --profile dev --force
+          echo "--- Switched back to dev profile ---"
+
+          # Verify research-only skills removed
+          if [ -d "$HOME/.claude/skills/investigate" ]; then
+            echo "FAIL: research-only skill /investigate should have been removed"
+            exit 1
+          fi
+          echo "OK: /investigate removed"
+
+          # Verify dev skills restored
+          test -d "$HOME/.claude/skills/checkpoint"  && echo "OK: checkpoint restored"
+          test -d "$HOME/.claude/skills/create-project" && echo "OK: create-project restored"
+          test -d "$HOME/.claude/skills/playbook"    && echo "OK: playbook restored"
+          test -d "$HOME/.claude/skills/continue"    && echo "OK: continue still present"
+
+          # Verify CLAUDE.md switched back to dev
+          grep -q "Explore, Plan, Code, Verify, Commit" "$HOME/.claude/CLAUDE.md"
+          echo "OK: CLAUDE.md has dev workflow"
+
+      # ── Phase 8: Invalid profile error ───────────────────────────
+
+      - name: "Invalid profile: bash rejects unknown profile"
+        if: runner.os == 'Linux'
+        run: |
+          output=$(bash install.sh --profile bogus 2>&1 || true)
+          echo "$output"
+          if echo "$output" | grep -q "Unknown profile"; then
+            echo "OK: bash rejects unknown profile with error message"
+          else
+            echo "FAIL: expected 'Unknown profile' error"
+            exit 1
+          fi
+
+      - name: "Invalid profile: PowerShell rejects unknown profile"
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          try {
+            & .\install.ps1 -Profile bogus -DryRun *>&1 | Out-Null
+            throw "FAIL: should have thrown on invalid profile"
+          } catch {
+            if ($_.Exception.Message -match 'ValidateSet|validate set|Cannot validate argument') {
+              Write-Output "OK: PowerShell ValidateSet rejects unknown profile"
+            } elseif ($_.Exception.Message -match 'FAIL: should have thrown') {
+              throw $_
+            } else {
+              # Any other error from parameter binding is acceptable
+              Write-Output "OK: PowerShell rejects unknown profile: $($_.Exception.Message)"
+            }
+          }
