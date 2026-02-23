@@ -763,13 +763,22 @@ jobs:
       - name: "Pre-install validation: missing node detected"
         if: runner.os == 'Linux'
         run: |
-          # Temporarily hide node from PATH
-          export PATH=$(echo "$PATH" | tr ':' '\n' | grep -v node | tr '\n' ':')
+          # Hide node by prepending a directory with a fake node that exits 127
+          hide_dir=$(mktemp -d)
+          cat > "$hide_dir/node" << 'FAKE'
+          #!/bin/sh
+          exit 127
+          FAKE
+          # Remove the fake — we just need node absent, not faked
+          rm "$hide_dir/node"
+
+          # Create a minimal PATH with only basic tools (no node)
+          export PATH="$hide_dir:/usr/bin:/bin"
           output=$(bash install.sh --profile dev --dry-run 2>&1 || true)
           echo "$output"
-          if echo "$output" | grep -q "node.*required"; then
+          if echo "$output" | grep -q "not found on PATH"; then
             echo "OK: install.sh detects missing node"
           else
-            echo "FAIL: expected node missing error"
+            echo "FAIL: expected 'not found on PATH' error"
             exit 1
           fi
