@@ -39,12 +39,17 @@ Investigations live at `~/.claude/investigations/<id>/`. Use `/investigate` to m
 
 ### Model Routing
 
-Use the cheapest model that can handle the task:
-- **Haiku**: File reads, search, log scanning, simple transforms.
-- **Sonnet**: Analysis, summarization, pattern matching across files.
-- **Opus**: Root cause analysis, architectural investigation, multi-system debugging.
+When spawning subagents via the Task tool, ALWAYS set the `model` parameter.
+Never rely on inheritance — it defaults to the parent model (usually the most
+expensive). Cost ratios are 1x (haiku) : 3x (sonnet) : 5x (opus).
 
-When spawning subagents, set the `model` parameter explicitly.
+Decision tree:
+1. Task reads logs, scans files, or searches for patterns? -> `model: "haiku"`
+2. Task analyzes evidence, summarizes findings, or matches patterns? -> `model: "sonnet"`
+3. Task performs root cause analysis, cross-system debugging, or architectural investigation? -> `model: "opus"`
+
+When in doubt, choose the cheaper option. A model-router hook auto-selects
+when you forget, but explicit is better than implicit.
 
 ## Context and Session Management
 

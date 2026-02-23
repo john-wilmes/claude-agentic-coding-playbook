@@ -228,6 +228,31 @@ jobs:
 
           exit $failed
 
+      - name: "Verify model-router hook installed"
+        shell: bash
+        run: |
+          failed=0
+          check() {
+            if [ ! -e "$1" ]; then
+              echo "MISSING: $1"
+              failed=1
+            else
+              echo "OK: $1"
+            fi
+          }
+
+          check "$HOME/.claude/hooks/model-router.js"
+
+          # Verify settings.json has PreToolUse hook
+          if grep -q "model-router" "$HOME/.claude/settings.json" 2>/dev/null; then
+            echo "OK: model-router configured in settings.json"
+          else
+            echo "MISSING: model-router entry in settings.json"
+            failed=1
+          fi
+
+          exit $failed
+
       - name: "Verify session-start.js has knowledge injection"
         shell: bash
         run: |
@@ -950,5 +975,7 @@ jobs:
     name: Hook integration tests
     steps:
       - uses: actions/checkout@v4
-      - name: Run hook integration tests
+      - name: Run session hook tests
         run: node tests/hooks/session-hooks.test.js
+      - name: Run model-router hook tests
+        run: node tests/hooks/model-router.test.js
