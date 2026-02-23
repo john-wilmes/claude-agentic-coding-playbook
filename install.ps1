@@ -5,7 +5,8 @@ param(
     [switch]$Wizard,
     [switch]$Force,
     [switch]$DryRun,
-    [switch]$Help
+    [switch]$Help,
+    [string]$KnowledgeRepo = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,17 +20,19 @@ Usage: .\install.ps1 [OPTIONS]
 Install agentic coding practices for Claude Code.
 
 Options:
-  -Profile <name>    Installation profile: dev (default), research
-  -Wizard            Interactive wizard to merge with existing configuration
-  -Force             Overwrite existing files without prompting
-  -DryRun            Show what would be installed without making changes
-  -Help              Show this help message
+  -Profile <name>         Installation profile: dev (default), research
+  -Wizard                 Interactive wizard to merge with existing configuration
+  -Force                  Overwrite existing files without prompting
+  -DryRun                 Show what would be installed without making changes
+  -KnowledgeRepo <url>    Clone (or pull) a git repo into ~/.claude/knowledge
+  -Help                   Show this help message
 
 Examples:
   .\install.ps1                              # Install dev profile
   .\install.ps1 -Wizard                      # Interactive merge with existing config
   .\install.ps1 -Force                        # Overwrite everything
   .\install.ps1 -DryRun                      # Preview what would be installed
+  .\install.ps1 -KnowledgeRepo https://github.com/org/knowledge
 "@
     exit 0
 }
@@ -266,6 +269,15 @@ if (Test-Path $hooksSrc) {
     }
 }
 
+# Claude session hooks (SessionStart, SessionEnd -- installed to ~/.claude/hooks/)
+Write-Host ""
+Write-Host "--- Installing Claude session hooks ---" -ForegroundColor Cyan
+$hooksInstallDir = Join-Path $ClaudeDir "hooks"
+if (-not $DryRun -and -not (Test-Path $hooksInstallDir)) { New-Item -ItemType Directory -Path $hooksInstallDir -Force | Out-Null }
+Get-ChildItem $hooksSrc -File -Filter "session-*.js" -ErrorAction SilentlyContinue | ForEach-Object {
+    Install-ConfigFile $_.FullName (Join-Path $hooksInstallDir $_.Name) "session hook: $($_.Name)"
+}
+
 # Cursor templates
 $cursorSrc = Join-Path $ScriptDir "templates\cursor"
 if (Test-Path $cursorSrc) {
@@ -283,10 +295,37 @@ if (Test-Path $cursorSrc) {
     }
 }
 
+# --- Knowledge repo setup ---
+if ($KnowledgeRepo -ne "") {
+    Write-Host ""
+    Write-Host "--- Setting up knowledge repository ---" -ForegroundColor Cyan
+    $KnowledgeDir = Join-Path $ClaudeDir "knowledge"
+    if ($DryRun) {
+        Write-Host "[DRY RUN] Would clone $KnowledgeRepo -> $KnowledgeDir" -ForegroundColor Green
+    } elseif (Test-Path (Join-Path $KnowledgeDir ".git")) {
+        Write-Host "Knowledge repo already exists at $KnowledgeDir"
+        Write-Host "Pulling latest..."
+        try {
+            & git -C $KnowledgeDir pull --rebase 2>$null
+        } catch {
+            Write-Host "  Pull failed (may need manual resolution)" -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "Cloning knowledge repo..."
+        & git clone $KnowledgeRepo $KnowledgeDir
+        Write-Host "INSTALLED: knowledge repo -> $KnowledgeDir" -ForegroundColor Green
+    }
+    # Ensure entries directory exists
+    if (-not $DryRun) {
+        $entriesDir = Join-Path $KnowledgeDir "entries"
+        if (-not (Test-Path $entriesDir)) { New-Item -ItemType Directory -Path $entriesDir -Force | Out-Null }
+    }
+}
+
 # --- Cleanup skills from other profile ---
 
 # Skills exclusive to each profile (continue is shared)
-$devOnlySkills = @("checkpoint", "create-project", "playbook")
+$devOnlySkills = @("checkpoint", "create-project", "learn", "playbook", "promote")
 $researchOnlySkills = @("investigate")
 $legacySkills = @("findings")
 

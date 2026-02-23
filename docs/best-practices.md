@@ -49,8 +49,9 @@ source; every recommendation is grounded in evidence.
 9. [Code Review Automation](#9-code-review-automation)
 10. [Security and Trust Boundaries](#10-security-and-trust-boundaries)
 11. [Multi-Agent Coordination](#11-multi-agent-coordination)
-12. [Getting Started](#12-getting-started)
-13. [Citations](#citations)
+12. [Shared Knowledge Base](#12-shared-knowledge-base)
+13. [Getting Started](#13-getting-started)
+14. [Citations](#citations)
 
 ---
 
@@ -500,7 +501,7 @@ this section becomes the most valuable part of the memory file.
 | Tool | Memory Location | Scope |
 |---|---|---|
 | Claude Code | `MEMORY.md`, `CLAUDE.md` | Per-project or global (`~/.claude/`) |
-| Claude Code Subagents | `.claude/agent-memory/<name>/` | Per-agent, with `user`, `project`, or `local` scope [3] |
+| Claude Code Subagents | `.claude/agent-memory/<name>/` | Per-agent, with `user`, `project`, or `local` scope *(built-in to Claude Code; not managed by this playbook)* [3] |
 | Cursor | `.cursor/memory/`, `.cursor/rules/*.mdc` | Per-project with glob-based activation |
 
 ---
@@ -1122,7 +1123,7 @@ CI pipelines), a shared communication channel enables coordination:
 |---|---|
 | Shared discovery | Agent A finds a breaking change that affects Agent B's work |
 | Conflict prevention | Two agents about to edit the same file |
-| Cross-project awareness | Pattern discovered in one project applies elsewhere |
+| Cross-project awareness | Pattern discovered in one project applies elsewhere *(requires concurrent sessions; for cross-temporal transfer, use `/promote`)* |
 | Workload rebalancing | Redirect work from blocked to available agents |
 
 ### When NOT to use multi-agent
@@ -1132,6 +1133,19 @@ CI pipelines), a shared communication channel enables coordination:
 - **No cross-cutting discoveries**: Isolated tasks with no interdependencies
 - **Simple exploration**: A single subagent is sufficient; full Agent Teams adds
   unnecessary complexity
+
+### Limitations of cross-session communication
+
+The shared communication channel described above operates in real time between
+concurrent sessions. It does **not** persist knowledge across time:
+
+- Messages are pruned after 2 hours or 200 messages
+- A lesson discovered on Monday is not available to a session on Tuesday
+- No mechanism exists to search historical cross-session messages
+
+For durable knowledge transfer across projects and time, use `/promote` to move
+lessons to global scope, or `/learn` to capture them as structured knowledge
+entries that persist and auto-inject into future sessions.
 
 ### Subagent patterns
 
@@ -1157,7 +1171,120 @@ task [3].
 
 ---
 
-## 12. Getting Started
+## 12. Shared Knowledge Base
+
+### The knowledge re-discovery problem
+
+Agents independently re-discover the same lessons across projects. An audit of
+9 project memory files found 73 lessons with 8 confirmed duplicates — each
+representing 10-60 minutes of debugging time. Multiply by team size and the cost
+compounds: 100 users re-discovering 12 lessons is ~600 person-hours wasted.
+
+Google's internal wiki had ~90% of content unviewed after several months.
+Documentation not co-located with the workflow gets ignored [20]. The fix: embed
+knowledge where it's consumed. For AI agents, that means injecting relevant
+lessons into the context window at session start — not storing them in a repo the
+agent must browse.
+
+### Entry format
+
+Each lesson is a separate markdown file with YAML frontmatter:
+
+```yaml
+---
+id: "20260222-143052-git-hookspath-override"
+created: "2026-02-22T14:30:52Z"
+author: "agent-name"
+source_project: "my-project"
+tool: "git"
+category: "gotcha"
+tags: ["hooks", "config", "silent-failure"]
+confidence: "high"
+visibility: "local"
+verified_at: "2026-02-22T14:30:52Z"
+---
+```
+
+Entries live at `~/.claude/knowledge/entries/<timestamp-slug>/entry.md`.
+
+One file per entry with timestamp-slug naming structurally eliminates merge
+conflicts. Two agents creating entries simultaneously produce two new files with
+different names — no existing file is touched [11].
+
+### Taxonomy
+
+Six flat categories — no hierarchy deeper than one level. Hierarchical classifiers
+show error cascade: wrong classification at level 1 propagates to all sublevels.
+A flat taxonomy with clear definitions achieves >90% accuracy on auto-classification [7].
+
+| Category | Description |
+|---|---|
+| `gotcha` | Surprising behavior, silent failure, common mistake |
+| `pattern` | Reusable approach or best practice |
+| `workaround` | Temporary fix for a known issue |
+| `config` | Configuration requirement or setting |
+| `security` | Security-related finding |
+| `performance` | Optimization or bottleneck insight |
+
+Tags provide the second dimension for cross-cutting concerns (e.g., `windows`,
+`ci`, `typescript`).
+
+### Contribution workflow
+
+Agents author entries automatically — contribution friction is zero for humans:
+
+1. **Capture**: Run `/learn` to describe a lesson. The skill auto-classifies
+   (category, tool, tags) and creates an entry file.
+2. **Checkpoint integration**: `/checkpoint` suggests running `/learn` when
+   non-obvious discoveries are detected.
+3. **Promote**: Run `/promote` to move a project-level lesson to global scope.
+4. **Sync**: If the knowledge directory is a git repo, entries push on checkpoint
+   and pull on session start.
+5. **Review**: For shared (public) repos, entries go through PR review before
+   merge — the human review gate that prevents hallucination amplification [13].
+
+### Context-aware injection
+
+The session-start hook scans `~/.claude/knowledge/entries/` and injects the top
+5 entries matching the current project's tools and tags. Injection stays under
+~1,500 tokens. The full knowledge base stays on disk for on-demand search.
+
+Relevance scoring:
+- Tool match (strongest signal): entry tool matches project dependencies
+- Tag overlap: entry tags match project context
+- Category boost: security and gotcha entries score higher (broadly useful)
+- Confidence: high-confidence entries preferred
+
+### Security model
+
+A shared knowledge base is architecturally an untrusted input pipeline.
+Natural-language injection is harder to detect than code injection [15].
+
+Defenses:
+- **Human review gate**: PRs for public repos catch obvious injection [13]
+- **Informational framing**: entries describe what happened, not what to do.
+  "This lesson describes X" rather than "Always do X" — reduces execution risk
+- **Provenance metadata**: author, source_project, created date enable filtering
+  by trust level
+- **Sensitivity scan**: CI and pre-commit hooks check for API keys, credentials,
+  email addresses, and absolute paths with usernames
+- **Opt-in scope**: `visibility` field (local/team/public) controls sharing radius
+
+### When to use a shared knowledge base
+
+**Good fit:**
+- Teams where multiple agents work on similar technology stacks
+- Organizations with recurring platform-specific issues (Amplify, Docker, CI)
+- Projects where onboarding cost is high (many lessons to re-discover)
+
+**Not needed:**
+- Solo developers with few projects (MEMORY.md Lessons Learned is sufficient)
+- Teams using completely different tech stacks (low knowledge overlap)
+- Short-lived projects (insufficient time to accumulate reusable lessons)
+
+---
+
+## 13. Getting Started
 
 ### Quick install
 

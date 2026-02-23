@@ -30,6 +30,23 @@ If `$ARGUMENTS` is provided, use it as the next-steps summary.
 
 Do not duplicate information already in memory. Read the current memory file first.
 
+### 1b. Capture knowledge entries (if applicable)
+
+If non-obvious discoveries, bugs, or workarounds were encountered this session — things a future agent working with the same tools would benefit from knowing — suggest capturing them:
+
+```text
+This session involved some non-trivial findings. Consider capturing them as
+knowledge entries with /learn so they auto-inject into future sessions.
+
+Candidates:
+  - <brief description of finding 1>
+  - <brief description of finding 2>
+
+Run /learn now? [y/N]
+```
+
+Only suggest this when there are genuine discoveries worth preserving. Do not prompt for routine work, trivial changes, or facts already in MEMORY.md. If the user declines, continue to step 2.
+
 ### 2. Run quality gates (if applicable)
 
 Check if the project has type-check, lint, or test commands defined in its CLAUDE.md. If so, run them. Report results but do not block the checkpoint on failures -- document failures in memory instead.
@@ -53,6 +70,25 @@ Check `git status` for uncommitted changes. If there are changes:
 - Push to remote
 
 If there are no changes, skip. If not in a git repo, skip.
+
+### 3b. Sync knowledge repo (if applicable)
+
+If `~/.claude/knowledge` is a git repo, commit any uncommitted entries and push to remote:
+
+```bash
+cd ~/.claude/knowledge
+# Commit any uncommitted entries
+if [ -n "$(git status --porcelain)" ]; then
+  git add entries/
+  git commit -m "checkpoint: sync entries"
+fi
+# Push if remote is configured
+if git remote get-url origin &>/dev/null; then
+  git push origin HEAD 2>/dev/null || echo "Knowledge repo push failed -- will sync on next session start"
+fi
+```
+
+If `~/.claude/knowledge` is not a git repo, skip this step.
 
 ### 4. Verify push
 
