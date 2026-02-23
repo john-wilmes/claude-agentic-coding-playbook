@@ -140,6 +140,7 @@ The wizard will:
 - **[Claude Code vs Cursor](docs/tool-comparison.md)** -- architectural differences, where agents can run, installation scope, pricing
 - **[Project CLAUDE.md Template](templates/project-CLAUDE.md)** -- starting point for per-project instructions
 - **[Cursor Rules Template](templates/cursor/rules/)** -- `.mdc` rules for Cursor projects
+- **[Dogfood Playbook](docs/dogfood-playbook.md)** -- manual interactive testing checklist for verifying the full user experience
 
 ## Contributing
 

@@ -944,3 +944,11 @@ jobs:
           } else {
             throw "FAIL: expected 'not found on PATH' error"
           }
+
+  test-hooks:
+    runs-on: ubuntu-latest
+    name: Hook integration tests
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run hook integration tests
+        run: node tests/hooks/session-hooks.test.js
