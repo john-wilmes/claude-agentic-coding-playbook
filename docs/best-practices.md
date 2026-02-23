@@ -23,6 +23,8 @@ its well-documented failure modes. The evidence:
   experience level and measurement method [METR, GitHub Copilot, Faros AI].
   Stack Overflow's 2025 survey confirms broad adoption: 84% of developers use or
   plan to use AI tools, though 46% distrust accuracy [33].
+- **MCP tool cost**: Every MCP tool definition is re-sent every turn. MCP Tool
+  Search activates automatically at >10% context to mitigate overhead [35].
 - **Instruction ceiling**: LLMs follow ~150-200 instructions reliably; Claude
   Code's system prompt uses ~50 of that budget [5].
 - **Flow state**: 73% of developers report flow state with AI tools; 87% preserve
@@ -48,10 +50,11 @@ source; every recommendation is grounded in evidence.
 8. [Testing and Verification](#8-testing-and-verification)
 9. [Code Review Automation](#9-code-review-automation)
 10. [Security and Trust Boundaries](#10-security-and-trust-boundaries)
-11. [Multi-Agent Coordination](#11-multi-agent-coordination)
-12. [Shared Knowledge Base](#12-shared-knowledge-base)
-13. [Getting Started](#13-getting-started)
-14. [Citations](#citations)
+11. [Model Context Protocol (MCP)](#11-model-context-protocol-mcp)
+12. [Multi-Agent Coordination](#12-multi-agent-coordination)
+13. [Shared Knowledge Base](#13-shared-knowledge-base)
+14. [Getting Started](#14-getting-started)
+- [Citations](#citations)
 
 ---
 
@@ -332,6 +335,58 @@ history by 90%. The cache has a 5-minute default TTL, refreshed on each use. A
 For multi-turn conversations, automatic caching moves the cache breakpoint forward
 with each turn. Previous conversation content is read from cache; only new content
 is written.
+
+### Cache-friendly instruction design
+
+Prompt caching operates on a prefix match: the infrastructure reuses the cached KV
+state only when the beginning of your prompt matches a previously cached version
+byte-for-byte [4]. This means the order and stability of content in your
+instruction files directly determines how often you pay full input cost versus the
+10% cache-hit rate.
+
+**The stable prefix rule.** Place the most stable content at the top of CLAUDE.md
+and the most volatile content at the bottom. A single change anywhere in the file
+invalidates the cache for every token after that point. If your frequently updated
+"Current Work" section sits above your 200-line coding standards block, every
+memory update forces a full re-tokenization of the standards. Moving volatile
+sections to the bottom preserves cache hits on everything above the change point.
+
+**Avoid dynamic values in instruction files.** Embedding a date
+(`last updated: 2026-02-22`), a version number, or any computed value in CLAUDE.md
+causes cache invalidation on every change, even when the substantive content is
+identical. Keep instruction files static in content; record dynamic metadata in
+memory files that are explicitly expected to change.
+
+**Keep the system prompt consistent across turns.** The cached prefix is formed by
+the concatenation of tool definitions, CLAUDE.md content, and any memory files
+loaded at session start [4]. Adding or removing an MCP server, changing tool
+availability, or editing a memory file mid-session all shift this prefix. Batch
+instruction changes into a single session boundary rather than editing files while
+actively working.
+
+### Per-operation cache behavior
+
+Not all agent actions break the cache. Tool calls -- file reads, grep, glob,
+bash -- are appended to the conversation after the cached prefix and do not modify
+it, making heavy tool use cache-neutral. Instruction file edits modify the prefix
+itself, making them the primary source of unexpected invalidation [4, 27].
+
+| Operation | Cache Impact | Reason |
+|---|---|---|
+| Tool call response (Read, Grep, Bash) | No invalidation | Result appended after cached prefix |
+| New conversation turn (user message) | No invalidation | Extends conversation; prefix unchanged |
+| Editing CLAUDE.md | Invalidates from edit point | Prefix content changes |
+| Updating a memory file | Invalidates from change point | Memory loaded as part of prefix |
+| Adding or removing an MCP server | Full invalidation | Tool definitions are part of the prefix |
+| Running `/compact` | Full invalidation | Replaces conversation history with summary |
+| Switching models | Full invalidation | Cache is per-model; no cross-model reuse |
+
+The practical implication: the work most agents do most of the time -- reading
+files, searching code, running commands -- is cache-friendly by design. The
+operations that invalidate the cache are almost always human-initiated: editing
+configuration, adjusting memory, changing the tool environment. Keep those changes
+batched and infrequent during active sessions to preserve the cached state that
+makes long investigative sessions economical.
 
 ### Cost-benefit summary by practice
 
@@ -1057,7 +1112,173 @@ Trail of Bits published a hardened Claude Code configuration [22] that provides:
 
 ---
 
-## 11. Multi-Agent Coordination
+## 11. Model Context Protocol (MCP)
+
+### What MCP is
+
+Model Context Protocol (MCP) is an open standard that turns external services into
+tool calls the agent can invoke [36]. Rather than building bespoke integrations for
+every data source, MCP provides a common JSON-RPC 2.0 interface: define a server,
+expose its capabilities, and any MCP-aware host (Claude Code, VS Code, Claude
+Desktop) can consume it without code changes [36].
+
+MCP defines three server-side primitives [36]:
+
+| Primitive | What it does | Example |
+|---|---|---|
+| **Tools** | Executable functions the agent calls | Query a database, create a GitHub issue |
+| **Resources** | Data sources attached as context | File contents, schema definitions, API responses |
+| **Prompts** | Reusable interaction templates | System prompts, few-shot examples |
+
+Two transport mechanisms are supported [36]:
+
+- **Stdio**: Local process communicates over stdin/stdout. No network overhead;
+  ideal for tools that need direct filesystem or system access.
+- **Streamable HTTP** (recommended for remote): HTTP POST for client-to-server
+  messages with optional Server-Sent Events for streaming. Supports OAuth 2.0,
+  bearer tokens, and API key headers. The older SSE-only transport is deprecated
+  [35].
+
+### Installation scopes
+
+Claude Code resolves MCP server configurations from three scopes [35]:
+
+| Scope | Storage location | Who can see it | Use case |
+|---|---|---|---|
+| **Local** (default) | `~/.claude.json` under project path | You, current project only | Personal dev servers, experiments |
+| **Project** | `.mcp.json` in project root (committed to git) | Entire team | Shared tools required for collaboration |
+| **User** | `~/.claude.json` top-level | You, all projects | Personal utilities used across multiple repos |
+
+When the same server name exists at multiple scopes, local overrides project,
+which overrides user [35].
+
+A minimal `.mcp.json` for a team-shared database server:
+
+```json
+{
+  "mcpServers": {
+    "analytics-db": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@bytebase/dbhub", "--dsn", "${DB_DSN}"],
+      "env": {}
+    }
+  }
+}
+```
+
+Environment variables expand using `${VAR}` or `${VAR:-default}` syntax in
+`command`, `args`, `env`, `url`, and `headers` fields [35]. This lets teams commit
+shared configurations without embedding credentials.
+
+### Security model
+
+Project-scope MCP servers represent a supply chain risk. The `.mcp.json` file
+lives in version control, so a compromised repository can ship a malicious MCP
+server to every developer who clones it [22].
+
+Three controls address this:
+
+1. **Disable project servers by default.** Set `enableAllProjectMcpServers: false`
+   in your Claude Code settings -- Trail of Bits identified this as a critical
+   hardening step [22]. Claude Code will prompt for per-server approval before
+   any project-scoped server runs.
+
+2. **Treat MCP tool output as untrusted input.** Any MCP server that fetches
+   remote content (web pages, issue descriptions, PR comments) is a potential
+   prompt injection vector. OWASP ranks prompt injection as the #1 LLM
+   vulnerability [17]. Apply the same skepticism to MCP responses that you apply
+   to user input.
+
+3. **Review server commands before approving.** Claude Code displays a warning
+   before using project-scoped servers from `.mcp.json` files. Read the
+   `command` and `args` fields; a legitimate database server does not need
+   `--exec` flags or network egress to arbitrary hosts.
+
+To reset previously granted approvals:
+
+```bash
+claude mcp reset-project-choices
+```
+
+### MCP vs built-in tools
+
+MCP is not a replacement for built-in tools. Use the right primitive for the job:
+
+| Capability | Use built-in tools | Use MCP |
+|---|---|---|
+| Read/write files | Read, Write, Edit (no setup) | -- |
+| Search code | Grep, Glob (fast, no latency) | -- |
+| Run shell commands | Bash | -- |
+| Query a SQL database | -- | Database MCP server |
+| Create/read GitHub issues | -- | GitHub MCP server |
+| Automate a browser | -- | Playwright MCP server |
+| Access IDE state | -- | IDE integration MCP server |
+| Call an internal API | -- | Custom MCP server |
+
+Built-in tools have zero startup cost and no network round-trip. Prefer them for
+file operations, search, and local commands. Reach for MCP when you need
+capabilities the built-ins cannot provide -- external services, proprietary APIs,
+or stateful browser sessions.
+
+### Token cost
+
+Every MCP tool definition is added to the system prompt and re-sent with every
+API call, exactly like lines in a CLAUDE.md file (see
+[Core Economics](#1-core-economics)). With many servers active, this overhead is
+measurable.
+
+Key limits from the Claude Code documentation [35]:
+
+- MCP tool output exceeding **10,000 tokens** triggers a warning.
+- The default maximum output is **25,000 tokens** (`MAX_MCP_OUTPUT_TOKENS`).
+- Increase the limit only when a specific server requires it:
+  ```bash
+  export MAX_MCP_OUTPUT_TOKENS=50000
+  ```
+
+**MCP Tool Search** activates automatically when MCP tool definitions would
+consume more than 10% of the context window [35]. Instead of loading all tool
+schemas upfront, the agent uses a search tool to discover relevant MCP tools
+on demand. Tool Search requires Sonnet 4 or Opus 4; it is not available on
+Haiku models.
+
+Practical rule: only enable the MCP servers you are actively using in a given
+session. Disable servers that serve different projects or workflows before
+starting a new task. Context budget spent on idle tool schemas is context
+unavailable for code and reasoning.
+
+### Common patterns
+
+**Database access**: Connect to PostgreSQL, MySQL, or other databases with a
+read-only credential. The agent can inspect schema, run analytical queries, and
+identify data issues without shell access to the database host [35].
+
+```bash
+claude mcp add --transport stdio db -- npx -y @bytebase/dbhub \
+  --dsn "postgresql://readonly:pass@db.prod:5432/analytics"
+```
+
+**Issue tracker integration**: Add the GitHub MCP server and the agent can read
+ticket descriptions, create issues, and open PRs in a single workflow --
+eliminating the copy-paste step between planning and implementation [35].
+
+**Browser automation**: The Playwright MCP server gives the agent a real browser
+it can navigate, screenshot, and test against. Useful for end-to-end test
+authoring and UI regression checks without writing Playwright scripts from
+scratch.
+
+```bash
+claude mcp add --transport stdio playwright -- npx -y @playwright/mcp@latest
+```
+
+**IDE integration**: MCP servers can expose editor state -- open files, active
+diagnostics, cursor position -- to the agent. This is how VS Code and Cursor
+surface language server information that a standalone CLI cannot access.
+
+---
+
+## 12. Multi-Agent Coordination
 
 ### Within-session: subagents
 
@@ -1169,9 +1390,144 @@ then use the optimizer subagent to fix them.
 concurrently while you continue working. Press `Ctrl+B` to background a running
 task [3].
 
+### The pipeline pattern
+
+A pipeline chains agents in sequence, where the output of each becomes the input
+to the next. Unlike parallel research (which fans out and collects), a pipeline
+moves linearly through phases that have distinct requirements -- and where later
+phases cannot begin until earlier ones complete.
+
+Example: a four-stage feature implementation pipeline.
+
+```
+Stage 1 (Haiku  -- Explore):    Read codebase, identify affected files, document API surface
+Stage 2 (Opus   -- Plan):       Design the implementation, identify risks, produce a spec
+Stage 3 (Sonnet -- Implement):  Write code and tests against the spec
+Stage 4 (Sonnet -- Review):     Security and correctness review of the diff
+```
+
+Each stage runs as a separate subagent with the model, tools, and system prompt
+appropriate to its task. The lead session passes structured output (a markdown
+file, a diff, a task list) as the input to the next stage.
+
+When to use a pipeline:
+
+- Multi-phase tasks where earlier phases produce structured artifacts (specs,
+  plans, diffs)
+- Tasks where you want to enforce a gate: stage 3 cannot start until stage 2
+  produces an approved spec
+- Tasks where different phases have genuinely different model requirements (cheap
+  exploration, expensive planning)
+
+When a pipeline is overkill: single-phase work, or tasks where stages are so
+interdependent that passing structured artifacts between them is more friction
+than a single coordinated session.
+
+### Git worktree isolation
+
+File ownership conflicts are the most common failure mode in parallel Agent
+Teams [3]. Two agents editing the same file in the same working directory will
+overwrite each other's changes without warning. The structural fix is to give
+each agent a separate copy of the repository using git worktrees.
+
+Claude Code supports this natively via the `isolation: "worktree"` parameter when
+launching subagents:
+
+```markdown
+---
+name: feature-agent
+description: Implements a self-contained feature on an isolated branch
+tools: Read, Write, Edit, Bash, Glob, Grep
+model: sonnet
+isolation: worktree
+---
+You are working on an isolated branch. Do not concern yourself with
+other agents. Implement the assigned feature completely, then stop.
+```
+
+Each agent launched with worktree isolation receives:
+
+- A fresh git branch created from the current HEAD
+- A private working directory -- no shared file state
+- Full read/write access within that directory
+
+When work is complete, the lead session merges the branches. Conflicts, if any,
+surface at merge time with full diff context rather than silently during parallel
+writes.
+
+Worktree isolation eliminates file conflict management entirely. Use it whenever
+two or more agents will write to files in the same repository.
+
+### Model routing per agent
+
+The largest lever for controlling multi-agent cost is assigning each agent the
+cheapest model that can handle its task [27]. Treat model selection as an
+architecture decision, not a default.
+
+| Role | Model | Rationale |
+|---|---|---|
+| Team lead / coordinator | Opus | Complex reasoning, cross-agent synthesis |
+| Implementer | Sonnet | Code writing, test writing, refactoring |
+| Explorer / searcher | Haiku | Read-only codebase search, grep, file reads |
+| Reviewer (mechanical) | Haiku | Pattern matching, lint-style checks |
+| Reviewer (substantive) | Sonnet | Logic errors, security, design review |
+
+Cost comparison for a four-agent team running a 20K-token workload per agent
+(input + output, no cache hits):
+
+| Routing strategy | Per-agent cost | Team total |
+|---|---|---|
+| All Opus | ~$0.060 | ~$0.24 |
+| All Sonnet | ~$0.036 | ~$0.14 |
+| Mixed (1 Opus + 2 Sonnet + 1 Haiku) | ~$0.012-0.060 | ~$0.096 |
+
+Source: Anthropic pricing [4]. Mixed routing yields roughly 60% cost reduction
+versus all-Opus for a typical research-plan-implement-review team.
+
+Set `model` explicitly in every custom subagent definition. Do not rely on
+inheritance for cost-sensitive teams [3].
+
+### Fan-out and consolidation
+
+The fan-out pattern extends parallel research to its logical conclusion: the lead
+spawns N specialized agents for independent tasks, waits for all to complete, then
+synthesizes results into a unified output. Each agent's context is disposable --
+it does its job, produces a structured artifact, and terminates. Only the artifact
+survives.
+
+**Concrete example**: adversarial review of this document with four parallel
+specialized agents:
+
+| Agent | Scope | Findings |
+|---|---|---|
+| Citations reviewer | Verified all 34 external URLs, checked claim accuracy | 8 dead links, 3 misattributed claims |
+| Scripts reviewer | Audited install.sh, install.ps1, hooks, skill frontmatter | 7 bugs including credential regex false negatives |
+| CI/docs verifier | Checked CI workflows, README accuracy, cross-references | 6 path errors, 2 broken badge references |
+| Prose analyzer | Reviewed structure, duplication, unsupported assertions | 16+ structural findings |
+
+Total: ~190K tokens, ~10 minutes, 30+ findings. The same review run sequentially
+in a single session would have saturated the context window before completing [1].
+
+The key insight: each agent is disposable. Its context window fills up and dies
+when the task is done, but its findings -- captured in a structured markdown file
+or task list -- persist. The lead session never sees the agent's internal
+reasoning, only the output artifact. N agents can each use 100K+ tokens of
+context with no accumulation in the parent session.
+
+Design guidance:
+
+- **Tasks must be independent.** Fan-out only works when agents do not need each
+  other's intermediate results.
+- **Outputs must be structured.** Tables, numbered findings, and severity labels
+  are easy to synthesize. Prose summaries are not.
+- **Agents should be disposable.** If you find yourself designing agents that
+  need to persist state, the task is not a fan-out candidate.
+- **Consolidation is the expensive step.** Budget Opus for the synthesis turn --
+  it requires reasoning across all N outputs simultaneously.
+
 ---
 
-## 12. Shared Knowledge Base
+## 13. Shared Knowledge Base
 
 ### The knowledge re-discovery problem
 
@@ -1284,7 +1640,7 @@ Defenses:
 
 ---
 
-## 13. Getting Started
+## 14. Getting Started
 
 ### Quick install
 
@@ -1339,9 +1695,17 @@ the agent would do correctly without the instruction.
 6. Enable `/sandbox` for any work on untrusted code.
 7. Run a baseline code review on your existing codebase.
 
+### Verifying on a clean machine
+
+For teams that need to validate the installer on a fresh environment (e.g., new
+developer onboarding or CI infrastructure), the repository includes
+`scripts/ec2-dogfood.sh` -- a standalone script that installs prerequisites, runs
+both profiles, tests hooks, and verifies knowledge repo integration on a clean
+Ubuntu instance.
+
 ---
 
-Last updated: 2026-02-21
+Last updated: 2026-02-23
 
 ---
 
@@ -1414,3 +1778,7 @@ Last updated: 2026-02-21
 33. **Stack Overflow 2025 Developer Survey -- AI.** https://survey.stackoverflow.co/2025/ai -- 84% use or plan to use AI tools; 46% distrust accuracy; 52% report productivity gains; 66% cite "almost right but not quite" as top frustration; 69% of agent users report increased productivity.
 
 34. **Langflow CVE-2025-3248 -- CISA KEV.** https://www.helpnetsecurity.com/2025/05/06/langflow-cve-2025-3248-exploited/ -- Critical RCE in Langflow < 1.3.0; no input validation or sandboxing; added to CISA KEV catalog May 5, 2025; actively exploited in the wild.
+
+35. **Anthropic -- Claude Code MCP.** https://code.claude.com/docs/en/mcp -- MCP server configuration, scopes (project/user/local), environment variable expansion, Tool Search activation, MAX_MCP_OUTPUT_TOKENS, transport options (stdio/HTTP).
+
+36. **Model Context Protocol -- Introduction.** https://modelcontextprotocol.io/introduction -- MCP architecture overview; primitives (tools/resources/prompts); JSON-RPC 2.0 transport; stdio and streamable HTTP transports; open standard specification.
