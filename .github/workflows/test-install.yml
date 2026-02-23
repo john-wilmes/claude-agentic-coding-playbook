@@ -332,12 +332,10 @@ jobs:
           test -f "$HOME/.claude/templates/project-CLAUDE.md" && echo "OK: project-CLAUDE.md"
           test -f "$HOME/.claude/templates/hooks/pre-commit" && echo "OK: pre-commit"
 
-      # ── Phase 4: Pre-commit hook integration (Linux only) ────────
-      # The hook uses bash process substitution and the `file` command,
-      # which aren't portable to Windows Git Bash.
+      # ── Phase 4: Pre-commit hook integration ────────────────────
 
       - name: "Pre-commit hook: clean commit passes"
-        if: runner.os == 'Linux'
+        shell: bash
         run: |
           repo=$(mktemp -d)
           git init "$repo"
@@ -350,7 +348,7 @@ jobs:
           echo "OK: clean commit succeeded"
 
       - name: "Pre-commit hook: blocks AWS keys"
-        if: runner.os == 'Linux'
+        shell: bash
         run: |
           repo=$(mktemp -d)
           git init "$repo"
@@ -366,7 +364,7 @@ jobs:
           echo "OK: AWS key blocked"
 
       - name: "Pre-commit hook: blocks .env files"
-        if: runner.os == 'Linux'
+        shell: bash
         run: |
           repo=$(mktemp -d)
           git init "$repo"
@@ -382,7 +380,7 @@ jobs:
           echo "OK: .env file blocked"
 
       - name: "Pre-commit hook: blocks large files"
-        if: runner.os == 'Linux'
+        shell: bash
         run: |
           repo=$(mktemp -d)
           git init "$repo"
@@ -400,7 +398,7 @@ jobs:
       # ── Phase 4b: Generic secret pattern ─────────────────────────
 
       - name: "Pre-commit hook: blocks generic secrets"
-        if: runner.os == 'Linux'
+        shell: bash
         run: |
           repo=$(mktemp -d)
           git init "$repo"
@@ -416,7 +414,7 @@ jobs:
           echo "OK: generic secret (password=...) blocked"
 
       - name: "Pre-commit hook: allows short values (no false positive)"
-        if: runner.os == 'Linux'
+        shell: bash
         run: |
           repo=$(mktemp -d)
           git init "$repo"
@@ -431,7 +429,7 @@ jobs:
       # ── Phase 4c: .env variant patterns ──────────────────────────
 
       - name: "Pre-commit hook: blocks .env.local"
-        if: runner.os == 'Linux'
+        shell: bash
         run: |
           repo=$(mktemp -d)
           git init "$repo"
@@ -447,7 +445,7 @@ jobs:
           echo "OK: .env.local blocked"
 
       - name: "Pre-commit hook: blocks secrets.env"
-        if: runner.os == 'Linux'
+        shell: bash
         run: |
           repo=$(mktemp -d)
           git init "$repo"
@@ -684,6 +682,82 @@ jobs:
           grep -q "Explore, Plan, Code, Verify, Commit" "$HOME/.claude/CLAUDE.md"
           echo "OK: CLAUDE.md has dev workflow"
 
+      - name: "Cross-profile: dev → research → dev (Windows)"
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Use isolated USERPROFILE
+          $testHome = Join-Path $env:TEMP "cross-profile-$(Get-Random)"
+          New-Item -ItemType Directory -Path $testHome -Force | Out-Null
+          $origProfile = $env:USERPROFILE
+          $env:USERPROFILE = $testHome
+
+          try {
+            # Step 1: Install dev profile
+            & .\install.ps1 -Profile dev -Force
+            Write-Output "--- Dev profile installed ---"
+
+            # Verify dev skills present
+            foreach ($skill in @('checkpoint', 'create-project', 'playbook', 'continue', 'learn', 'promote')) {
+              if (-not (Test-Path "$testHome\.claude\skills\$skill")) {
+                throw "FAIL: dev skill $skill missing"
+              }
+              Write-Output "OK: $skill present"
+            }
+
+            # Step 2: Switch to research profile
+            & .\install.ps1 -Profile research -Force
+            Write-Output "--- Switched to research profile ---"
+
+            # Verify dev-only skills removed
+            foreach ($skill in @('checkpoint', 'create-project', 'playbook', 'learn', 'promote')) {
+              if (Test-Path "$testHome\.claude\skills\$skill") {
+                throw "FAIL: dev-only skill $skill should have been removed"
+              }
+              Write-Output "OK: $skill removed"
+            }
+
+            # Verify research skills present
+            if (-not (Test-Path "$testHome\.claude\skills\investigate")) {
+              throw "FAIL: investigate skill missing"
+            }
+            Write-Output "OK: investigate present"
+
+            # Verify CLAUDE.md switched to research
+            $content = Get-Content "$testHome\.claude\CLAUDE.md" -Raw
+            if ($content -notmatch 'Question, Collect, Synthesize, Close') {
+              throw "FAIL: CLAUDE.md does not have research workflow"
+            }
+            Write-Output "OK: CLAUDE.md has research workflow"
+
+            # Step 3: Switch back to dev profile
+            & .\install.ps1 -Profile dev -Force
+            Write-Output "--- Switched back to dev profile ---"
+
+            # Verify research-only skills removed
+            if (Test-Path "$testHome\.claude\skills\investigate") {
+              throw "FAIL: research-only skill investigate should have been removed"
+            }
+            Write-Output "OK: investigate removed"
+
+            # Verify dev skills restored
+            foreach ($skill in @('checkpoint', 'create-project', 'playbook', 'continue', 'learn', 'promote')) {
+              if (-not (Test-Path "$testHome\.claude\skills\$skill")) {
+                throw "FAIL: dev skill $skill not restored"
+              }
+              Write-Output "OK: $skill restored"
+            }
+
+            # Verify CLAUDE.md switched back to dev
+            $content = Get-Content "$testHome\.claude\CLAUDE.md" -Raw
+            if ($content -notmatch 'Explore, Plan, Code, Verify, Commit') {
+              throw "FAIL: CLAUDE.md does not have dev workflow"
+            }
+            Write-Output "OK: CLAUDE.md has dev workflow"
+          } finally {
+            $env:USERPROFILE = $origProfile
+          }
+
       # ── Phase 8: Invalid profile error ───────────────────────────
 
       - name: "Invalid profile: bash rejects unknown profile"
@@ -716,7 +790,7 @@ jobs:
             }
           }
 
-      # ── Phase 9: Knowledge repo integration (Linux only) ──────────
+      # ── Phase 9: Knowledge repo integration ─────────────────────
 
       - name: "Knowledge repo: install with --knowledge-repo"
         if: runner.os == 'Linux'
@@ -782,3 +856,91 @@ jobs:
             echo "FAIL: expected 'not found on PATH' error"
             exit 1
           fi
+
+      - name: "Knowledge repo: install with -KnowledgeRepo (Windows)"
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Use isolated USERPROFILE
+          $testHome = Join-Path $env:TEMP "knowledge-$(Get-Random)"
+          New-Item -ItemType Directory -Path $testHome -Force | Out-Null
+          $origProfile = $env:USERPROFILE
+          $env:USERPROFILE = $testHome
+
+          try {
+            # Create a bare git repo as a dummy knowledge source
+            $bareRepo = Join-Path $env:TEMP "bare-knowledge-$(Get-Random)"
+            git init --bare $bareRepo
+
+            # Seed it with a sample entry
+            $work = Join-Path $env:TEMP "work-knowledge-$(Get-Random)"
+            git clone $bareRepo $work
+            git -C $work config user.email "ci@test"
+            git -C $work config user.name "CI"
+            New-Item -ItemType Directory -Path "$work/entries/20260222-test-entry" -Force | Out-Null
+            @"
+          ---
+          id: "20260222-test-entry"
+          tool: "git"
+          category: "gotcha"
+          tags: ["test"]
+          confidence: "high"
+          ---
+          # Test Entry
+          This is a test knowledge entry for CI.
+          "@ | Set-Content "$work/entries/20260222-test-entry/entry.md"
+            git -C $work add .
+            git -C $work commit -m "seed entry"
+            git -C $work push
+
+            # Run install with -KnowledgeRepo
+            & .\install.ps1 -Profile dev -Force -KnowledgeRepo $bareRepo
+
+            # Verify knowledge directory exists and has entries
+            if (-not (Test-Path "$testHome\.claude\knowledge\.git")) {
+              throw "FAIL: knowledge repo not cloned"
+            }
+            Write-Output "OK: knowledge repo cloned (.git exists)"
+
+            if (-not (Test-Path "$testHome\.claude\knowledge\entries")) {
+              throw "FAIL: entries directory missing"
+            }
+            Write-Output "OK: entries directory exists"
+
+            if (-not (Test-Path "$testHome\.claude\knowledge\entries\20260222-test-entry\entry.md")) {
+              throw "FAIL: seeded entry missing"
+            }
+            Write-Output "OK: seeded entry present"
+          } finally {
+            $env:USERPROFILE = $origProfile
+          }
+
+      # ── Phase 10: Session hooks syntax validation ─────────────────
+
+      - name: "Session hooks: JavaScript syntax valid"
+        shell: bash
+        run: |
+          node --check "$HOME/.claude/hooks/session-start.js"
+          echo "OK: session-start.js parses correctly"
+          node --check "$HOME/.claude/hooks/session-end.js"
+          echo "OK: session-end.js parses correctly"
+
+      - name: "Pre-install validation: missing node detected (Windows)"
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Save original PATH
+          $origPath = $env:PATH
+          try {
+            # Set PATH to only Windows system directory (excludes node)
+            $env:PATH = "C:\Windows\System32"
+            $output = & .\install.ps1 -Profile dev -DryRun *>&1 | Out-String
+            Write-Output $output
+            if ($output -match 'not found on PATH') {
+              Write-Output "OK: install.ps1 detects missing node"
+            } else {
+              throw "FAIL: expected 'not found on PATH' error"
+            }
+          } finally {
+            $env:PATH = $origPath
+          }

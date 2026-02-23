@@ -21,7 +21,7 @@ done < <(git diff --cached --name-only --diff-filter=ACM)
 # --- Block common credential patterns ---
 # Only scan text files staged for commit
 while IFS= read -r file; do
-  if [ -f "$file" ] && file "$file" | grep -q text; then
+  if [ -f "$file" ] && grep -Iq . "$file" 2>/dev/null; then
     # AWS access keys (AKIA...)
     if grep -qE 'AKIA[0-9A-Z]{16}' "$file" 2>/dev/null; then
       echo "BLOCKED: $file appears to contain an AWS access key."
