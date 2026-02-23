@@ -325,6 +325,20 @@ if [ -d "$SCRIPT_DIR/templates/cursor" ]; then
   done
 fi
 
+# Knowledge base templates
+if [ -d "$SCRIPT_DIR/templates/knowledge" ]; then
+  echo ""
+  echo "--- Installing knowledge base templates ---"
+  if [ "$DRY_RUN" != true ]; then
+    mkdir -p "$CLAUDE_DIR/templates/knowledge"
+  fi
+  for kb_file in "$SCRIPT_DIR/templates/knowledge"/*; do
+    [ -f "$kb_file" ] || continue
+    kb_name=$(basename "$kb_file")
+    install_file "$kb_file" "$CLAUDE_DIR/templates/knowledge/$kb_name" "knowledge template: $kb_name"
+  done
+fi
+
 # --- Knowledge repo setup ---
 if [ -n "$KNOWLEDGE_REPO" ]; then
   echo ""
@@ -397,10 +411,12 @@ for skill_dir in "$SCRIPT_DIR/profiles/$PROFILE/skills"/*/; do
   [ -d "$skill_dir" ] || continue
   echo "  /$(basename "$skill_dir") skill  -> $CLAUDE_DIR/skills/$(basename "$skill_dir")/"
 done
+echo "  Session hooks    -> $CLAUDE_DIR/hooks/ (auto-run on session start/end)"
 echo "  Templates        -> $CLAUDE_DIR/templates/"
 echo "    project-CLAUDE.md   (copy to new project roots)"
 echo "    hooks/pre-commit    (copy to .git/hooks/ in each project)"
 echo "      Note: If core.hooksPath is set globally, install the hook there instead of .git/hooks/"
+echo "    knowledge/          (entry format, CI, pre-commit for knowledge repos)"
 echo "    cursor/rules/       (copy to .cursor/rules/ in each project)"
 echo "    cursor/commands/    (copy to .cursor/commands/ in each project)"
 echo ""

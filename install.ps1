@@ -295,6 +295,20 @@ if (Test-Path $cursorSrc) {
     }
 }
 
+# Knowledge base templates
+$kbSrc = Join-Path $ScriptDir "templates" "knowledge"
+if (Test-Path $kbSrc) {
+    Write-Host ""
+    Write-Host "--- Installing knowledge base templates ---" -ForegroundColor Cyan
+    $kbDest = Join-Path $ClaudeDir "templates" "knowledge"
+    if (-not $DryRun) {
+        New-Item -Path $kbDest -ItemType Directory -Force | Out-Null
+    }
+    Get-ChildItem $kbSrc -File -ErrorAction SilentlyContinue | ForEach-Object {
+        Install-ConfigFile $_.FullName (Join-Path $kbDest $_.Name) "knowledge template: $($_.Name)"
+    }
+}
+
 # --- Knowledge repo setup ---
 if ($KnowledgeRepo -ne "") {
     Write-Host ""

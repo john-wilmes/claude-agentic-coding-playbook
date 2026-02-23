@@ -182,6 +182,8 @@ jobs:
           check "$HOME/.claude/skills/continue/SKILL.md"
           check "$HOME/.claude/skills/playbook/SKILL.md"
           check "$HOME/.claude/skills/create-project/SKILL.md"
+          check "$HOME/.claude/skills/learn/SKILL.md"
+          check "$HOME/.claude/skills/promote/SKILL.md"
 
           exit $failed
 
@@ -203,6 +205,55 @@ jobs:
           check "$HOME/.claude/skills/continue/SKILL.md"
           check "$HOME/.claude/investigations/_patterns/"
           check "$HOME/.claude/templates/investigation/brief.md"
+
+          exit $failed
+
+      # ── Phase 2b2: Session hooks and knowledge templates ─────────
+
+      - name: "Verify session hooks installed"
+        shell: bash
+        run: |
+          failed=0
+          check() {
+            if [ ! -e "$1" ]; then
+              echo "MISSING: $1"
+              failed=1
+            else
+              echo "OK: $1"
+            fi
+          }
+
+          check "$HOME/.claude/hooks/session-start.js"
+          check "$HOME/.claude/hooks/session-end.js"
+
+          exit $failed
+
+      - name: "Verify session-start.js has knowledge injection"
+        shell: bash
+        run: |
+          file="$HOME/.claude/hooks/session-start.js"
+          grep -q 'getRelevantKnowledge' "$file"
+          echo "OK: session-start.js has knowledge injection function"
+          grep -q 'Lessons Learned' "$file"
+          echo "OK: session-start.js extracts Lessons Learned"
+
+      - name: "Verify knowledge templates"
+        shell: bash
+        run: |
+          failed=0
+          check() {
+            if [ ! -e "$1" ]; then
+              echo "MISSING: $1"
+              failed=1
+            else
+              echo "OK: $1"
+            fi
+          }
+
+          check "$HOME/.claude/templates/knowledge/entry-template.md"
+          check "$HOME/.claude/templates/knowledge/validate-entries.yml"
+          check "$HOME/.claude/templates/knowledge/pre-commit"
+          check "$HOME/.claude/templates/knowledge/README.md"
 
           exit $failed
 
@@ -586,13 +637,15 @@ jobs:
           test -d "$HOME/.claude/skills/create-project" && echo "OK: create-project present"
           test -d "$HOME/.claude/skills/playbook"    && echo "OK: playbook present"
           test -d "$HOME/.claude/skills/continue"    && echo "OK: continue present"
+          test -d "$HOME/.claude/skills/learn"       && echo "OK: learn present"
+          test -d "$HOME/.claude/skills/promote"     && echo "OK: promote present"
 
           # Step 2: Switch to research profile
           bash install.sh --profile research --force
           echo "--- Switched to research profile ---"
 
           # Verify dev-only skills removed
-          for skill in checkpoint create-project playbook; do
+          for skill in checkpoint create-project playbook learn promote; do
             if [ -d "$HOME/.claude/skills/$skill" ]; then
               echo "FAIL: dev-only skill /$skill should have been removed"
               exit 1
@@ -624,6 +677,8 @@ jobs:
           test -d "$HOME/.claude/skills/create-project" && echo "OK: create-project restored"
           test -d "$HOME/.claude/skills/playbook"    && echo "OK: playbook restored"
           test -d "$HOME/.claude/skills/continue"    && echo "OK: continue still present"
+          test -d "$HOME/.claude/skills/learn"       && echo "OK: learn restored"
+          test -d "$HOME/.claude/skills/promote"     && echo "OK: promote restored"
 
           # Verify CLAUDE.md switched back to dev
           grep -q "Explore, Plan, Code, Verify, Commit" "$HOME/.claude/CLAUDE.md"
