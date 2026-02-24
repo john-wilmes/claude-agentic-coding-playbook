@@ -67,32 +67,31 @@ process.stdin.on("end", () => {
     writeState(state);
     log(`deregistered ${agentName} (session ${sessionId.slice(0, 8)})`);
 
-    // Auto-commit memory/config changes to ~/.claude git repo
+    // Auto-commit THIS session's memory file only.
+    // Using "git add -A" would stage other agents' memory files when multiple
+    // projects are open simultaneously, causing wrong attribution and git index
+    // contention. Stage only the path owned by this session.
     try {
       const claudeDir = path.join(os.homedir(), ".claude");
       const gitOpts = { cwd: claudeDir, timeout: 5000, stdio: "pipe" };
-      execSync("git add -A", gitOpts);
-      // Unstage files matching sensitive patterns
-      const sensitivePatterns = [
-        "*.env", "*.env.*", ".env*",
-        "*credential*", "*secret*",
-        "*.pem", "*.key", "*.p12", "*.pfx",
-        "**/id_rsa*", "**/id_ed25519*"
-      ];
-      for (const pattern of sensitivePatterns) {
-        try {
-          execSync(`git reset HEAD -- "${pattern}"`, { ...gitOpts, stdio: "pipe" });
-        } catch {
-          // Pattern didn't match anything -- that's fine
-        }
+
+      // Encode cwd to the project key Claude Code uses for memory paths
+      const encodedCwd = cwd.replace(/:/g, "-").replace(/[\\/]/g, "-").replace(/^-/, "");
+      const memoryPath = `projects/${encodedCwd}/memory/MEMORY.md`;
+
+      try {
+        execSync(`git add "${memoryPath}"`, gitOpts);
+      } catch {
+        // Memory file may not exist yet -- skip
       }
+
       // Check if there are staged changes before committing
       try {
         execSync("git diff --cached --quiet", gitOpts);
-        // No changes -- skip commit
+        // No staged changes -- skip commit
         log("memory auto-commit: no changes");
       } catch {
-        // diff --quiet exits non-zero when there ARE changes
+        // diff --quiet exits non-zero when there ARE staged changes
         const msg = `auto: ${agentName} session ${sessionId.slice(0, 8)}`;
         execSync(`git commit -m "${msg}"`, gitOpts);
         log("memory auto-commit: committed");
