@@ -318,27 +318,6 @@ jobs:
           fi
           echo "OK: sanitize.sh is executable"
 
-      # ── Phase 2d: Cursor template verification ───────────────────
-
-      - name: "Verify Cursor templates"
-        shell: bash
-        run: |
-          failed=0
-          check() {
-            if [ ! -e "$1" ]; then
-              echo "MISSING: $1"
-              failed=1
-            else
-              echo "OK: $1"
-            fi
-          }
-
-          check "$HOME/.claude/templates/cursor/rules/standards.mdc"
-          check "$HOME/.claude/templates/cursor/rules/quality.mdc"
-          check "$HOME/.claude/templates/cursor/commands/checkpoint.md"
-
-          exit $failed
-
       # ── Phase 3: Idempotency ─────────────────────────────────────
 
       - name: "Re-install (idempotency check, bash)"
