@@ -3,7 +3,7 @@ name: playbook
 description: Analyze your Claude Code configuration and suggest improvements based on the agentic coding playbook. Works on both global and project-level CLAUDE.md files.
 disable-model-invocation: false
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion
-argument-hint: "[global | project | cursor | check]"
+argument-hint: "[global | project | check]"
 ---
 
 # Playbook Configurator
@@ -15,7 +15,6 @@ Analyze the user's Claude Code configuration and intelligently merge playbook be
 Parse `$ARGUMENTS` to determine the mode:
 - **`global`** (default if no argument): Analyze and improve `~/.claude/CLAUDE.md`
 - **`project`**: Analyze and improve the current project's `CLAUDE.md`
-- **`cursor`**: Set up Cursor rules and commands in the current project
 - **`check`**: Audit current configuration and report what is missing or outdated
 
 ## Steps for `global` mode
@@ -159,28 +158,6 @@ git config core.hooksPath
   - Report what it enforces (large file blocking, credential scanning, .env blocking)
 - If a pre-commit hook already exists, skip (do not overwrite custom hooks).
 
-## Steps for `cursor` mode
-
-### 1. Check for Cursor config
-
-Look for `.cursor/` directory in the current project.
-
-### 2. Check for templates
-
-Look for Cursor templates at `~/.claude/templates/cursor/`. If not found, inform the user they need to run the install script first.
-
-### 3. Copy templates
-
-If templates exist:
-- Copy `~/.claude/templates/cursor/rules/*.mdc` to `.cursor/rules/`
-- Copy `~/.claude/templates/cursor/commands/*.md` to `.cursor/commands/`
-- Create `.cursor/rules/` and `.cursor/commands/` directories if needed
-- Skip files that already exist (report them)
-
-### 4. Report
-
-Show what was installed and what was skipped.
-
 ## Steps for `check` mode
 
 Run a quick audit without making changes:
@@ -188,7 +165,7 @@ Run a quick audit without making changes:
 1. **Global CLAUDE.md**: Does it exist? How many sections match the playbook? What is missing?
 2. **Skills**: Are /checkpoint, /continue, and /playbook installed?
 3. **Project CLAUDE.md** (if in a project): Does it exist? Does it have quality gates, review rules, test strategy?
-4. **Cursor** (if in a project): Are .cursor rules and commands set up?
+4. **Pre-commit hook**: Is it installed and executable?
 5. **Memory**: Does the project have a memory directory with a MEMORY.md file?
 
 Present results as a checklist:
@@ -199,6 +176,5 @@ Present results as a checklist:
 [x] /playbook skill installed
 [ ] Project CLAUDE.md (no quality gates defined)
 [ ] Pre-commit hook (not installed)
-[ ] Cursor rules (not installed)
 [x] Memory file exists
 ```

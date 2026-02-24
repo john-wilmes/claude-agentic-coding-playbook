@@ -711,7 +711,6 @@ this section becomes the most valuable part of the memory file.
 |---|---|---|
 | Claude Code | `MEMORY.md`, `CLAUDE.md` | Per-project or global (`~/.claude/`) |
 | Claude Code Subagents | `.claude/agent-memory/<name>/` | Per-agent, with `user`, `project`, or `local` scope *(built-in to Claude Code; not managed by this playbook)* [3] |
-| Cursor | `.cursor/memory/`, `.cursor/rules/*.mdc` | Per-project with glob-based activation |
 
 ---
 
@@ -790,23 +789,6 @@ Use hooks for:
   }
 }
 ```
-
-### Cursor-specific: glob-based rule activation
-
-In Cursor, `.cursor/rules/*.mdc` files use frontmatter glob patterns to activate
-rules only for matching files:
-
-```markdown
----
-description: React component conventions
-globs: ["src/components/**/*.tsx"]
----
-# Component Rules
-- Use functional components with hooks
-- Export named, not default
-```
-
-This provides the same on-demand loading benefit as Claude Code's skills system.
 
 ### Writing style for instructions
 
