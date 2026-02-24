@@ -156,6 +156,70 @@ function createProjectDir(opts = {}) {
   return dir;
 }
 
+/**
+ * Create a temp investigation directory with FINDINGS.md, EVIDENCE/ files,
+ * and optional STATUS.md for scorer tests.
+ *
+ * @param {object} opts
+ * @param {string}   opts.findings   - FINDINGS.md content (default: well-structured)
+ * @param {object[]} opts.evidence   - Array of { name, source, observation } objects
+ * @param {boolean}  opts.noFindings - Omit FINDINGS.md entirely
+ * @returns {{ dir, cleanup }}
+ */
+function createTempInvestigation(opts = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "inv-test-"));
+  const evidenceDir = path.join(dir, "EVIDENCE");
+  fs.mkdirSync(evidenceDir, { recursive: true });
+
+  // Default evidence
+  const evidenceItems = opts.evidence || [
+    {
+      name: "001-test-finding.md",
+      source: "src/utils/helper.ts:42",
+      observation: "The function splits on colon, returning only the drive letter on Windows.",
+    },
+  ];
+
+  for (const item of evidenceItems) {
+    const content = `# ${item.name.replace(".md", "")}\n\n**Source**: ${item.source || ""}\n**Relevance**: ${item.relevance || "Directly related to the investigation question."}\n\n${item.observation || "Observation text."}\n`;
+    fs.writeFileSync(path.join(evidenceDir, item.name), content);
+  }
+
+  if (!opts.noFindings) {
+    const findings = opts.findings || `---
+tags:
+  domain: []
+  type: []
+---
+# Findings: TEST-001
+
+## Answer
+
+The root cause is the colon-split at line 42 (see 001). On Windows, the drive letter
+contains a colon, causing split(":")[0] to return "D" instead of the full path (see 001).
+
+## Evidence Summary
+
+| # | Slug | Key observation |
+|---|------|-----------------|
+| 001 | colon-split | split(":")[0] breaks on Windows drive letters |
+
+## Implications
+
+The fix is to use lastIndexOf(":") instead of split(":")[0].
+`;
+    fs.writeFileSync(path.join(dir, "FINDINGS.md"), findings);
+  }
+
+  return {
+    dir,
+    evidenceDir,
+    cleanup() {
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+    },
+  };
+}
+
 module.exports = {
   createTempHome,
   createKnowledgeEntry,
@@ -163,4 +227,5 @@ module.exports = {
   runHook,
   readState,
   createProjectDir,
+  createTempInvestigation,
 };
