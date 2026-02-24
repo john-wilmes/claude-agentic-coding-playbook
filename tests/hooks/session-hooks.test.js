@@ -12,6 +12,8 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
+const { spawnSync } = require("child_process");
+
 const {
   createTempHome,
   createKnowledgeEntry,
@@ -390,6 +392,54 @@ Body text.`;
   assert.strictEqual(fm.tool, "git");
   assert.strictEqual(fm.category, "gotcha");
   assert.strictEqual(fm.confidence, "high");
+});
+
+// ─── Cross-agent isolation test ──────────────────────────────────────────────
+
+console.log("\nsession-end.js cross-agent isolation:");
+
+test("18. session-end only stages its OWN project MEMORY.md, not other projects'", (env) => {
+  // Set up a git repo in the temp ~/.claude dir (simulates a real multi-project install)
+  const gitEnv = { HOME: env.home, USERPROFILE: env.home, GIT_AUTHOR_NAME: "Test", GIT_COMMITTER_NAME: "Test", GIT_AUTHOR_EMAIL: "t@t.com", GIT_COMMITTER_EMAIL: "t@t.com" };
+  const gitIn = { cwd: env.claudeDir, encoding: "utf8", env: { ...process.env, ...gitEnv } };
+
+  // Use simple predictable fake cwd paths so encoding is deterministic
+  // Encoding: colons → dashes, separators → dashes, strip leading dash
+  const projACwd = "C:\\projects\\alpha";   // encodes to: C--projects-alpha
+  const projBCwd = "C:\\projects\\beta";    // encodes to: C--projects-beta
+  const encA = projACwd.replace(/:/g, "-").replace(/[\\/]/g, "-").replace(/^-/, "");
+  const encB = projBCwd.replace(/:/g, "-").replace(/[\\/]/g, "-").replace(/^-/, "");
+
+  const memA = path.join(env.claudeDir, "projects", encA, "memory", "MEMORY.md");
+  const memB = path.join(env.claudeDir, "projects", encB, "memory", "MEMORY.md");
+  fs.mkdirSync(path.dirname(memA), { recursive: true });
+  fs.mkdirSync(path.dirname(memB), { recursive: true });
+
+  // Write initial content and commit both so they are tracked
+  fs.writeFileSync(memA, "# Memory A initial\n");
+  fs.writeFileSync(memB, "# Memory B initial\n");
+  spawnSync("git", ["init"], gitIn);
+  spawnSync("git", ["add", "-A"], gitIn);
+  spawnSync("git", ["commit", "-m", "initial"], gitIn);
+
+  // Simulate two concurrent agents: both modify their own MEMORY.md
+  fs.writeFileSync(memA, "# Memory A — updated by project alpha session\n");
+  fs.writeFileSync(memB, "# Memory B — updated by project beta session (must NOT be staged by alpha)\n");
+
+  // Run session-end for project A only
+  runHook(SESSION_END, { session_id: "aabbccdd", cwd: projACwd }, { HOME: env.home, USERPROFILE: env.home, ...gitEnv });
+
+  // After hook: project B's MEMORY.md should still be unstaged (dirty).
+  // If git add -A was used, B would have been committed and would appear clean.
+  const statusOut = spawnSync("git", ["status", "--porcelain"], gitIn);
+  const status = statusOut.stdout || "";
+
+  // Normalise to forward slashes for cross-platform comparison
+  const bRelPath = `projects/${encB}/memory/MEMORY.md`;
+  assert.ok(
+    status.replace(/\\/g, "/").includes(bRelPath),
+    `Project B MEMORY.md should still be dirty after project A session-end.\nGit status:\n${status}`
+  );
 });
 
 // ─── Summary ─────────────────────────────────────────────────────────────────
