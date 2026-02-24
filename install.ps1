@@ -345,23 +345,6 @@ if (Test-Path $modelRouterSrc) {
     }
 }
 
-# Cursor templates
-$cursorSrc = Join-Path $ScriptDir "templates\cursor"
-if (Test-Path $cursorSrc) {
-    Write-Host ""
-    Write-Host "--- Installing Cursor templates ---" -ForegroundColor Cyan
-    $cursorRulesDir = Join-Path $templatesDir "cursor\rules"
-    $cursorCmdsDir = Join-Path $templatesDir "cursor\commands"
-    if (-not $DryRun -and -not (Test-Path $cursorRulesDir)) { New-Item -ItemType Directory -Path $cursorRulesDir -Force | Out-Null }
-    if (-not $DryRun -and -not (Test-Path $cursorCmdsDir)) { New-Item -ItemType Directory -Path $cursorCmdsDir -Force | Out-Null }
-    Get-ChildItem (Join-Path $cursorSrc "rules") -File -ErrorAction SilentlyContinue | ForEach-Object {
-        Install-ConfigFile $_.FullName (Join-Path $cursorRulesDir $_.Name) "cursor rule: $($_.Name)"
-    }
-    Get-ChildItem (Join-Path $cursorSrc "commands") -File -ErrorAction SilentlyContinue | ForEach-Object {
-        Install-ConfigFile $_.FullName (Join-Path $cursorCmdsDir $_.Name) "cursor command: $($_.Name)"
-    }
-}
-
 # Knowledge base templates
 $kbSrc = Join-Path $ScriptDir "templates" "knowledge"
 if (Test-Path $kbSrc) {
@@ -453,13 +436,8 @@ Write-Host "  Templates        -> $ClaudeDir\templates\"
 Write-Host "    project-CLAUDE.md   (copy to new project roots)"
 Write-Host "    hooks\pre-commit    (copy to .git\hooks\ in each project)"
 Write-Host "      Note: If core.hooksPath is set globally, install the hook there instead of .git\hooks\"
-Write-Host "    cursor\rules\       (copy to .cursor\rules\ in each project)"
-Write-Host "    cursor\commands\    (copy to .cursor\commands\ in each project)"
 Write-Host ""
 Write-Host "Claude Code: ready to use globally (no per-project setup needed)." -ForegroundColor Green
-Write-Host "Cursor:      copy templates into each project:" -ForegroundColor Yellow
-Write-Host "  Copy-Item -Recurse $ClaudeDir\templates\cursor\rules\ .cursor\rules\"
-Write-Host "  Copy-Item -Recurse $ClaudeDir\templates\cursor\commands\ .cursor\commands\"
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor White
 Write-Host "  1. Review $ClaudeDir\CLAUDE.md and customize for your workflow"
@@ -472,4 +450,4 @@ if ($Profile -eq "dev") {
     Write-Host "  4. Use /continue at session start to see open investigations"
 }
 Write-Host ""
-Write-Host "Docs: docs\best-practices.md (practices) and docs\tool-comparison.md (Claude vs Cursor)"
+Write-Host "Docs: docs\best-practices.md"

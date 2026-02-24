@@ -376,25 +376,6 @@ if [ -f "$SCRIPT_DIR/templates/hooks/model-router.js" ]; then
   fi
 fi
 
-# Cursor templates (rules + commands)
-if [ -d "$SCRIPT_DIR/templates/cursor" ]; then
-  echo ""
-  echo "--- Installing Cursor templates ---"
-  if [ "$DRY_RUN" != true ]; then
-    mkdir -p "$CLAUDE_DIR/templates/cursor/rules" "$CLAUDE_DIR/templates/cursor/commands"
-  fi
-  for rule_file in "$SCRIPT_DIR/templates/cursor/rules"/*; do
-    [ -f "$rule_file" ] || continue
-    rule_name=$(basename "$rule_file")
-    install_file "$rule_file" "$CLAUDE_DIR/templates/cursor/rules/$rule_name" "cursor rule: $rule_name"
-  done
-  for cmd_file in "$SCRIPT_DIR/templates/cursor/commands"/*; do
-    [ -f "$cmd_file" ] || continue
-    cmd_name=$(basename "$cmd_file")
-    install_file "$cmd_file" "$CLAUDE_DIR/templates/cursor/commands/$cmd_name" "cursor command: $cmd_name"
-  done
-fi
-
 # Knowledge base templates
 if [ -d "$SCRIPT_DIR/templates/knowledge" ]; then
   echo ""
@@ -487,13 +468,8 @@ echo "    project-CLAUDE.md   (copy to new project roots)"
 echo "    hooks/pre-commit    (copy to .git/hooks/ in each project)"
 echo "      Note: If core.hooksPath is set globally, install the hook there instead of .git/hooks/"
 echo "    knowledge/          (entry format, CI, pre-commit for knowledge repos)"
-echo "    cursor/rules/       (copy to .cursor/rules/ in each project)"
-echo "    cursor/commands/    (copy to .cursor/commands/ in each project)"
 echo ""
 echo "Claude Code: ready to use globally (no per-project setup needed)."
-echo "Cursor:      copy templates into each project:"
-echo "  cp -r $CLAUDE_DIR/templates/cursor/rules/ .cursor/rules/"
-echo "  cp -r $CLAUDE_DIR/templates/cursor/commands/ .cursor/commands/"
 echo ""
 echo "Next steps:"
 echo "  1. Review $CLAUDE_DIR/CLAUDE.md and customize for your workflow"
@@ -506,4 +482,4 @@ else
   echo "  4. Use /continue at session start to see open investigations"
 fi
 echo ""
-echo "Docs: docs/best-practices.md (practices) and docs/tool-comparison.md (Claude vs Cursor)"
+echo "Docs: docs/best-practices.md"
