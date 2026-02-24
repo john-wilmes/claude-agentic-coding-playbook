@@ -958,3 +958,11 @@ jobs:
         run: node tests/hooks/session-hooks.test.js
       - name: Run model-router hook tests
         run: node tests/hooks/model-router.test.js
+
+  test-investigate:
+    runs-on: ubuntu-latest
+    name: Investigation scorer tests
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run investigation scorer tests
+        run: node tests/investigate/score.test.js

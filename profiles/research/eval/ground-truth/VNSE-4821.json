@@ -1,0 +1,50 @@
+{
+  "investigation_id": "VNSE-4821",
+  "brief": "Customer CSV import of 100 livestock listings results in only 47 created. No error shown in the UI. 53 listings silently missing.",
+  "codebase": "vnse",
+  "root_cause": {
+    "description": "Raw GraphQL EPD mutation (createEPDProfile) omits the 'owner' field required by AppSync owner-based authorization. Amplify client auto-injects owner; raw client.graphql() calls do not.",
+    "file": "src/utils/csv-import.ts",
+    "line_range": [290, 360],
+    "mechanism": "AppSync owner-auth rejects mutations that lack the 'owner' field; raw GraphQL bypass skips Amplify's auto-injection",
+    "subsystem": "EPD profile creation in csv-import"
+  },
+  "required_findings": [
+    {
+      "pattern": "EPD|createEPDProfile|epd.profile",
+      "score_level": 2,
+      "description": "Agent must identify EPD profile creation as the failing subsystem"
+    },
+    {
+      "pattern": "owner.*field|owner.*auth|authorization.*owner|AppSync.*auth|auth.*AppSync",
+      "score_level": 3,
+      "description": "Agent must identify AppSync owner-based authorization as the mechanism"
+    },
+    {
+      "pattern": "raw.*graphql|client\\.graphql|graphql.*bypass|amplify.*inject|auto.inject",
+      "score_level": 3,
+      "description": "Agent must identify that raw GraphQL bypasses Amplify's owner field injection"
+    },
+    {
+      "pattern": "owner.*field.{0,30}missing|missing.{0,30}owner.*field|owner.{0,20}mutation.*input|mutation.*input.{0,20}owner",
+      "score_level": 4,
+      "description": "Agent must identify the missing 'owner' field in the mutation input as the exact cause"
+    }
+  ],
+  "anti_patterns": [
+    {
+      "pattern": "network.*error|connection.*fail|timeout",
+      "description": "Root cause is authorization, not a network connectivity issue"
+    },
+    {
+      "pattern": "csv.*format|parse.*error|malformed.*csv",
+      "description": "CSV parsing succeeds for all 100 rows; the failure is in the GraphQL mutation"
+    },
+    {
+      "pattern": "cognito.*bug|authentication.*fail|login.*problem",
+      "description": "User is authenticated; the issue is authorization on a specific mutation, not authentication"
+    }
+  ],
+  "multi_cause_note": "Secondary issue: 6 REGISTERED_HEIFER listings may have EPD data silently omitted due to sanitization. A score-4 investigation will note both causes.",
+  "notes": "The 53 failed listings are exclusively BULL type (which use the EPD code path). The 47 successful ones are non-EPD animal types."
+}
