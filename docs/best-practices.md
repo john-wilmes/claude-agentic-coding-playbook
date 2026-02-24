@@ -42,18 +42,19 @@ source; every recommendation is grounded in evidence.
 
 1. [Core Economics](#1-core-economics)
 2. [The Workflow: Explore, Plan, Code, Verify, Commit](#2-the-workflow-explore-plan-code-verify-commit)
-3. [Reasoning Standards](#3-reasoning-standards)
-4. [Efficiency and Cost Optimization](#4-efficiency-and-cost-optimization)
-5. [Context and Session Management](#5-context-and-session-management)
-6. [Memory and Persistence](#6-memory-and-persistence)
-7. [Instruction File Design](#7-instruction-file-design)
-8. [Testing and Verification](#8-testing-and-verification)
-9. [Code Review Automation](#9-code-review-automation)
-10. [Security and Trust Boundaries](#10-security-and-trust-boundaries)
-11. [Model Context Protocol (MCP)](#11-model-context-protocol-mcp)
-12. [Multi-Agent Coordination](#12-multi-agent-coordination)
-13. [Shared Knowledge Base](#13-shared-knowledge-base)
-14. [Getting Started](#14-getting-started)
+3. [When the Agent Fails](#3-when-the-agent-fails)
+4. [Reasoning Standards](#4-reasoning-standards)
+5. [Efficiency and Cost Optimization](#5-efficiency-and-cost-optimization)
+6. [Context and Session Management](#6-context-and-session-management)
+7. [Memory and Persistence](#7-memory-and-persistence)
+8. [Instruction File Design](#8-instruction-file-design)
+9. [Testing and Verification](#9-testing-and-verification)
+10. [Code Review Automation](#10-code-review-automation)
+11. [Security and Trust Boundaries](#11-security-and-trust-boundaries)
+12. [Model Context Protocol (MCP)](#12-model-context-protocol-mcp)
+13. [Multi-Agent Coordination](#13-multi-agent-coordination)
+14. [Shared Knowledge Base](#14-shared-knowledge-base)
+15. [Getting Started](#15-getting-started)
 - [Citations](#citations)
 
 ---
@@ -215,7 +216,114 @@ entirely on finding problems [1].
 
 ---
 
-## 3. Reasoning Standards
+## 3. When the Agent Fails
+
+The workflow above describes what happens when things go well. This section is
+about what to do when they don't.
+
+### Failure modes that guardrails don't catch
+
+Instruction files, memory systems, and hooks prevent many classes of errors. But
+some failure modes are invisible to automated checks because they involve the
+agent misinterpreting intent, not violating a rule:
+
+- **Confident misinterpretation.** The agent does the opposite of what you asked,
+  with full confidence, because it inferred the wrong intent. Memory files make
+  this worse: a wrong conclusion persisted across sessions becomes a wrong
+  conviction acted on repeatedly.
+- **Activity as a substitute for progress.** The agent generates analysis,
+  options, and explanations instead of doing the task. A one-command request
+  becomes a multi-paragraph discussion. This is the most common failure mode and
+  the most expensive, because it looks like work.
+- **Compounding verbosity.** The agent pads responses when uncertain. More words,
+  more context, more detail -- not because you need it, but because sparse output
+  feels insufficient to the model. Every extra token costs money and attention.
+- **Rule-following decay.** Instruction files are suggestions, not constraints.
+  The agent may follow 90% of your CLAUDE.md rules 90% of the time, but the 10%
+  it drops are unpredictable. Adding more rules does not fix this -- it increases
+  the surface area for selective non-compliance.
+
+### The instruction hierarchy problem
+
+LLM behavior is driven by a stack of instructions with different priorities:
+
+1. **Built-in system prompt** (highest priority) -- set by the vendor, not
+   editable. Claude Code's system prompt is ~500 lines encouraging thoroughness,
+   caution, and explanation. This is why the agent over-explains by default.
+2. **CLAUDE.md / instruction files** (medium priority) -- your rules. These
+   compete with the system prompt. When your instruction ("be concise") conflicts
+   with the system prompt ("be thorough"), the system prompt often wins.
+3. **Conversation context** (lowest priority) -- what you say in the moment. This
+   should override everything but sometimes doesn't, especially when memory files
+   contain contradictory directives.
+
+This means some agent behaviors cannot be fixed by writing better instructions.
+If the built-in prompt drives verbosity and your CLAUDE.md says "be concise," you
+get an agent that is concise most of the time but reverts under uncertainty. The
+direct API with a custom system prompt gives you full control of the stack, at the
+cost of losing Claude Code's tool integrations.
+
+### Intervention over prevention
+
+When the agent is going sideways, do not try to guide it back with explanation.
+Interrupt it:
+
+| Situation | Do this | Not this |
+|---|---|---|
+| Agent is explaining instead of doing | "Stop. Run this command: [command]" | "Could you maybe just run the command?" |
+| Agent did the wrong thing | `/rewind` and restate with fewer words | Explain why it was wrong and ask it to redo |
+| Agent is asking what you want | Give a direct instruction, not a discussion | Answer the question and wait for more questions |
+| Agent keeps repeating the same mistake | Switch approaches or start a fresh session | Retry the same prompt hoping for different results |
+
+The key insight: **the faster you interrupt, the less it costs.** Every message
+in a wrong direction increases context size, which increases cost per message and
+reduces response quality. Three words ("Stop. Do X.") are cheaper and more
+effective than three paragraphs of correction.
+
+`/rewind` is the most underused tool. It removes the failed exchange from context
+entirely, so the agent does not carry forward the bad reasoning. A fresh attempt
+from a clean state beats a corrected attempt from a polluted one.
+
+### Memory is fallible
+
+Memory files persist conclusions across sessions. When those conclusions are
+correct, this is powerful. When they are wrong, the agent acts on bad information
+with the confidence of established fact.
+
+Protect against this:
+
+- **Separate observations from interpretations.** "Removed claude-api from
+  .bashrc" is a fact. "User doesn't want API key billing" is an interpretation.
+  Label them differently. Wrong interpretations dressed as facts are the most
+  dangerous memory entries.
+- **Live instructions override stored memory.** If the user asks for something
+  and memory says otherwise, the user wins. Always.
+- **Directive memory entries are suspect.** Any memory entry that says "always do
+  X" or "never do Y" should trace back to an explicit user instruction, not an
+  agent inference. If it doesn't, it's a guess with persistence.
+
+### You are the final guardrail
+
+The more you integrate an agent into your workflow, the harder it becomes to spot
+when it is failing. Automated checks catch rule violations. They do not catch
+misunderstood intent, subtly wrong approaches, or confident mistakes.
+
+This means:
+
+- **The cost of adoption is attention, not just tokens.** You must keep watching.
+  The more the agent gets right, the less you watch, and the more damage it does
+  when it gets something wrong.
+- **Factor human review into your productivity estimates.** If the agent saves
+  you 30 minutes of coding but costs 10 minutes of review, the real gain is 20
+  minutes. If review catches a mistake that would have cost an hour to debug
+  later, the gain is higher -- but only because you were paying attention.
+- **Simple tasks have negative ROI.** If you can type a command faster than you
+  can describe it to the agent, type the command. The agent adds value on tasks
+  where the thinking is hard, not where the typing is hard.
+
+---
+
+## 4. Reasoning Standards
 
 ### Evidence-based debugging
 
@@ -265,7 +373,7 @@ problem.
 
 ---
 
-## 4. Efficiency and Cost Optimization
+## 5. Efficiency and Cost Optimization
 
 ### Parallel tool calls
 
@@ -401,7 +509,7 @@ makes long investigative sessions economical.
 
 ---
 
-## 5. Context and Session Management
+## 6. Context and Session Management
 
 ### Fresh session advantage
 
@@ -485,7 +593,7 @@ fast, low-cost read-only exploration [3].
 
 ---
 
-## 6. Memory and Persistence
+## 7. Memory and Persistence
 
 ### Memory is an index, not a journal
 
@@ -561,7 +669,7 @@ this section becomes the most valuable part of the memory file.
 
 ---
 
-## 7. Instruction File Design
+## 8. Instruction File Design
 
 ### The instruction ceiling
 
@@ -677,7 +785,7 @@ the middle of a long file [5].
 
 ---
 
-## 8. Testing and Verification
+## 9. Testing and Verification
 
 ### Tests as feedback loop, not terminal gate
 
@@ -770,7 +878,7 @@ to running unit tests for backend code.
 
 ---
 
-## 9. Code Review Automation
+## 10. Code Review Automation
 
 ### Tool comparison: detection rates
 
@@ -968,7 +1076,7 @@ automatically.
 
 ---
 
-## 10. Security and Trust Boundaries
+## 11. Security and Trust Boundaries
 
 ### The threat landscape
 
@@ -1112,7 +1220,7 @@ Trail of Bits published a hardened Claude Code configuration [22] that provides:
 
 ---
 
-## 11. Model Context Protocol (MCP)
+## 12. Model Context Protocol (MCP)
 
 ### What MCP is
 
