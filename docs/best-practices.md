@@ -248,11 +248,15 @@ agent misinterpreting intent, not violating a rule:
 LLM behavior is driven by a stack of instructions with different priorities:
 
 1. **Built-in system prompt** (highest priority) -- set by the vendor, not
-   editable. Claude Code's system prompt is ~500 lines encouraging thoroughness,
-   caution, and explanation. This is why the agent over-explains by default.
+   editable. Claude Code's system prompt is ~500 lines. It explicitly instructs
+   conciseness, simplicity, and avoiding over-engineering -- but it also contains
+   extensive safety reasoning around irreversible actions. Verbosity comes from
+   training weights (the model's base behavior), not primarily from the system
+   prompt. This matters: you cannot fully override training-weight tendencies
+   with CLAUDE.md rules, regardless of how well you write them.
 2. **CLAUDE.md / instruction files** (medium priority) -- your rules. These
-   compete with the system prompt. When your instruction ("be concise") conflicts
-   with the system prompt ("be thorough"), the system prompt often wins.
+   augment the system prompt. When your instruction ("be concise") conflicts
+   with a training-weight tendency, the tendency often wins under uncertainty.
 3. **Conversation context** (lowest priority) -- what you say in the moment. This
    should override everything but sometimes doesn't, especially when memory files
    contain contradictory directives.
@@ -423,6 +427,48 @@ model: opus
 A codebase exploration task that costs $0.05 with Opus costs $0.01 with Haiku --
 a 5x savings per operation. Across hundreds of exploration calls per day, this
 compounds significantly [4, 27].
+
+### Tool tier selection
+
+Model routing selects which model to use for a subtask. Tool tier selection is
+a higher-level decision: what kind of interface does this task need? Three tiers
+with qualitatively different capabilities and trade-offs:
+
+| Tier | When to use | System prompt control | Tools available |
+|---|---|---|---|
+| `q` (direct API, no tools) | Q&A, lookups, quick answers | Full -- you write it | None |
+| `qa` (direct API + tool use) | File/shell work without hooks or MCP | Full -- you write it | bash + text editor |
+| Claude Code | Multi-file coordination, hooks, MCP, subagents | None -- vendor-controlled | Full suite |
+
+The decision tree:
+
+```
+Does the task need file or shell access?
+  No  → q   (fastest, cheapest, fully predictable)
+  Yes →
+    Does it need hooks, MCP, or subagents?
+      No  → qa  (file-capable, controlled system prompt)
+      Yes → Claude Code
+```
+
+The routing signal is **capability requirements, not difficulty**. Features that
+predict tier: file paths mentioned, shell commands implied, multi-repo context,
+presence of architectural keywords (refactor, migrate, redesign), debugging
+stack traces. A regex classifier over these features is sufficient for v1.
+
+**Cost asymmetry**: Routing too cheap when a task needed more capability causes
+compounding errors in agentic sessions -- silent failures, wrong edits,
+corrupted state. Routing too expensive wastes money but produces correct output.
+When uncertain, bias toward the higher tier.
+
+**Do not cascade at session level.** Using a cheap model for the first few turns
+and escalating on failure does not work for agentic tasks: the cheap model's
+tool calls create state that is not free to discard. Cascade logic belongs at
+the subtask level (individual tool calls), not the session level.
+
+**Building a router**: Start with the decision tree above as a 20-line regex
+script. After accumulating ~200 labeled sessions, a kNN classifier over prompt
+embeddings reliably matches or outperforms more complex learned approaches [27].
 
 ### Prompt caching mechanics and economics
 
