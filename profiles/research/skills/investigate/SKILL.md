@@ -206,11 +206,11 @@ Build the specialist list:
 
 | Specialist | Include when | Evidence range | Model |
 |---|---|---|---|
-| code-archaeologist | `HAS_REPO = true` | 001–049 | `claude-haiku-4-5-20251001` |
-| test-reader | `HAS_TESTS = true` | 050–099 | `claude-haiku-4-5-20251001` |
-| git-historian | `HAS_GIT = true` | 100–149 | `claude-haiku-4-5-20251001` |
-| log-config-reader | `HAS_LOGS or HAS_CONFIG` | 150–199 | `claude-haiku-4-5-20251001` |
-| concept-analyst | `HAS_REPO = false` | 001–099 | `claude-sonnet-4-6` |
+| code-archaeologist | `HAS_REPO = true` | 001–049 | `"haiku"` |
+| test-reader | `HAS_TESTS = true` | 050–099 | `"haiku"` |
+| git-historian | `HAS_GIT = true` | 100–149 | `"haiku"` |
+| log-config-reader | `HAS_LOGS or HAS_CONFIG` | 150–199 | `"haiku"` |
+| concept-analyst | `HAS_REPO = false` | 001–099 | `"sonnet"` |
 
 Rules:
 - If `HAS_REPO = false`: use concept-analyst only.
@@ -475,7 +475,7 @@ Choice [1/2/3]:
 ### Step 9: Round 2 (if triggered)
 
 List uncited evidence files (numbers + slugs). Dispatch a single synthesis specialist:
-- `model`: `claude-sonnet-4-6`
+- `model`: `"sonnet"`
 - Range: 200–249
 - Prompt:
 
