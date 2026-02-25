@@ -33,8 +33,8 @@
   ],
   "anti_patterns": [
     {
-      "pattern": "git.*bug|git.*broken|git.*wrong|bug.*in.*git",
-      "description": "Blaming git output rather than the parsing code is incorrect"
+      "pattern": "git\\s+(is|was|has)\\s.{0,30}(bug|broken|wrong|incorrect|caus)|bug\\s+is\\s+in\\s+git|issue\\s+is\\s+in\\s+git|problem\\s+(is\\s+)?(with|in)\\s+git\\s|\\bgit\\s+bug\\b|\\bgit\\s+output\\s+(is|was|has)\\b",
+      "description": "Blaming git (the version control system) as the root cause rather than the parsing code is incorrect"
     },
     {
       "pattern": "encoding|unicode|locale|charset",
