@@ -122,7 +122,7 @@ function computeChainIntegrity(evidenceDir, repoRoot) {
     const content = readFile(path.join(evidenceDir, file));
     if (!content) continue;
 
-    const sourceMatch = content.match(/\*\*Source\*\*:[ \t]*([^\n]+)/i);
+    const sourceMatch = content.match(/\*\*Source:?\*\*:?[ \t]*([^\n]+)/i);
     const source      = sourceMatch?.[1]?.trim();
 
     if (!source || source === SOURCE_PLACEHOLDER) {
