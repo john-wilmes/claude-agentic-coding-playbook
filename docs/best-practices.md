@@ -1637,7 +1637,7 @@ specialized agents:
 | Agent | Scope | Findings |
 |---|---|---|
 | Citations reviewer | Verified all 34 external URLs, checked claim accuracy | 8 dead links, 3 misattributed claims |
-| Scripts reviewer | Audited install.sh, install.ps1, hooks, skill frontmatter | 7 bugs including credential regex false negatives |
+| Scripts reviewer | Audited install.sh, hooks, skill frontmatter | 7 bugs including credential regex false negatives |
 | CI/docs verifier | Checked CI workflows, README accuracy, cross-references | 6 path errors, 2 broken badge references |
 | Prose analyzer | Reviewed structure, duplication, unsupported assertions | 16+ structural findings |
 
@@ -1786,13 +1786,6 @@ git clone https://github.com/john-wilmes/agentic-coding-playbook.git
 cd agentic-coding-playbook
 chmod +x install.sh
 ./install.sh
-```
-
-**Windows (PowerShell):**
-```powershell
-git clone https://github.com/john-wilmes/agentic-coding-playbook.git
-cd agentic-coding-playbook
-.\install.ps1
 ```
 
 ### Profile descriptions
