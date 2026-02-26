@@ -23,19 +23,11 @@ Full details with citations: [docs/best-practices.md](docs/best-practices.md)
 
 ## Quick Install
 
-**macOS / Linux:**
 ```bash
 git clone https://github.com/john-wilmes/agentic-coding-playbook.git
 cd agentic-coding-playbook
 chmod +x install.sh
 ./install.sh
-```
-
-**Windows (PowerShell):**
-```powershell
-git clone https://github.com/john-wilmes/agentic-coding-playbook.git
-cd agentic-coding-playbook
-.\install.ps1
 ```
 
 ### Install Options

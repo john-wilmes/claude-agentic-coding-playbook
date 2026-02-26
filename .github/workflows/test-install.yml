@@ -1,4 +1,4 @@
-name: Test Install Scripts
+name: Test Install Script
 
 on:
   push:
@@ -73,35 +73,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
         profile: [dev, research]
-    runs-on: ${{ matrix.os }}
-    name: ${{ matrix.os }} / ${{ matrix.profile }}
+    runs-on: ubuntu-latest
+    name: ubuntu / ${{ matrix.profile }}
 
     steps:
       - uses: actions/checkout@v4
 
       # ── Phase 1: Dry-run ──────────────────────────────────────────
 
-      - name: "Dry-run install (bash)"
-        if: runner.os == 'Linux'
+      - name: "Dry-run install"
         run: |
           output=$(bash install.sh --profile ${{ matrix.profile }} --dry-run 2>&1)
           echo "$output"
           echo "$output" | grep -q '\[DRY RUN\] INSTALL'
 
-      - name: "Dry-run install (PowerShell)"
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $output = & .\install.ps1 -Profile ${{ matrix.profile }} -DryRun *>&1 | Out-String
-          Write-Output $output
-          if ($output -notmatch '\[DRY RUN\] INSTALL') {
-            throw "Dry-run output missing expected [DRY RUN] INSTALL lines"
-          }
-
       - name: "Verify dry-run created no files"
-        shell: bash
         run: |
           if [ -f "$HOME/.claude/CLAUDE.md" ]; then
             echo "FAIL: dry-run should not create files"
@@ -111,19 +98,12 @@ jobs:
 
       # ── Phase 2: Real install ─────────────────────────────────────
 
-      - name: "Install (bash)"
-        if: runner.os == 'Linux'
+      - name: "Install"
         run: bash install.sh --profile ${{ matrix.profile }} --force
-
-      - name: "Install (PowerShell)"
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: .\install.ps1 -Profile ${{ matrix.profile }} -Force
 
       # ── Phase 2b: Verify installed files ──────────────────────────
 
       - name: "Verify common files"
-        shell: bash
         run: |
           failed=0
           check() {
@@ -142,7 +122,6 @@ jobs:
           exit $failed
 
       - name: "Verify CLAUDE.md content"
-        shell: bash
         run: |
           file="$HOME/.claude/CLAUDE.md"
           if [ "${{ matrix.profile }}" = "dev" ]; then
@@ -154,7 +133,6 @@ jobs:
           fi
 
       - name: "Verify pre-commit hook is executable"
-        if: runner.os == 'Linux'
         run: |
           hook="$HOME/.claude/templates/hooks/pre-commit"
           if [ ! -x "$hook" ]; then
@@ -166,7 +144,6 @@ jobs:
 
       - name: "Verify dev profile skills"
         if: matrix.profile == 'dev'
-        shell: bash
         run: |
           failed=0
           check() {
@@ -189,7 +166,6 @@ jobs:
 
       - name: "Verify research profile skills and extras"
         if: matrix.profile == 'research'
-        shell: bash
         run: |
           failed=0
           check() {
@@ -211,7 +187,6 @@ jobs:
       # ── Phase 2b2: Session hooks and knowledge templates ─────────
 
       - name: "Verify session hooks installed"
-        shell: bash
         run: |
           failed=0
           check() {
@@ -229,7 +204,6 @@ jobs:
           exit $failed
 
       - name: "Verify model-router hook installed"
-        shell: bash
         run: |
           failed=0
           check() {
@@ -254,7 +228,6 @@ jobs:
           exit $failed
 
       - name: "Verify session-start.js has knowledge injection"
-        shell: bash
         run: |
           file="$HOME/.claude/hooks/session-start.js"
           grep -q 'getRelevantKnowledge' "$file"
@@ -263,7 +236,6 @@ jobs:
           echo "OK: session-start.js extracts Lessons Learned"
 
       - name: "Verify knowledge templates"
-        shell: bash
         run: |
           failed=0
           check() {
@@ -286,7 +258,6 @@ jobs:
 
       - name: "Verify research profile templates"
         if: matrix.profile == 'research'
-        shell: bash
         run: |
           failed=0
           check() {
@@ -308,7 +279,7 @@ jobs:
           exit $failed
 
       - name: "Verify sanitize.sh is executable"
-        if: matrix.profile == 'research' && runner.os == 'Linux'
+        if: matrix.profile == 'research'
         run: |
           script="$HOME/.claude/scripts/sanitize.sh"
           if [ ! -x "$script" ]; then
@@ -320,17 +291,10 @@ jobs:
 
       # ── Phase 3: Idempotency ─────────────────────────────────────
 
-      - name: "Re-install (idempotency check, bash)"
-        if: runner.os == 'Linux'
+      - name: "Re-install (idempotency check)"
         run: bash install.sh --profile ${{ matrix.profile }} --force
 
-      - name: "Re-install (idempotency check, PowerShell)"
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: .\install.ps1 -Profile ${{ matrix.profile }} -Force
-
       - name: "Verify files still intact after re-install"
-        shell: bash
         run: |
           test -f "$HOME/.claude/CLAUDE.md" && echo "OK: CLAUDE.md"
           test -f "$HOME/.claude/templates/project-CLAUDE.md" && echo "OK: project-CLAUDE.md"
@@ -339,7 +303,6 @@ jobs:
       # ── Phase 4: Pre-commit hook integration ────────────────────
 
       - name: "Pre-commit hook: clean commit passes"
-        shell: bash
         run: |
           repo=$(mktemp -d)
           git init "$repo"
@@ -352,7 +315,6 @@ jobs:
           echo "OK: clean commit succeeded"
 
       - name: "Pre-commit hook: blocks AWS keys"
-        shell: bash
         run: |
           repo=$(mktemp -d)
           git init "$repo"
@@ -368,7 +330,6 @@ jobs:
           echo "OK: AWS key blocked"
 
       - name: "Pre-commit hook: blocks .env files"
-        shell: bash
         run: |
           repo=$(mktemp -d)
           git init "$repo"
@@ -384,7 +345,6 @@ jobs:
           echo "OK: .env file blocked"
 
       - name: "Pre-commit hook: blocks large files"
-        shell: bash
         run: |
           repo=$(mktemp -d)
           git init "$repo"
@@ -402,7 +362,6 @@ jobs:
       # ── Phase 4b: Generic secret pattern ─────────────────────────
 
       - name: "Pre-commit hook: blocks generic secrets"
-        shell: bash
         run: |
           repo=$(mktemp -d)
           git init "$repo"
@@ -418,7 +377,6 @@ jobs:
           echo "OK: generic secret (password=...) blocked"
 
       - name: "Pre-commit hook: allows short values (no false positive)"
-        shell: bash
         run: |
           repo=$(mktemp -d)
           git init "$repo"
@@ -433,7 +391,6 @@ jobs:
       # ── Phase 4c: .env variant patterns ──────────────────────────
 
       - name: "Pre-commit hook: blocks .env.local"
-        shell: bash
         run: |
           repo=$(mktemp -d)
           git init "$repo"
@@ -449,7 +406,6 @@ jobs:
           echo "OK: .env.local blocked"
 
       - name: "Pre-commit hook: blocks secrets.env"
-        shell: bash
         run: |
           repo=$(mktemp -d)
           git init "$repo"
@@ -467,7 +423,6 @@ jobs:
       # ── Phase 5: Project scaffolding ─────────────────────────────
 
       - name: "Scaffold a new project from templates"
-        shell: bash
         run: |
           proj=$(mktemp -d)
           git init "$proj"
@@ -492,7 +447,7 @@ jobs:
       # ── Phase 5b: sanitize.sh smoke test ────────────────────────
 
       - name: "sanitize.sh: no arguments exits with error"
-        if: matrix.profile == 'research' && runner.os == 'Linux'
+        if: matrix.profile == 'research'
         run: |
           script="$HOME/.claude/scripts/sanitize.sh"
           if "$script" 2>/dev/null; then
@@ -502,7 +457,7 @@ jobs:
           echo "OK: sanitize.sh exits non-zero with no arguments"
 
       - name: "sanitize.sh: missing presidio.yaml degrades gracefully"
-        if: matrix.profile == 'research' && runner.os == 'Linux'
+        if: matrix.profile == 'research'
         run: |
           # Use isolated HOME so there's no presidio.yaml
           export HOME=$(mktemp -d)
@@ -513,7 +468,7 @@ jobs:
           echo "OK: sanitize.sh exits 0 when presidio.yaml is missing"
 
       - name: "sanitize.sh: no Presidio installed degrades gracefully"
-        if: matrix.profile == 'research' && runner.os == 'Linux'
+        if: matrix.profile == 'research'
         run: |
           # Config exists but Presidio Python packages are not installed
           export HOME=$(mktemp -d)
@@ -525,10 +480,9 @@ jobs:
           "$script_src" "$tmp_file"
           echo "OK: sanitize.sh exits 0 when Presidio is not installed"
 
-      # ── Phase 6: Dogfood test (Linux only) ─────────────────────
+      # ── Phase 6: Dogfood test ────────────────────────────────────
 
       - name: "Dogfood: full user journey"
-        if: runner.os == 'Linux'
         run: |
           set -euo pipefail
 
@@ -593,7 +547,6 @@ jobs:
 
       - name: "Scaffold an investigation (research profile)"
         if: matrix.profile == 'research'
-        shell: bash
         run: |
           inv_dir="$HOME/.claude/investigations/TEST-001"
           mkdir -p "$inv_dir/EVIDENCE"
@@ -618,10 +571,9 @@ jobs:
           test -d "$HOME/.claude/investigations/_patterns"
           echo "OK: _patterns directory exists for cross-investigation patterns"
 
-      # ── Phase 7: Cross-profile switching (Linux only) ────────────
+      # ── Phase 7: Cross-profile switching ───────────────────────────
 
-      - name: "Cross-profile: dev → research → dev"
-        if: runner.os == 'Linux'
+      - name: "Cross-profile: dev -> research -> dev"
         run: |
           set -euo pipefail
 
@@ -686,86 +638,9 @@ jobs:
           grep -q "Explore, Plan, Code, Verify, Commit" "$HOME/.claude/CLAUDE.md"
           echo "OK: CLAUDE.md has dev workflow"
 
-      - name: "Cross-profile: dev → research → dev (Windows)"
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          # Use isolated USERPROFILE
-          $testHome = Join-Path $env:TEMP "cross-profile-$(Get-Random)"
-          New-Item -ItemType Directory -Path $testHome -Force | Out-Null
-          $origProfile = $env:USERPROFILE
-          $env:USERPROFILE = $testHome
-
-          try {
-            # Step 1: Install dev profile
-            & .\install.ps1 -Profile dev -Force
-            Write-Output "--- Dev profile installed ---"
-
-            # Verify dev skills present
-            foreach ($skill in @('checkpoint', 'create-project', 'playbook', 'continue', 'learn', 'promote')) {
-              if (-not (Test-Path "$testHome\.claude\skills\$skill")) {
-                throw "FAIL: dev skill $skill missing"
-              }
-              Write-Output "OK: $skill present"
-            }
-
-            # Step 2: Switch to research profile
-            & .\install.ps1 -Profile research -Force
-            Write-Output "--- Switched to research profile ---"
-
-            # Verify dev-only skills removed
-            foreach ($skill in @('checkpoint', 'create-project', 'playbook', 'learn', 'promote')) {
-              if (Test-Path "$testHome\.claude\skills\$skill") {
-                throw "FAIL: dev-only skill $skill should have been removed"
-              }
-              Write-Output "OK: $skill removed"
-            }
-
-            # Verify research skills present
-            if (-not (Test-Path "$testHome\.claude\skills\investigate")) {
-              throw "FAIL: investigate skill missing"
-            }
-            Write-Output "OK: investigate present"
-
-            # Verify CLAUDE.md switched to research
-            $content = Get-Content "$testHome\.claude\CLAUDE.md" -Raw
-            if ($content -notmatch 'Question, Collect, Synthesize, Close') {
-              throw "FAIL: CLAUDE.md does not have research workflow"
-            }
-            Write-Output "OK: CLAUDE.md has research workflow"
-
-            # Step 3: Switch back to dev profile
-            & .\install.ps1 -Profile dev -Force
-            Write-Output "--- Switched back to dev profile ---"
-
-            # Verify research-only skills removed
-            if (Test-Path "$testHome\.claude\skills\investigate") {
-              throw "FAIL: research-only skill investigate should have been removed"
-            }
-            Write-Output "OK: investigate removed"
-
-            # Verify dev skills restored
-            foreach ($skill in @('checkpoint', 'create-project', 'playbook', 'continue', 'learn', 'promote')) {
-              if (-not (Test-Path "$testHome\.claude\skills\$skill")) {
-                throw "FAIL: dev skill $skill not restored"
-              }
-              Write-Output "OK: $skill restored"
-            }
-
-            # Verify CLAUDE.md switched back to dev
-            $content = Get-Content "$testHome\.claude\CLAUDE.md" -Raw
-            if ($content -notmatch 'Explore, Plan, Code, Verify, Commit') {
-              throw "FAIL: CLAUDE.md does not have dev workflow"
-            }
-            Write-Output "OK: CLAUDE.md has dev workflow"
-          } finally {
-            $env:USERPROFILE = $origProfile
-          }
-
       # ── Phase 8: Invalid profile error ───────────────────────────
 
-      - name: "Invalid profile: bash rejects unknown profile"
-        if: runner.os == 'Linux'
+      - name: "Invalid profile: rejects unknown profile"
         run: |
           output=$(bash install.sh --profile bogus 2>&1 || true)
           echo "$output"
@@ -776,28 +651,9 @@ jobs:
             exit 1
           fi
 
-      - name: "Invalid profile: PowerShell rejects unknown profile"
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          try {
-            & .\install.ps1 -Profile bogus -DryRun *>&1 | Out-Null
-            throw "FAIL: should have thrown on invalid profile"
-          } catch {
-            if ($_.Exception.Message -match 'ValidateSet|validate set|Cannot validate argument') {
-              Write-Output "OK: PowerShell ValidateSet rejects unknown profile"
-            } elseif ($_.Exception.Message -match 'FAIL: should have thrown') {
-              throw $_
-            } else {
-              # Any other error from parameter binding is acceptable
-              Write-Output "OK: PowerShell rejects unknown profile: $($_.Exception.Message)"
-            }
-          }
-
       # ── Phase 9: Knowledge repo integration ─────────────────────
 
       - name: "Knowledge repo: install with --knowledge-repo"
-        if: runner.os == 'Linux'
         run: |
           set -euo pipefail
 
@@ -839,7 +695,6 @@ jobs:
           test -f "$HOME/.claude/knowledge/entries/20260222-test-entry/entry.md" && echo "OK: seeded entry present"
 
       - name: "Pre-install validation: missing node detected"
-        if: runner.os == 'Linux'
         run: |
           # Hide node by prepending a directory with a fake node that exits 127
           hide_dir=$(mktemp -d)
@@ -861,93 +716,14 @@ jobs:
             exit 1
           fi
 
-      - name: "Knowledge repo: install with -KnowledgeRepo (Windows)"
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          # Use isolated USERPROFILE
-          $testHome = Join-Path $env:TEMP "knowledge-$(Get-Random)"
-          New-Item -ItemType Directory -Path $testHome -Force | Out-Null
-          $origProfile = $env:USERPROFILE
-          $env:USERPROFILE = $testHome
-
-          try {
-            # Create a bare git repo as a dummy knowledge source
-            $bareRepo = Join-Path $env:TEMP "bare-knowledge-$(Get-Random)"
-            git init --bare $bareRepo
-
-            # Seed it with a sample entry
-            $work = Join-Path $env:TEMP "work-knowledge-$(Get-Random)"
-            git clone $bareRepo $work
-            git -C $work config user.email "ci@test"
-            git -C $work config user.name "CI"
-            New-Item -ItemType Directory -Path "$work/entries/20260222-test-entry" -Force | Out-Null
-            @"
-          ---
-          id: "20260222-test-entry"
-          tool: "git"
-          category: "gotcha"
-          tags: ["test"]
-          confidence: "high"
-          ---
-          # Test Entry
-          This is a test knowledge entry for CI.
-          "@ | Set-Content "$work/entries/20260222-test-entry/entry.md"
-            git -C $work add .
-            git -C $work commit -m "seed entry"
-            git -C $work push
-
-            # Run install with -KnowledgeRepo
-            & .\install.ps1 -Profile dev -Force -KnowledgeRepo $bareRepo
-
-            # Verify knowledge directory exists and has entries
-            if (-not (Test-Path "$testHome\.claude\knowledge\.git")) {
-              throw "FAIL: knowledge repo not cloned"
-            }
-            Write-Output "OK: knowledge repo cloned (.git exists)"
-
-            if (-not (Test-Path "$testHome\.claude\knowledge\entries")) {
-              throw "FAIL: entries directory missing"
-            }
-            Write-Output "OK: entries directory exists"
-
-            if (-not (Test-Path "$testHome\.claude\knowledge\entries\20260222-test-entry\entry.md")) {
-              throw "FAIL: seeded entry missing"
-            }
-            Write-Output "OK: seeded entry present"
-          } finally {
-            $env:USERPROFILE = $origProfile
-          }
-
       # ── Phase 10: Session hooks syntax validation ─────────────────
 
       - name: "Session hooks: JavaScript syntax valid"
-        shell: bash
         run: |
           node --check "$HOME/.claude/hooks/session-start.js"
           echo "OK: session-start.js parses correctly"
           node --check "$HOME/.claude/hooks/session-end.js"
           echo "OK: session-end.js parses correctly"
-
-      - name: "Pre-install validation: missing node detected (Windows)"
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          # Run install.ps1 in a child process with restricted PATH so its
-          # exit 1 doesn't fail this step
-          $scriptPath = Resolve-Path ".\install.ps1"
-          $output = & pwsh -NoProfile -Command "
-            `$env:PATH = 'C:\Windows\System32'
-            & '$scriptPath' -Profile dev -DryRun *>&1 | Out-String
-          " 2>&1 | Out-String
-          # Reset LASTEXITCODE — the child process exits 1 by design
-          $global:LASTEXITCODE = 0
-          Write-Output $output
-          if ($output -match 'not found on PATH') {
-            Write-Output "OK: install.ps1 detects missing node"
-          } else {
-            throw "FAIL: expected 'not found on PATH' error"
-          }
 
   test-hooks:
     runs-on: ubuntu-latest

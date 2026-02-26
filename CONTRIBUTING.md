@@ -94,19 +94,13 @@ This project follows the [Contributor Covenant v2.1](https://www.contributor-cov
 
 ## Local Testing
 
-Both install scripts support a `--dry-run` flag that prints actions without modifying your system. Always test with dry-run before reporting an installation bug.
+The install script supports a `--dry-run` flag that prints actions without modifying your system. Always test with dry-run before reporting an installation bug.
 
-**Bash:**
 ```bash
 bash install.sh --profile dev --dry-run
 ```
 
-**PowerShell:**
-```powershell
-.\install.ps1 -Profile dev -DryRun
-```
-
-CI runs automatically on every push to `master` and validates that the install scripts complete without error in a clean environment.
+CI runs automatically on every push to `master` and validates that the install script completes without error in a clean environment.
 
 ---
 
