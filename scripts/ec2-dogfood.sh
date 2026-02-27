@@ -4,11 +4,11 @@
 # Usage:
 #   1. Launch a t3.micro Ubuntu 22.04 LTS instance
 #   2. SSH in and run:
-#      curl -fsSL https://raw.githubusercontent.com/john-wilmes/agentic-coding-playbook/master/scripts/ec2-dogfood.sh | bash
+#      curl -fsSL https://raw.githubusercontent.com/john-wilmes/claude-agentic-coding-playbook/master/scripts/ec2-dogfood.sh | bash
 #
 # Or clone first:
-#   git clone https://github.com/john-wilmes/agentic-coding-playbook.git
-#   cd agentic-coding-playbook
+#   git clone https://github.com/john-wilmes/claude-agentic-coding-playbook.git
+#   cd claude-agentic-coding-playbook
 #   bash scripts/ec2-dogfood.sh
 #
 # What this script does:
@@ -80,8 +80,8 @@ if [ -f "install.sh" ] && [ -d "profiles/dev" ]; then
   REPO_DIR="$(pwd)"
   pass "Already in repo directory"
 else
-  REPO_DIR=$(mktemp -d)/agentic-coding-playbook
-  git clone https://github.com/john-wilmes/agentic-coding-playbook.git "$REPO_DIR"
+  REPO_DIR=$(mktemp -d)/claude-agentic-coding-playbook
+  git clone https://github.com/john-wilmes/claude-agentic-coding-playbook.git "$REPO_DIR"
   pass "Cloned repo to $REPO_DIR"
 fi
 
@@ -191,13 +191,13 @@ bash "$REPO_DIR/install.sh" --profile dev --force --knowledge-repo "$bare"
 section "Step 6: Cross-profile switching (dev → research → dev)"
 
 bash "$REPO_DIR/install.sh" --profile research --force
-[ -d "$HOME/.claude/skills/investigate" ] && pass "investigate skill present" || fail "investigate missing"
+[ ! -d "$HOME/.claude/skills/investigate" ] && pass "no investigate skill (CLAUDE.md-driven)" || fail "investigate skill dir should not exist"
 [ ! -d "$HOME/.claude/skills/checkpoint" ] && pass "checkpoint removed on switch" || fail "checkpoint still present"
 grep -q "Question, Collect, Synthesize, Close" "$HOME/.claude/CLAUDE.md" && \
   pass "CLAUDE.md has research workflow" || fail "CLAUDE.md missing research workflow"
 
 bash "$REPO_DIR/install.sh" --profile dev --force
-[ ! -d "$HOME/.claude/skills/investigate" ] && pass "investigate removed on switch back" || fail "investigate still present"
+[ ! -d "$HOME/.claude/skills/investigate" ] && pass "investigate skill still absent" || fail "investigate skill should not exist"
 [ -d "$HOME/.claude/skills/checkpoint" ] && pass "checkpoint restored" || fail "checkpoint not restored"
 
 # ── Step 7: Idempotency ─────────────────────────────────────────
