@@ -33,7 +33,7 @@ For automated E2E testing using `claude -p` (headless mode), see [`scripts/dogfo
 | 2.2 | Verify CLAUDE.md | `grep "Explore, Plan, Code, Verify" ~/.claude/CLAUDE.md` | Match found |
 | 2.3 | Verify skills | `ls ~/.claude/skills/` | checkpoint, continue, create-project, learn, playbook, promote |
 | 2.4 | Verify hooks | `ls ~/.claude/hooks/` | session-start.js, session-end.js |
-| 2.5 | Verify templates | `ls ~/.claude/templates/` | hooks/, knowledge/, project-CLAUDE.md, cursor/ |
+| 2.5 | Verify templates | `ls ~/.claude/templates/` | hooks/, knowledge/, project-CLAUDE.md |
 | 2.6 | Smoke-test session-start | `echo '{"session_id":"test","cwd":"/tmp"}' \| node ~/.claude/hooks/session-start.js` | Valid JSON with `hookEventName: "SessionStart"` |
 
 ## 3. Knowledge Setup
@@ -120,7 +120,7 @@ Use `git stash` explicitly before rebase, then `git stash pop` after resolving c
 | 10.1 | Exit Claude Code | Type `/exit` or Ctrl+C | Session ends cleanly |
 | 10.2 | Check deregistration | `cat ~/.claude/agent-comm/state.json \| python3 -m json.tool` | Agent removed from `agents` |
 | 10.3 | Check broadcast | Look for "Session ended" in messages array | Message present with session ID |
-| 10.4 | Check auto-commit | `cd ~/.claude && git log --oneline -1` | **KNOWN FAIL**: auto-commit fails if ~/.claude is not a git repo. Initialize with `git init` before this step to test. |
+| 10.4 | Check auto-commit | `cd ~/.claude && git log --oneline -1` | Shows auto-commit with session ID (session-end hook auto-inits git repo if needed) |
 
 ## 11. Research Profile
 
@@ -163,8 +163,6 @@ Use `git stash` explicitly before rebase, then `git stash pop` after resolving c
 
 ## Known Expected Failures
 
-1. **Session-end auto-commit** (10.4): Fails on fresh install because `~/.claude` is not initialized as a git repo. Workaround: run `cd ~/.claude && git init && git add -A && git commit -m "init"` before testing.
+1. **`/create-project` hardcodes `~/Documents/`**: Fails on Linux servers without a Documents directory. Must be run from the desired parent directory manually.
 
-2. **`/create-project` hardcodes `~/Documents/`**: Fails on Linux servers without a Documents directory. Must be run from the desired parent directory manually.
-
-3. **`project-CLAUDE.md` template is Node-specific**: Python/Go users need to manually edit the testing and quality gate sections after scaffolding.
+2. **`project-CLAUDE.md` template is Node-specific**: Python/Go users need to manually edit the testing and quality gate sections after scaffolding.
