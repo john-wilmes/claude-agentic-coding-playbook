@@ -75,6 +75,14 @@ process.stdin.on("end", () => {
       const claudeDir = path.join(os.homedir(), ".claude");
       const gitOpts = { cwd: claudeDir, timeout: 5000, stdio: "pipe" };
 
+      // Initialize ~/.claude as a git repo if it isn't one yet
+      try {
+        execSync("git rev-parse --git-dir", gitOpts);
+      } catch {
+        execSync("git init", gitOpts);
+        log("memory auto-commit: initialized ~/.claude as git repo");
+      }
+
       // Encode cwd to the project key Claude Code uses for memory paths
       const encodedCwd = cwd.replace(/:/g, "-").replace(/[\\/]/g, "-").replace(/^-/, "");
       const memoryPath = `projects/${encodedCwd}/memory/MEMORY.md`;

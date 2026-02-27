@@ -102,8 +102,3 @@ bash install.sh --profile dev --dry-run
 
 CI runs automatically on every push to `master` and validates that the install script completes without error in a clean environment.
 
----
-
-## i18n / Translations
-
-Guidelines for translating the playbook into other languages are maintained separately to keep this file concise. See [docs/TRANSLATING.md](docs/TRANSLATING.md) before starting a translation or updating an existing one.

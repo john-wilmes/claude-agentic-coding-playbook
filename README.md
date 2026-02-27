@@ -75,7 +75,7 @@ The installer **will not overwrite** existing skills or configuration without pr
 
 - **`/checkpoint`** -- Save all work, update memory with Current Work section, run quality gates, commit, push. Designed for clean session handoffs.
 - **`/continue`** -- Read the Current Work section from memory and present what was done, current state, and next steps. Start every session here.
-- **`/playbook`** -- Analyze your CLAUDE.md configuration and suggest improvements. Modes: `global` (default), `project`, `cursor`, `check`. Uses LLM understanding to merge sections intelligently rather than simple file replacement.
+- **`/playbook`** -- Analyze your CLAUDE.md configuration and suggest improvements. Modes: `global` (default), `project`, `check`. Uses LLM understanding to merge sections intelligently rather than simple file replacement.
 - **`/create-project`** -- Scaffold a new project with git, .gitignore, CLAUDE.md, GitHub repo, and memory directory.
 
 ### CLAUDE.md Rules
@@ -90,17 +90,6 @@ The dev profile CLAUDE.md includes:
 - **Security baseline** -- sandbox mode, credential protection, MCP server restrictions
 - **Efficiency rules** -- parallel tool calls, no re-reads, two-attempt limit
 - **Memory discipline** -- Current Work tracking for session continuity
-
-### Both Tools, One Install
-
-The installer sets up both Claude Code and Cursor configurations:
-
-| Tool | What gets installed | Scope |
-|------|-------------------|-------|
-| **Claude Code** | `~/.claude/CLAUDE.md`, skills, hooks | Global -- works in every project automatically |
-| **Cursor** | Templates in `~/.claude/templates/cursor/` | Per-project -- copy into each project's `.cursor/` |
-
-Claude Code has a global config layer; Cursor does not. See [docs/tool-comparison.md](docs/tool-comparison.md) for the full architectural comparison, including where agents can run, how rules activate, and pricing differences.
 
 ### Installation Profiles
 
@@ -129,9 +118,7 @@ The wizard will:
 ## Documentation
 
 - **[Best Practices Guide](docs/best-practices.md)** -- the full evidence-backed guide with 34 verified citations
-- **[Claude Code vs Cursor](docs/tool-comparison.md)** -- architectural differences, where agents can run, installation scope, pricing
 - **[Project CLAUDE.md Template](templates/project-CLAUDE.md)** -- starting point for per-project instructions
-- **[Cursor Rules Template](templates/cursor/rules/)** -- `.mdc` rules for Cursor projects
 - **[Dogfood Playbook](docs/dogfood-playbook.md)** -- manual interactive testing checklist for verifying the full user experience
 
 ## Contributing
