@@ -90,6 +90,7 @@ When a branch is 5+ commits ahead of main and includes documentation or configur
 - Never commit credentials, API keys, or secrets. Use `.env` files excluded by `.gitignore`.
 - Review proposed changes to security-critical files (auth, permissions, crypto) line by line.
 - Enable `/sandbox` mode when working with untrusted repositories or running unfamiliar scripts.
+- Always create GitHub repos with `--private`. Only use `--public` if the user has explicitly and unprompted requested a public repo. Never infer public visibility from context.
 - Disable project-level MCP servers by default (`enableAllProjectMcpServers: false`) to prevent supply chain injection.
 
 ## Git Discipline
