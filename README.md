@@ -24,8 +24,8 @@ Full details with citations: [docs/best-practices.md](docs/best-practices.md)
 ## Quick Install
 
 ```bash
-git clone https://github.com/john-wilmes/agentic-coding-playbook.git
-cd agentic-coding-playbook
+git clone https://github.com/john-wilmes/claude-agentic-coding-playbook.git
+cd claude-agentic-coding-playbook
 chmod +x install.sh
 ./install.sh
 ```
@@ -60,7 +60,6 @@ Research (investigation) profile:
 ~/.claude/
   CLAUDE.md                          # Investigation-focused instruction file
   skills/
-    investigate/SKILL.md             # /investigate - full investigation lifecycle
     continue/SKILL.md                  # /continue - list open investigations, resume work
   templates/
     investigation/                   # Templates for investigation files

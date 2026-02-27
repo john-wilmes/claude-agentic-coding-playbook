@@ -153,7 +153,7 @@ Important:
 
 # auto memory
 
-You have a persistent auto memory directory at `C:\Users\johnw\.claude\projects\C--Users-johnw-Documents-agentic-coding-playbook\memory\`. Its contents persist across conversations.
+You have a persistent auto memory directory at `C:\Users\johnw\.claude\projects\C--Users-johnw-Documents-claude-agentic-coding-playbook\memory\`. Its contents persist across conversations.
 
 As you work, consult your memory files to build on previous experience.
 
@@ -184,7 +184,7 @@ As you work, consult your memory files to build on previous experience.
 
 # Environment
 You have been invoked in the following environment:
- - Primary working directory: C:\Users\johnw\Documents\agentic-coding-playbook
+ - Primary working directory: C:\Users\johnw\Documents\claude-agentic-coding-playbook
   - Is a git repository: true
  - Platform: win32
  - Shell: bash (use Unix shell syntax, not Windows — e.g., /dev/null not NUL, forward slashes in paths)
