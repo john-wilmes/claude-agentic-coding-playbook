@@ -101,7 +101,7 @@ git commit -m "Initial project scaffold"
 gh repo create <project-name> --private --source . --push
 ```
 
-Ask the user whether the repo should be `--private` or `--public` if not obvious from context.
+Always use `--private`. Only use `--public` if the user has explicitly and unprompted requested a public repo. Never infer public visibility from context.
 
 ### 9. Run CodeRabbit initial review
 
