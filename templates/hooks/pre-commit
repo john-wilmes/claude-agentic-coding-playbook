@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # pre-commit hook: block large files and common credential patterns
-# Installed by the claude-agentic-coding-playbook. Safe to customize per project.
+# Installed by the agentic-coding-playbook. Safe to customize per project.
 set -euo pipefail
 
 MAX_FILE_SIZE_KB=5120  # 5MB
