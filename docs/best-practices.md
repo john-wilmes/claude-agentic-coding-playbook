@@ -1782,8 +1782,8 @@ Defenses:
 
 **macOS / Linux:**
 ```bash
-git clone https://github.com/john-wilmes/claude-agentic-coding-playbook.git
-cd claude-agentic-coding-playbook
+git clone https://github.com/john-wilmes/agentic-coding-playbook.git
+cd agentic-coding-playbook
 chmod +x install.sh
 ./install.sh
 ```
