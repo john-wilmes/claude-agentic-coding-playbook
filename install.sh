@@ -3,8 +3,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CLAUDE_DIR="$HOME/.claude"
-PROFILE="dev"
+INSTALL_ROOT=""
+CLAUDE_DIR=""
 WIZARD=false
 FORCE=false
 DRY_RUN=false
@@ -17,17 +17,19 @@ Usage: install.sh [OPTIONS]
 Install agentic coding practices for Claude Code.
 
 Options:
-  --profile <name>         Installation profile: dev (default), research
-  --wizard                 Interactive wizard to merge with existing configuration
-  --force                  Overwrite existing files without prompting
-  --dry-run                Show what would be installed without making changes
-  --knowledge-repo <url>   Clone (or pull) a git repo into ~/.claude/knowledge
-  -h, --help               Show this help message
+  --root <path>              Install root directory (default: ~/Documents)
+                             The .claude/ config goes here, projects are siblings
+  --wizard                   Interactive wizard to merge with existing configuration
+  --force                    Overwrite existing files without prompting
+  --dry-run                  Show what would be installed without making changes
+  --knowledge-repo <url>     Clone (or pull) a git repo into <root>/.claude/knowledge
+  -h, --help                 Show this help message
 
 Examples:
-  ./install.sh                          # Install dev profile, prompt on conflicts
+  ./install.sh                          # Install to ~/Documents/.claude/
+  ./install.sh --root ~/projects        # Install to ~/projects/.claude/
   ./install.sh --wizard                 # Interactive merge with existing config
-  ./install.sh --force                   # Overwrite everything
+  ./install.sh --force                  # Overwrite everything
   ./install.sh --dry-run                # Preview what would be installed
   ./install.sh --knowledge-repo https://github.com/org/knowledge
 EOF
@@ -37,11 +39,11 @@ EOF
 # Parse arguments
 while [[ "$#" -gt 0 ]]; do
   case $1 in
-    --profile)
+    --root)
       if [[ "$#" -lt 2 || "$2" == --* ]]; then
-        echo "ERROR: --profile requires a value (dev, research)"; exit 1
+        echo "ERROR: --root requires a path"; exit 1
       fi
-      PROFILE="$2"; shift ;;
+      INSTALL_ROOT="$2"; shift ;;
     --wizard) WIZARD=true ;;
     --force) FORCE=true ;;
     --dry-run) DRY_RUN=true ;;
@@ -56,13 +58,23 @@ while [[ "$#" -gt 0 ]]; do
   shift
 done
 
-# Validate profile (whitelist to prevent path traversal)
-case "$PROFILE" in
-  dev|research) ;;
-  *) echo "ERROR: Unknown profile '$PROFILE'. Available: dev, research"; exit 1 ;;
-esac
-if [ ! -d "$SCRIPT_DIR/profiles/$PROFILE" ]; then
-  echo "ERROR: Profile '$PROFILE' directory not found."
+# Resolve install root
+if [ -z "$INSTALL_ROOT" ]; then
+  if [ -d "$HOME/Documents" ]; then
+    INSTALL_ROOT="$HOME/Documents"
+  else
+    INSTALL_ROOT="$HOME"
+  fi
+fi
+
+# Expand ~ and resolve to absolute path
+INSTALL_ROOT="$(eval echo "$INSTALL_ROOT")"
+INSTALL_ROOT="$(cd "$INSTALL_ROOT" 2>/dev/null && pwd || echo "$INSTALL_ROOT")"
+CLAUDE_DIR="$INSTALL_ROOT/.claude"
+
+PROFILE_DIR="$SCRIPT_DIR/profiles/combined"
+if [ ! -d "$PROFILE_DIR" ]; then
+  echo "ERROR: Combined profile directory not found at $PROFILE_DIR."
   exit 1
 fi
 
@@ -86,16 +98,9 @@ if [ "$missing" -eq 1 ]; then
   exit 1
 fi
 
-if [ "$PROFILE" = "research" ] && ! command -v python3 &>/dev/null; then
-  echo "WARNING: python3 not found. The research profile's sanitize.sh requires python3 for Presidio integration."
-  echo "  Install with: sudo apt install python3  (Linux) / brew install python3 (macOS)"
-  echo "  Continuing without python3 (sanitize.sh will degrade gracefully)."
-  echo ""
-fi
-
 echo "=== Agentic Coding Playbook Installer ==="
-echo "Profile: $PROFILE"
-echo "Target:  $CLAUDE_DIR"
+echo "Root:    $INSTALL_ROOT"
+echo "Config:  $CLAUDE_DIR"
 echo ""
 
 # --- Helper functions ---
@@ -143,7 +148,7 @@ install_file() {
 
 install_skill() {
   local skill_name="$1"
-  local src="$SCRIPT_DIR/profiles/$PROFILE/skills/$skill_name/SKILL.md"
+  local src="$PROFILE_DIR/skills/$skill_name/SKILL.md"
   local dest_dir="$CLAUDE_DIR/skills/$skill_name"
   local dest="$dest_dir/SKILL.md"
 
@@ -233,16 +238,17 @@ elif [ "${FORCE_CLAUDE:-false}" = true ]; then
   if [ "$DRY_RUN" = true ]; then
     echo "[DRY RUN] Would install: CLAUDE.md"
   else
-    cp "$SCRIPT_DIR/profiles/$PROFILE/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md"
+    mkdir -p "$CLAUDE_DIR"
+    cp "$PROFILE_DIR/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md"
     echo "INSTALLED: CLAUDE.md"
   fi
 else
-  install_file "$SCRIPT_DIR/profiles/$PROFILE/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md" "CLAUDE.md"
+  install_file "$PROFILE_DIR/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md" "CLAUDE.md"
 fi
 
 echo ""
 echo "--- Installing skills ---"
-for skill_dir in "$SCRIPT_DIR/profiles/$PROFILE/skills"/*/; do
+for skill_dir in "$PROFILE_DIR/skills"/*/; do
   [ -d "$skill_dir" ] || continue
   skill_name=$(basename "$skill_dir")
   install_skill "$skill_name"
@@ -259,8 +265,8 @@ if [ -f "$SCRIPT_DIR/templates/project-CLAUDE.md" ]; then
   install_file "$SCRIPT_DIR/templates/project-CLAUDE.md" "$CLAUDE_DIR/templates/project-CLAUDE.md" "template: project-CLAUDE.md"
 fi
 
-# Investigation templates (research profile only)
-if [ "$PROFILE" = "research" ] && [ -d "$SCRIPT_DIR/profiles/research/templates" ]; then
+# Investigation templates
+if [ -d "$SCRIPT_DIR/profiles/research/templates" ]; then
   echo ""
   echo "--- Installing investigation templates ---"
   if [ "$DRY_RUN" != true ]; then
@@ -283,10 +289,10 @@ if [ "$PROFILE" = "research" ] && [ -d "$SCRIPT_DIR/profiles/research/templates"
   fi
   # Create investigations directory structure
   if [ "$DRY_RUN" = true ]; then
-    echo "[DRY RUN] MKDIR: ~/.claude/investigations/_patterns/"
+    echo "[DRY RUN] MKDIR: $CLAUDE_DIR/../research/ and $INSTALL_ROOT/.claude/investigations/_patterns/"
   else
     mkdir -p "$CLAUDE_DIR/investigations/_patterns"
-    echo "CREATED: ~/.claude/investigations/_patterns/"
+    echo "CREATED: $CLAUDE_DIR/investigations/_patterns/"
   fi
 
   # Install investigation scripts
@@ -294,7 +300,7 @@ if [ "$PROFILE" = "research" ] && [ -d "$SCRIPT_DIR/profiles/research/templates"
   echo "--- Installing investigation scripts ---"
   if [ -f "$SCRIPT_DIR/profiles/research/scripts/sanitize.sh" ]; then
     if [ "$DRY_RUN" = true ]; then
-      echo "[DRY RUN] INSTALL: sanitize.sh -> ~/.claude/scripts/sanitize.sh"
+      echo "[DRY RUN] INSTALL: sanitize.sh -> $CLAUDE_DIR/scripts/sanitize.sh"
     else
       mkdir -p "$CLAUDE_DIR/scripts"
       cp "$SCRIPT_DIR/profiles/research/scripts/sanitize.sh" "$CLAUDE_DIR/scripts/sanitize.sh"
@@ -302,6 +308,16 @@ if [ "$PROFILE" = "research" ] && [ -d "$SCRIPT_DIR/profiles/research/templates"
       echo "INSTALLED: sanitize.sh -> $CLAUDE_DIR/scripts/sanitize.sh"
     fi
   fi
+fi
+
+# Create research directory as sibling
+echo ""
+echo "--- Creating research directory ---"
+if [ "$DRY_RUN" = true ]; then
+  echo "[DRY RUN] MKDIR: $INSTALL_ROOT/research/"
+else
+  mkdir -p "$INSTALL_ROOT/research"
+  echo "CREATED: $INSTALL_ROOT/research/"
 fi
 
 # Git hook templates
@@ -321,7 +337,7 @@ if [ -d "$SCRIPT_DIR/templates/hooks" ]; then
   done
 fi
 
-# Claude session hooks (SessionStart, SessionEnd -- installed to ~/.claude/hooks/)
+# Claude session hooks (SessionStart, SessionEnd -- installed to <root>/.claude/hooks/)
 echo ""
 echo "--- Installing Claude session hooks ---"
 if [ "$DRY_RUN" != true ]; then
@@ -412,53 +428,15 @@ if [ -n "$KNOWLEDGE_REPO" ]; then
   fi
 fi
 
-# --- Cleanup skills from other profile ---
-
-# Skills exclusive to each profile (continue is shared)
-DEV_ONLY_SKILLS=("checkpoint" "create-project" "learn" "playbook" "promote")
-RESEARCH_ONLY_SKILLS=("investigate")
-LEGACY_SKILLS=("findings")
-
-if [ "$PROFILE" = "dev" ]; then
-  OTHER_SKILLS=("${RESEARCH_ONLY_SKILLS[@]}")
-elif [ "$PROFILE" = "research" ]; then
-  OTHER_SKILLS=("${DEV_ONLY_SKILLS[@]}" "${LEGACY_SKILLS[@]}")
-fi
-
-for other_skill in "${OTHER_SKILLS[@]}"; do
-  other_dir="$CLAUDE_DIR/skills/$other_skill"
-  if [ -d "$other_dir" ]; then
-    if [ "$DRY_RUN" = true ]; then
-      echo "[DRY RUN] OTHER PROFILE SKILL: /$other_skill (would offer removal)"
-    elif [ "$FORCE" = true ]; then
-      rm -rf "$other_dir"
-      echo "REMOVED: /$other_skill (not part of $PROFILE profile)"
-    else
-      echo ""
-      echo "OTHER PROFILE SKILL: /$other_skill is not part of the $PROFILE profile."
-      read -r -p "  Remove $other_dir? [y/N] " remove_choice
-      case $remove_choice in
-        y|Y)
-          rm -rf "$other_dir"
-          echo "  -> Removed."
-          ;;
-        *)
-          echo "  -> Kept."
-          ;;
-      esac
-    fi
-  fi
-done
-
 # --- Summary ---
 
 echo ""
 echo "=== Installation complete ==="
-echo "Profile: $PROFILE"
+echo "Install root: $INSTALL_ROOT"
 echo ""
 echo "What was installed:"
-echo "  CLAUDE.md        -> $CLAUDE_DIR/CLAUDE.md (global, loads every session)"
-for skill_dir in "$SCRIPT_DIR/profiles/$PROFILE/skills"/*/; do
+echo "  CLAUDE.md        -> $CLAUDE_DIR/CLAUDE.md (loads for all sessions under $INSTALL_ROOT)"
+for skill_dir in "$PROFILE_DIR/skills"/*/; do
   [ -d "$skill_dir" ] || continue
   echo "  /$(basename "$skill_dir") skill  -> $CLAUDE_DIR/skills/$(basename "$skill_dir")/"
 done
@@ -469,17 +447,18 @@ echo "    hooks/pre-commit    (copy to .git/hooks/ in each project)"
 echo "      Note: If core.hooksPath is set globally, install the hook there instead of .git/hooks/"
 echo "    knowledge/          (entry format, CI, pre-commit for knowledge repos)"
 echo ""
-echo "Claude Code: ready to use globally (no per-project setup needed)."
+echo "Directory structure:"
+echo "  $INSTALL_ROOT/"
+echo "    .claude/             <- playbook config (CLAUDE.md, skills, hooks, templates)"
+echo "    research/            <- investigations and research"
+echo "    <your-projects>/     <- dev projects (siblings to .claude/)"
 echo ""
 echo "Next steps:"
 echo "  1. Review $CLAUDE_DIR/CLAUDE.md and customize for your workflow"
-echo "  2. Start a Claude Code session: claude"
-if [ "$PROFILE" = "dev" ]; then
-  echo "  3. Run /playbook to configure for your environment"
-  echo "  4. Use /continue at session start, /checkpoint at session end"
-else
-  echo "  3. Run /investigate <id> new to start an investigation"
-  echo "  4. Use /continue at session start to see open investigations"
-fi
+echo "  2. cd $INSTALL_ROOT && claude     # start a session"
+echo "  3. Run /playbook to configure for your environment"
+echo "  4. Use /continue at session start, /checkpoint at session end"
+echo "  5. Use /create-project <name> to scaffold new projects"
+echo "  6. Use /investigate <id> new to start research investigations"
 echo ""
 echo "Docs: docs/best-practices.md"

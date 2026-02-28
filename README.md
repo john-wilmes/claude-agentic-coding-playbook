@@ -34,37 +34,34 @@ chmod +x install.sh
 
 | Flag | Description |
 |------|-------------|
-| `--profile dev` | Development workflow (default) -- quality gates, code review, testing |
-| `--profile research` | Investigation workflow -- structured evidence collection, tagging, PHI sanitization |
+| `--root <path>` | Install root directory (default: `~/Documents`). Config goes to `<root>/.claude/`, projects are siblings |
 | `--wizard` | Interactive merge with your existing configuration |
 | `--force` | Overwrite existing files without prompting |
 | `--dry-run` | Preview what would be installed |
 
 ### What Gets Installed
 
-Dev profile:
 ```
-~/.claude/
-  CLAUDE.md                          # Global instruction file
-  skills/
-    checkpoint/SKILL.md              # /checkpoint - save state and end session
-    continue/SKILL.md                  # /continue - pick up where you left off
-    playbook/SKILL.md                # /playbook - analyze and improve your config
-    create-project/SKILL.md          # /create-project - scaffold a new project
-  templates/
-    project-CLAUDE.md                # Template for new project CLAUDE.md files
-```
-
-Research (investigation) profile:
-```
-~/.claude/
-  CLAUDE.md                          # Investigation-focused instruction file
-  skills/
-    investigate/SKILL.md             # /investigate - full investigation lifecycle
-    continue/SKILL.md                  # /continue - list open investigations, resume work
-  templates/
-    investigation/                   # Templates for investigation files
-  investigations/                    # Investigation storage (created on first use)
+<install-root>/                        # e.g. ~/Documents
+  .claude/                             # Playbook configuration
+    CLAUDE.md                          #   Combined dev + research workflows
+    skills/
+      checkpoint/SKILL.md             #   /checkpoint - save state, commit, end session
+      continue/SKILL.md               #   /continue - resume work (auto-detects dev vs research)
+      create-project/SKILL.md         #   /create-project - scaffold a new project
+      investigate/SKILL.md            #   /investigate - full investigation lifecycle
+      learn/SKILL.md                  #   /learn - capture knowledge entries
+      playbook/SKILL.md              #   /playbook - analyze and improve config
+      promote/SKILL.md               #   /promote - promote lessons to global scope
+    hooks/                             #   Session start/end hooks, model router
+    templates/
+      project-CLAUDE.md              #   Template for project-level CLAUDE.md
+      hooks/pre-commit               #   Git pre-commit hook (blocks secrets, large files)
+      investigation/                 #   Templates for investigation files
+      knowledge/                     #   Knowledge entry format
+  research/                           # Research/investigation workspace
+  project-a/                          # Dev project (created with /create-project)
+  project-b/                          # Dev project
 ```
 
 The installer **will not overwrite** existing skills or configuration without prompting. Use `--wizard` to analyze your current setup and merge intelligently.
@@ -73,30 +70,32 @@ The installer **will not overwrite** existing skills or configuration without pr
 
 ### Skills
 
+**Development:**
 - **`/checkpoint`** -- Save all work, update memory with Current Work section, run quality gates, commit, push. Designed for clean session handoffs.
 - **`/continue`** -- Read the Current Work section from memory and present what was done, current state, and next steps. Start every session here.
-- **`/playbook`** -- Analyze your CLAUDE.md configuration and suggest improvements. Modes: `global` (default), `project`, `check`. Uses LLM understanding to merge sections intelligently rather than simple file replacement.
-- **`/create-project`** -- Scaffold a new project with git, .gitignore, CLAUDE.md, GitHub repo, and memory directory.
+- **`/create-project`** -- Scaffold a new project with git, .gitignore, CLAUDE.md, GitHub repo. Projects are created as siblings to `.claude/`.
+- **`/playbook`** -- Analyze your CLAUDE.md configuration and suggest improvements. Modes: `global`, `project`, `check`.
+- **`/learn`** -- Capture a non-obvious lesson as a structured knowledge entry for future sessions.
+- **`/promote`** -- Promote a project-level lesson to global scope.
+
+**Research:**
+- **`/investigate`** -- Full investigation lifecycle with multi-agent evidence collection, synthesis, tagging, and PHI sanitization. Subcommands: `new`, `run`, `collect`, `synthesize`, `close`, `status`, `list`, `search`.
+- **`/continue`** -- Lists open investigations and resumes work. Same skill as above — auto-detects context.
 
 ### CLAUDE.md Rules
 
-The dev profile CLAUDE.md includes:
+The combined CLAUDE.md includes:
 
-- **Explore-Plan-Code-Verify-Commit workflow** -- Anthropic's recommended task lifecycle
+- **Dual workflow** -- Development (Explore-Plan-Code-Verify-Commit) and Research (Question-Collect-Synthesize-Close), auto-selected by working directory
 - **Reasoning standards** -- evidence-based debugging, two-hypothesis minimum, no cargo-culting
 - **Model routing** -- use Haiku for exploration, Sonnet for implementation, Opus for planning
 - **Testing as feedback loop** -- verify continuously, not just at the end
 - **Code review enforcement** -- review staged changes before every commit
+- **Evidence discipline** -- numbered observations with source, relevance, and 3-line max
+- **PII/PHI protection** -- Presidio-based auto-sanitization for investigation files
 - **Security baseline** -- sandbox mode, credential protection, MCP server restrictions
 - **Efficiency rules** -- parallel tool calls, no re-reads, two-attempt limit
 - **Memory discipline** -- Current Work tracking for session continuity
-
-### Installation Profiles
-
-| Profile | Focus | Status |
-|---------|-------|--------|
-| **dev** | Full development workflow with quality gates, code review, testing, security | Available |
-| **research** | Structured investigations with evidence collection, tagging, and PHI sanitization | Available |
 
 ## Existing Users
 
