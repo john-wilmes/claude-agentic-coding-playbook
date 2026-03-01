@@ -1,6 +1,7 @@
 ---
 name: playbook
-description: Analyze your Claude Code configuration and suggest improvements based on the agentic coding playbook. Works on both global and project-level CLAUDE.md files.
+description: Analyze your Claude Code configuration and suggest improvements based on the agentic coding playbook. Use when user says "audit my config", "check my setup", or "improve my CLAUDE.md". Works on both global and project-level CLAUDE.md files. Do NOT use for application configuration — only for Claude Code setup.
+compatibility: claude-code
 disable-model-invocation: false
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion
 argument-hint: "[global | project | check]"

@@ -1,6 +1,7 @@
 ---
 name: learn
-description: Capture a lesson as a structured knowledge entry. Use when you discover a non-obvious bug, workaround, or pattern worth preserving for future sessions.
+description: Capture a lesson as a structured knowledge entry. Use when you discover a non-obvious bug, workaround, or pattern worth preserving for future sessions. Use when user says "remember this", "save this lesson", or "this is worth noting".
+compatibility: claude-code
 disable-model-invocation: false
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 argument-hint: "[description of what was learned]"
