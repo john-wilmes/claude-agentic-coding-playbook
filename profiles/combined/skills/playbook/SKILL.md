@@ -10,10 +10,20 @@ argument-hint: "[global | project | check]"
 
 Analyze the user's Claude Code configuration and intelligently merge playbook best practices. Unlike the install script's `--wizard` mode (which does simple file-level skip/overwrite/backup), this skill understands the semantic content of CLAUDE.md files and merges section-by-section.
 
+## Install Root Discovery
+
+Before running any mode, determine where the playbook's `.claude/` directory is installed. The install root may differ from `~/.claude/` if the user ran `install.sh --root <path>`.
+
+1. Walk up from the current working directory, checking each ancestor for a `.claude/` directory that contains any of: `skills/`, `templates/`, or a `CLAUDE.md` with playbook content (e.g., the "Explore, Plan, Code, Verify, Commit" workflow heading).
+2. Also check `~/.claude/` as a candidate.
+3. Use whichever path is found as `<INSTALL_ROOT>/.claude/`. All `<INSTALL_ROOT>` references below use this resolved path.
+
+If multiple candidates exist, prefer the one closest to the current working directory (it is the most specific). If no `.claude/` directory with playbook content is found, fall back to `~/.claude/`.
+
 ## Modes
 
 Parse `$ARGUMENTS` to determine the mode:
-- **`global`** (default if no argument): Analyze and improve `~/.claude/CLAUDE.md`
+- **`global`** (default if no argument): Analyze and improve `<INSTALL_ROOT>/.claude/CLAUDE.md`
 - **`project`**: Analyze and improve the current project's `CLAUDE.md`
 - **`check`**: Audit current configuration and report what is missing or outdated
 
@@ -21,7 +31,7 @@ Parse `$ARGUMENTS` to determine the mode:
 
 ### 1. Read the user's global CLAUDE.md
 
-Read `~/.claude/CLAUDE.md`. If it does not exist, offer to create one from scratch using the playbook template.
+Read `<INSTALL_ROOT>/.claude/CLAUDE.md`. If it does not exist, offer to create one from scratch using the playbook template.
 
 ### 2. Analyze existing sections
 
@@ -80,8 +90,8 @@ If the user chose to merge:
 ### 6. Check skills
 
 After handling CLAUDE.md, check if recommended skills are installed:
-- `/checkpoint` at `~/.claude/skills/checkpoint/SKILL.md`
-- `/continue` at `~/.claude/skills/continue/SKILL.md`
+- `/checkpoint` at `<INSTALL_ROOT>/.claude/skills/checkpoint/SKILL.md`
+- `/continue` at `<INSTALL_ROOT>/.claude/skills/continue/SKILL.md`
 
 Report any missing skills and offer to note them for the user to install via the install script.
 
@@ -93,7 +103,7 @@ Look for `CLAUDE.md` in the current working directory.
 
 ### 2. If no project CLAUDE.md exists
 
-Offer to create one using the playbook template. Read `~/.claude/templates/project-CLAUDE.md` if available, otherwise use the built-in template structure:
+Offer to create one using the playbook template. Read `<INSTALL_ROOT>/.claude/templates/project-CLAUDE.md` if available, otherwise use the built-in template structure:
 
 ```markdown
 # <project-name>
@@ -152,7 +162,7 @@ git config core.hooksPath
 - Warn the user that this is a global hook directory shared across all repos
 
 **If `core.hooksPath` is NOT set:**
-- Check if `.git/hooks/pre-commit` exists in the project. If not, and `~/.claude/templates/hooks/pre-commit` exists:
+- Check if `.git/hooks/pre-commit` exists in the project. If not, and `<INSTALL_ROOT>/.claude/templates/hooks/pre-commit` exists:
   - Copy it to `.git/hooks/pre-commit`
   - Make it executable (`chmod +x`)
   - Report what it enforces (large file blocking, credential scanning, .env blocking)
