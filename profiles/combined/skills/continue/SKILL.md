@@ -10,6 +10,16 @@ argument-hint: "[investigation-id]"
 
 Pick up where the last session left off. Check inbox first, then detect context (dev project vs research) and present the appropriate information.
 
+## Install Root Discovery
+
+Before any step, determine where the playbook's `.claude/` directory is installed:
+
+1. Walk up from the current working directory, checking each ancestor for a `.claude/` directory that contains `investigations/`, `skills/`, or `templates/`.
+2. Also check `~/.claude/` as a candidate.
+3. Prefer the candidate closest to the current working directory. Fall back to `~/.claude/`.
+
+Set `INSTALL_ROOT` to the discovered path. The investigations directory is `<INSTALL_ROOT>/.claude/investigations/`.
+
 ## Steps
 
 ### 1. Check inbox (agent-comm)
@@ -33,7 +43,7 @@ If agent-comm is not available (MCP server not running), skip silently and conti
 
 Determine whether this is a dev or research session:
 
-- **Research context**: If `$ARGUMENTS` contains an investigation ID, OR if the current directory is inside `~/.claude/investigations/`, this is a research session. Go to step 3R.
+- **Research context**: If `$ARGUMENTS` contains an investigation ID, OR if the current directory is inside `<INSTALL_ROOT>/.claude/investigations/`, this is a research session. Go to step 3R.
 - **Dev context**: Otherwise, this is a dev session. Go to step 3D.
 
 ### 3D. Dev context — Find and present memory
@@ -96,7 +106,7 @@ If `$ARGUMENTS` contains an investigation ID, jump to step 5R (resume specific i
 
 ### 4R. List open investigations
 
-Glob for `~/.claude/investigations/*/STATUS.md` (exclude `_patterns/`).
+Glob for `<INSTALL_ROOT>/.claude/investigations/*/STATUS.md` (exclude `_patterns/`).
 
 For each, read the current phase from STATUS.md. Filter to non-closed investigations. Present:
 
@@ -140,7 +150,7 @@ Scan for additional context:
 
 If an investigation ID was provided (from argument or user choice):
 
-1. Read `~/.claude/investigations/<id>/STATUS.md`
+1. Read `<INSTALL_ROOT>/.claude/investigations/<id>/STATUS.md`
 2. If phase is "closed": ask if user wants to reopen. If yes, update phase to "collecting" and add history entry: `| <today> | reopen | Reopened by user |`
 3. Read BRIEF.md for the investigation question.
 4. Read the most recent evidence files (last 3).

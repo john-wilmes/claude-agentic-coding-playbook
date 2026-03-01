@@ -8,10 +8,20 @@ argument-hint: "<id> [new|run|collect|synthesize|close|status] | list | search <
 
 # Investigate (v2)
 
-Manage structured investigations in `~/.claude/investigations/`.
+Manage structured investigations.
 
-Set `INVESTIGATIONS_DIR` to `~/.claude/investigations`.
-Set `TEMPLATES_DIR` to `~/.claude/templates/investigation`.
+## Install Root Discovery
+
+Before any subcommand, determine where the playbook's `.claude/` directory is installed. The install root may differ from `~/.claude/` if the user ran `install.sh --root <path>`.
+
+1. Walk up from the current working directory, checking each ancestor for a `.claude/` directory that contains `investigations/`, `skills/`, or `templates/`.
+2. Also check `~/.claude/` as a candidate.
+3. Prefer the candidate closest to the current working directory.
+4. Fall back to `~/.claude/` if no candidate is found.
+
+Set `INSTALL_ROOT` to the discovered path (the parent of `.claude/`).
+Set `INVESTIGATIONS_DIR` to `<INSTALL_ROOT>/.claude/investigations`.
+Set `TEMPLATES_DIR` to `<INSTALL_ROOT>/.claude/templates/investigation`.
 
 ---
 
@@ -260,12 +270,12 @@ Repository: {REPO_PATH}
 Your evidence range: 001–049
 
 Tasks:
-1. Read ~/.claude/investigations/{ID}/BRIEF.md for full context.
+1. Read $INVESTIGATIONS_DIR/{ID}/BRIEF.md for full context.
 2. Use Glob and Grep to find the 3–5 source files most relevant to the question.
 3. Read each file. Write one evidence file per significant finding.
 4. Write between 3 and 8 evidence files. Stop before file 050.
 
-Evidence file path: ~/.claude/investigations/{ID}/EVIDENCE/NNN-slug.md
+Evidence file path: $INVESTIGATIONS_DIR/{ID}/EVIDENCE/NNN-slug.md
 Evidence file format (use exactly):
 
 # NNN: slug
@@ -294,12 +304,12 @@ Repository: {REPO_PATH}
 Your evidence range: 050–099
 
 Tasks:
-1. Read ~/.claude/investigations/{ID}/BRIEF.md for full context.
+1. Read $INVESTIGATIONS_DIR/{ID}/BRIEF.md for full context.
 2. Use Glob to find test files related to the question (*.test.*, *.spec.*, test_*.py, __tests__/).
 3. For each relevant test file: what does it assert, what is absent, are any tests skipped?
 4. Write between 2 and 6 evidence files. Stop before file 100.
 
-Evidence file path: ~/.claude/investigations/{ID}/EVIDENCE/NNN-slug.md
+Evidence file path: $INVESTIGATIONS_DIR/{ID}/EVIDENCE/NNN-slug.md
 Evidence file format (use exactly):
 
 # NNN: slug
@@ -328,12 +338,12 @@ Repository: {REPO_PATH}
 Your evidence range: 100–149
 
 Tasks:
-1. Read ~/.claude/investigations/{ID}/BRIEF.md for full context.
+1. Read $INVESTIGATIONS_DIR/{ID}/BRIEF.md for full context.
 2. Run: git -C "{REPO_PATH}" log --oneline -50
 3. Identify commits relevant to the question. For key commits run: git -C "{REPO_PATH}" show --stat <hash>
 4. Write between 2 and 6 evidence files. Stop before file 150.
 
-Evidence file path: ~/.claude/investigations/{ID}/EVIDENCE/NNN-slug.md
+Evidence file path: $INVESTIGATIONS_DIR/{ID}/EVIDENCE/NNN-slug.md
 Evidence file format (use exactly):
 
 # NNN: slug
@@ -362,12 +372,12 @@ Repository: {REPO_PATH}
 Your evidence range: 150–199
 
 Tasks:
-1. Read ~/.claude/investigations/{ID}/BRIEF.md for full context.
+1. Read $INVESTIGATIONS_DIR/{ID}/BRIEF.md for full context.
 2. Find config files (*.yaml, *.yml, *.json, .env*) and log files (*.log, logs/) in the repo root, excluding node_modules/.
 3. For each relevant config value or log entry: note the exact value, file, and line.
 4. Write between 2 and 6 evidence files. Stop before file 200.
 
-Evidence file path: ~/.claude/investigations/{ID}/EVIDENCE/NNN-slug.md
+Evidence file path: $INVESTIGATIONS_DIR/{ID}/EVIDENCE/NNN-slug.md
 Evidence file format (use exactly):
 
 # NNN: slug
@@ -395,12 +405,12 @@ Investigation question: {QUESTION}
 Your evidence range: 001–099
 
 Tasks:
-1. Read ~/.claude/investigations/{ID}/BRIEF.md for full context.
+1. Read $INVESTIGATIONS_DIR/{ID}/BRIEF.md for full context.
 2. Identify 6–10 distinct aspects of the question: mechanisms, failure modes, trade-offs, known patterns, architectural principles.
 3. Write one evidence file per aspect.
 4. Write between 6 and 15 evidence files. Stop before file 100.
 
-Evidence file path: ~/.claude/investigations/{ID}/EVIDENCE/NNN-slug.md
+Evidence file path: $INVESTIGATIONS_DIR/{ID}/EVIDENCE/NNN-slug.md
 Evidence file format (use exactly):
 
 # NNN: slug
@@ -487,14 +497,14 @@ Investigation question: {QUESTION}
 Uncited evidence files: {LIST OF NNN-SLUG}
 
 Tasks:
-1. Read ~/.claude/investigations/{ID}/BRIEF.md
-2. Read ~/.claude/investigations/{ID}/FINDINGS.md
+1. Read $INVESTIGATIONS_DIR/{ID}/BRIEF.md
+2. Read $INVESTIGATIONS_DIR/{ID}/FINDINGS.md
 3. For each uncited file listed above: read it, then write one new evidence file (range 200–249) containing:
    - What the uncited evidence says
    - How it relates to the investigation question
    - A specific suggested addition or correction to FINDINGS.md
 
-Evidence file path: ~/.claude/investigations/{ID}/EVIDENCE/NNN-slug.md
+Evidence file path: $INVESTIGATIONS_DIR/{ID}/EVIDENCE/NNN-slug.md
 Evidence file format:
 
 # NNN: synthesis-of-{original-number}
@@ -640,9 +650,9 @@ Finalize the investigation: classify, tag, extract patterns, sanitize.
    - If no clear pattern, skip.
 
 4. **PHI sanitization**:
-   - Check if `~/.claude/scripts/sanitize.sh` exists and is executable
+   - Check if `<INSTALL_ROOT>/.claude/scripts/sanitize.sh` exists and is executable
    - If yes: run it on BRIEF.md, FINDINGS.md, STATUS.md, and all evidence files. Report what was sanitized.
-   - If no: print "Review files manually for PII/PHI before sharing. Install the research profile for automated sanitization: install.sh --profile research"
+   - If no: print "Review files manually for PII/PHI before sharing. Install the playbook for automated sanitization: install.sh --root <path>"
 
 5. Update STATUS.md:
    - Set phase to `"closed"`
@@ -656,7 +666,7 @@ Finalize the investigation: classify, tag, extract patterns, sanitize.
      Pattern extracted: <yes (name) | no>
      PHI sanitized: <yes | not installed | no config>
 
-     Findings: ~/.claude/investigations/<id>/FINDINGS.md
+     Findings: $INVESTIGATIONS_DIR/<id>/FINDINGS.md
    ```
 
 ---
