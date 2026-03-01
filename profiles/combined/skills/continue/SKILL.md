@@ -1,6 +1,7 @@
 ---
 name: continue
-description: Continue work from where the last session left off. Checks inbox, reads memory, and detects whether you're in a dev project or research context to show the right information.
+description: Continue work from where the last session left off. Use when user says "where was I", "pick up where I left off", or "what was I working on". Checks inbox, reads memory, and detects whether you're in a dev project or research context to show the right information.
+compatibility: claude-code
 disable-model-invocation: false
 allowed-tools: Read, Glob, Grep, Bash, mcp__agent-comm__read_messages, mcp__agent-comm__list_agents
 argument-hint: "[investigation-id]"

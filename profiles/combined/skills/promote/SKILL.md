@@ -1,6 +1,7 @@
 ---
 name: promote
-description: Promote a project-level lesson to global scope so it's available across all projects. Use when a lesson discovered in one project would benefit others.
+description: Promote a project-level lesson to global scope so it's available across all projects. Use when user says "make this global", "share this across projects", or "promote this lesson". Use when a lesson discovered in one project would benefit others.
+compatibility: claude-code
 disable-model-invocation: false
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 argument-hint: "[lesson description or 'list' to see candidates]"

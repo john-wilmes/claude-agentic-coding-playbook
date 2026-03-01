@@ -1,6 +1,7 @@
 ---
 name: create-project
-description: Scaffold a new project with git, .gitignore, CLAUDE.md, GitHub repo, and memory directory. Creates the project as a sibling to the .claude/ config directory.
+description: Scaffold a new project with git, .gitignore, CLAUDE.md, GitHub repo, and memory directory. Use when user says "start a new project", "create a repo", or "scaffold an app". Creates the project as a sibling to the .claude/ config directory.
+compatibility: claude-code
 disable-model-invocation: false
 allowed-tools: Bash, Write, Read, Glob, AskUserQuestion, mcp__coderabbitai__*
 argument-hint: "<project-name>"

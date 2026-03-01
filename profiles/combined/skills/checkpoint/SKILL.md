@@ -1,6 +1,7 @@
 ---
 name: checkpoint
-description: Save all work, update memory, commit, push, and prepare to end the session. Use at natural breakpoints or when context is getting large.
+description: Save all work, update memory, commit, push, and prepare to end the session. Use when user says "save my work", "wrap up", or "I'm done for now". Use at natural breakpoints or when context is getting large.
+compatibility: claude-code
 disable-model-invocation: false
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep
 argument-hint: "[next-steps summary]"
