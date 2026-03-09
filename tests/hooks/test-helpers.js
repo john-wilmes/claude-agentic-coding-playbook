@@ -8,19 +8,17 @@ const crypto = require("crypto");
 const { spawnSync } = require("child_process");
 
 /**
- * Create an isolated temp HOME with ~/.claude/agent-comm/ pre-created.
- * Returns { home, claudeDir, agentCommDir, cleanup }.
+ * Create an isolated temp HOME with ~/.claude/ pre-created.
+ * Returns { home, claudeDir, cleanup }.
  */
 function createTempHome() {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "hook-test-"));
   const claudeDir = path.join(home, ".claude");
-  const agentCommDir = path.join(claudeDir, "agent-comm");
-  fs.mkdirSync(agentCommDir, { recursive: true });
+  fs.mkdirSync(claudeDir, { recursive: true });
 
   return {
     home,
     claudeDir,
-    agentCommDir,
     cleanup() {
       try {
         fs.rmSync(home, { recursive: true, force: true });
@@ -117,21 +115,6 @@ function runHook(hookPath, stdinJson = {}, env = {}) {
 }
 
 /**
- * Read and parse the agent-comm state.json.
- * @param {string} agentCommDir - Path to ~/.claude/agent-comm/
- * @returns {object} Parsed state or default empty state
- */
-function readState(agentCommDir) {
-  try {
-    return JSON.parse(
-      fs.readFileSync(path.join(agentCommDir, "state.json"), "utf8")
-    );
-  } catch {
-    return { agents: {}, messages: [], tasks: [] };
-  }
-}
-
-/**
  * Create a fake project directory with optional marker files.
  * @param {object} opts - { git, packageJson, dockerfile, pyproject }
  * @returns {string} path to the project directory
@@ -225,7 +208,6 @@ module.exports = {
   createKnowledgeEntry,
   createMemoryFile,
   runHook,
-  readState,
   createProjectDir,
   createTempInvestigation,
 };

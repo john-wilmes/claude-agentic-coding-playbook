@@ -9,4 +9,5 @@ Thumbs.db
 
 # Node (if install scripts use npm)
 node_modules/
-docs/raw -terminal-session.txt
+docs/raw-terminal-session.txt
+.claude/settings.local.json

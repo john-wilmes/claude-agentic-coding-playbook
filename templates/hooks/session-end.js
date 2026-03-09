@@ -1,41 +1,20 @@
-// SessionEnd hook: writes session-ended message to agent-comm state, deregisters,
-// and auto-commits memory/config changes to the ~/.claude git repo.
+// SessionEnd hook: auto-commits memory changes to the ~/.claude git repo.
 // Runs automatically when a session closes -- all agents, all projects.
 
 const fs = require("fs");
 const path = require("path");
-const crypto = require("crypto");
 const os = require("os");
 const { execSync } = require("child_process");
 
-const STATE_DIR = path.join(os.homedir(), ".claude", "agent-comm");
-const STATE_FILE = path.join(STATE_DIR, "state.json");
-const LOG_FILE = path.join(STATE_DIR, "agent-comm.log");
-const MAX_MESSAGES = 200;
+const LOG_DIR = path.join(os.homedir(), ".claude");
+const LOG_FILE = path.join(LOG_DIR, "hooks.log");
 
 function log(msg) {
   try {
     const line = `[${new Date().toISOString()}] session-end: ${msg}\n`;
+    fs.mkdirSync(LOG_DIR, { recursive: true });
     fs.appendFileSync(LOG_FILE, line);
   } catch {}
-}
-
-function readState() {
-  try {
-    return JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
-  } catch {
-    return { agents: {}, messages: [], tasks: [] };
-  }
-}
-
-function writeState(state) {
-  fs.mkdirSync(STATE_DIR, { recursive: true });
-  if (state.messages.length > MAX_MESSAGES) {
-    state.messages = state.messages.slice(-MAX_MESSAGES);
-  }
-  const tmp = path.join(os.tmpdir(), `agent-comm-${crypto.randomUUID()}.json`);
-  fs.writeFileSync(tmp, JSON.stringify(state, null, 2));
-  fs.renameSync(tmp, STATE_FILE);
 }
 
 let input = "";
@@ -49,23 +28,7 @@ process.stdin.on("end", () => {
     const cwd = hookInput.cwd || process.cwd();
     const agentName = path.basename(cwd) || "unknown";
 
-    const state = readState();
-    const now = new Date().toISOString();
-
-    // Post a session-ended message so other agents know
-    state.messages.push({
-      id: crypto.randomUUID(),
-      from: agentName,
-      to: null,
-      content: `Session ended (${sessionId.slice(0, 8)})`,
-      timestamp: now,
-    });
-
-    // Remove agent registration
-    delete state.agents[agentName];
-
-    writeState(state);
-    log(`deregistered ${agentName} (session ${sessionId.slice(0, 8)})`);
+    log(`session ${sessionId.slice(0, 8)} ended for ${agentName}`);
 
     // Auto-commit THIS session's memory file only.
     // Using "git add -A" would stage other agents' memory files when multiple

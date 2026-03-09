@@ -1,3 +1,5 @@
+[![Test Install Script](https://github.com/john-wilmes/claude-agentic-coding-playbook/actions/workflows/test-install.yml/badge.svg)](https://github.com/john-wilmes/claude-agentic-coding-playbook/actions/workflows/test-install.yml)
+
 # Agentic Coding Playbook
 
 Evidence-based practices for LLM-assisted software development. Optimized for [Claude Code](https://claude.com/claude-code) with cross-tool principles that apply to Cursor, Copilot, and other AI coding tools.
@@ -24,17 +26,23 @@ Full details with citations: [docs/best-practices.md](docs/best-practices.md)
 ## Quick Install
 
 ```bash
-git clone https://github.com/john-wilmes/agentic-coding-playbook.git
+git clone https://github.com/john-wilmes/claude-agentic-coding-playbook.git
 cd agentic-coding-playbook
 chmod +x install.sh
 ./install.sh
 ```
+
+### Prerequisites
+
+- **Node.js 18+** (for hooks and test scripts)
+- **git** (for version control and install script)
 
 ### Install Options
 
 | Flag | Description |
 |------|-------------|
 | `--root <path>` | Install root directory (default: `~/Documents`). Config goes to `<root>/.claude/`, projects are siblings |
+| `--knowledge-repo <url>` | Git URL for a shared knowledge repository (cloned to `<root>/.claude/knowledge/`) |
 | `--wizard` | Interactive merge with your existing configuration |
 | `--force` | Overwrite existing files without prompting |
 | `--dry-run` | Preview what would be installed |
@@ -77,15 +85,13 @@ The installer **will not overwrite** existing skills or configuration without pr
 - **`/playbook`** -- Analyze your CLAUDE.md configuration and suggest improvements. Modes: `global`, `project`, `check`.
 - **`/learn`** -- Capture a non-obvious lesson as a structured knowledge entry for future sessions.
 - **`/promote`** -- Promote a project-level lesson to global scope.
-- **`/export`** -- Export CLAUDE.md rules to `.cursorrules`, `AGENTS.md`, and `.windsurfrules` for cross-tool portability.
-
 **Research:**
 - **`/investigate`** -- Full investigation lifecycle with multi-agent evidence collection, synthesis, tagging, and PHI sanitization. Subcommands: `new`, `run`, `collect`, `synthesize`, `close`, `status`, `list`, `search`.
 - **`/continue`** -- Lists open investigations and resumes work. Same skill as above — auto-detects context.
 
 ### Hooks
 
-- **Session start** -- Auto-registers with agent-comm, injects memory and knowledge, warns when MEMORY.md or CLAUDE.md exceed size thresholds.
+- **Session start** -- Injects memory, knowledge entries, and git context. Warns when MEMORY.md or CLAUDE.md exceed size thresholds.
 - **Model router** -- Auto-selects Haiku/Sonnet/Opus for Task tool calls based on prompt signals.
 - **Prompt injection guard** -- Blocks high-confidence injection patterns in Bash commands (zero false positives by design).
 - **Post-tool verify** -- Auto-runs project tests after Edit/Write on code files with debouncing.
@@ -128,6 +134,23 @@ The wizard will:
 - **[Project CLAUDE.md Template](templates/project-CLAUDE.md)** -- starting point for per-project instructions
 - **[Dogfooding Guide](docs/dogfooding.md)** -- how to design and run a sustained dogfood campaign against real codebases, with a 100-task worked example
 - **[Dogfood Playbook](docs/dogfood-playbook.md)** -- manual interactive testing checklist for verifying the full user experience
+
+### Case Studies
+
+- **[Agent Failure Analysis](docs/case-study-agent-failure.md)** -- detailed post-mortem of a production agent failure with root cause analysis
+- **[Agent Failure Transcript](docs/transcript-2026-02-24-agent-failure.md)** -- raw session transcript from the failure event
+
+### Architecture
+
+The playbook ships with three profile variants in `profiles/`:
+
+| Profile | CLAUDE.md Focus | Skills | Use Case |
+|---------|----------------|--------|----------|
+| `combined` | Dual workflow (dev + research) | checkpoint, continue, create-project, investigate, learn, playbook, promote | Default install — covers both development and investigation workflows |
+| `dev` | Development workflow only | checkpoint, continue, create-project, learn, playbook, promote | Lighter config for pure development work |
+| `research` | Investigation workflow only | continue, investigate | Structured investigations with evidence discipline and PII/PHI sanitization |
+
+The install script uses the `combined` profile by default. Each profile includes its own `CLAUDE.md`, `skills/`, and (for research) evaluation templates and sanitization scripts.
 
 ## Benchmarks
 
