@@ -19,7 +19,6 @@ const {
   createKnowledgeEntry,
   createMemoryFile,
   runHook,
-  readState,
   createProjectDir,
 } = require("./test-helpers");
 
@@ -103,22 +102,7 @@ test("1. Minimal valid input → valid JSON with SessionStart event", (env) => {
   );
 });
 
-test("2. Registers agent in state.json", (env) => {
-  const projDir = createProjectDir();
-  const projName = path.basename(projDir);
-
-  runHook(SESSION_START, {
-    session_id: "test-session-reg",
-    cwd: projDir,
-  }, { HOME: env.home, USERPROFILE: env.home });
-
-  const state = readState(env.agentCommDir);
-  assert.ok(state.agents[projName], `Agent '${projName}' should be registered`);
-  assert.strictEqual(state.agents[projName].role, "auto");
-  assert.ok(state.agents[projName].workingOn.includes("test-ses"));
-});
-
-test("3. Injects memory when MEMORY.md exists", (env) => {
+test("2. Injects memory when MEMORY.md exists", (env) => {
   const projDir = createProjectDir({ git: true });
   const memContent = `# Project Memory
 
@@ -247,49 +231,7 @@ test("8. Minimal valid input → exits 0", (env) => {
   assert.strictEqual(result.status, 0, `Exit code should be 0, got ${result.status}`);
 });
 
-test("9. Deregisters agent from state", (env) => {
-  const projDir = createProjectDir();
-  const projName = path.basename(projDir);
-
-  // First, register via session-start
-  runHook(SESSION_START, {
-    session_id: "test-dereg",
-    cwd: projDir,
-  }, { HOME: env.home, USERPROFILE: env.home });
-
-  // Confirm registered
-  let state = readState(env.agentCommDir);
-  assert.ok(state.agents[projName], "Agent should be registered before session-end");
-
-  // Now run session-end
-  runHook(SESSION_END, {
-    session_id: "test-dereg",
-    cwd: projDir,
-  }, { HOME: env.home, USERPROFILE: env.home });
-
-  state = readState(env.agentCommDir);
-  assert.ok(!state.agents[projName], "Agent should be deregistered after session-end");
-});
-
-test("10. Posts 'Session ended' broadcast message", (env) => {
-  const projDir = createProjectDir();
-  const projName = path.basename(projDir);
-
-  runHook(SESSION_END, {
-    session_id: "abcd1234-rest",
-    cwd: projDir,
-  }, { HOME: env.home, USERPROFILE: env.home });
-
-  const state = readState(env.agentCommDir);
-  const endMsg = state.messages.find(
-    (m) => m.from === projName && m.content.includes("Session ended")
-  );
-  assert.ok(endMsg, "Should post a 'Session ended' message");
-  assert.ok(endMsg.content.includes("abcd1234"), "Message should include session ID prefix");
-  assert.strictEqual(endMsg.to, null, "Message should be a broadcast (to: null)");
-});
-
-test("11. Graceful when ~/.claude is not a git repo (exits 0)", (env) => {
+test("9. Graceful when ~/.claude is not a git repo (exits 0)", (env) => {
   const projDir = createProjectDir();
 
   // Ensure ~/.claude exists but is NOT a git repo
@@ -302,11 +244,10 @@ test("11. Graceful when ~/.claude is not a git repo (exits 0)", (env) => {
 
   assert.strictEqual(result.status, 0, "Should exit 0 even without git repo at ~/.claude");
 
-  // Check the log file for the expected error
-  const logFile = path.join(env.agentCommDir, "agent-comm.log");
+  // Check the log file for the expected entries
+  const logFile = path.join(env.home, ".claude", "hooks.log");
   if (fs.existsSync(logFile)) {
     const log = fs.readFileSync(logFile, "utf8");
-    // It should log an auto-commit error, but not crash
     assert.ok(
       log.includes("session-end:"),
       "Should have log entries from session-end"

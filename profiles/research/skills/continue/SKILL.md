@@ -2,7 +2,7 @@
 name: continue
 description: Continue work by checking inbox, listing open investigations, and project memory state. Optionally resume or reopen a specific investigation.
 disable-model-invocation: false
-allowed-tools: Read, Glob, Grep, Bash, mcp__agent-comm__read_messages, mcp__agent-comm__list_agents
+allowed-tools: Read, Glob, Grep, Bash
 argument-hint: "[investigation-id]"
 ---
 
@@ -12,28 +12,11 @@ Pick up where the last session left off. Check inbox first, then list investigat
 
 ## Steps
 
-### 1. Check inbox (agent-comm)
+### 1. Check for arguments
 
-Before anything else, check for messages from other agents:
+If `$ARGUMENTS` contains an investigation ID, jump to step 4 (resume specific investigation).
 
-1. Call `read_messages` with `agent` set to the current project name (derived from the working directory basename) and `unread_only: true`.
-2. If there are unread messages, present them prominently:
-
-```text
-Inbox (N unread messages):
-  [time] sender: message content
-  ...
-```
-
-3. Also call `list_agents` to see who else is active and if anyone is waiting.
-
-If agent-comm is not available (MCP server not running), skip silently and continue to step 2.
-
-### 2. Check for arguments
-
-If `$ARGUMENTS` contains an investigation ID, jump to step 5 (resume specific investigation).
-
-### 3. List open investigations
+### 2. List open investigations
 
 Glob for `~/.claude/investigations/*/STATUS.md` (exclude `_patterns/`).
 
@@ -49,7 +32,7 @@ Also show a count of closed investigations if any exist.
 
 If no open investigations exist, say so and suggest `/investigate <id> new` to start one.
 
-### 4. Check project memory
+### 3. Check project memory
 
 Check for a project-level memory file:
 1. Look for `MEMORY.md` in the project's memory directory (under `~/.claude/projects/`)
@@ -75,7 +58,7 @@ Scan for additional context:
 - Run `git status` to check for uncommitted changes
 - Run `git log --oneline -3` to see recent commits
 
-### 5. Resume specific investigation
+### 4. Resume specific investigation
 
 If an investigation ID was provided (from argument or user choice):
 
@@ -103,6 +86,6 @@ Handoff notes:
    - `synthesizing` -> "Review and refine findings, then close"
    - `closed` (reopened) -> "Continue collecting new evidence"
 
-### 6. Propose action
+### 5. Propose action
 
 Based on available context (open investigations + project memory), propose what to do next. Ask the user to confirm or redirect.

@@ -74,9 +74,8 @@ Use `git stash` explicitly before rebase, then `git stash pop` after resolving c
 | # | Action | Command | Pass Criterion |
 |---|--------|---------|----------------|
 | 4.1 | Launch Claude Code | `cd $TEST_HOME/Documents && claude` | Session starts |
-| 4.2 | Check hook fired | Look for "Registered as" in session context | Registration message visible |
-| 4.3 | Check agent-comm log | `cat ~/.claude/agent-comm/agent-comm.log` | Shows "registered" entry |
-| 4.4 | Check state.json | `cat ~/.claude/agent-comm/state.json \| python3 -m json.tool` | Agent listed in `agents` |
+| 4.2 | Check hook fired | Look for "Recent commits" or knowledge entries in session context | Session context injected |
+| 4.3 | Check hook log | `cat ~/.claude/hooks.log` | Shows "session-start" entry |
 
 ## 5. Knowledge Injection
 
@@ -145,9 +144,8 @@ Use `git stash` explicitly before rebase, then `git stash pop` after resolving c
 | # | Action | Command | Pass Criterion |
 |---|--------|---------|----------------|
 | 13.1 | Exit Claude Code | Type `/exit` or Ctrl+C | Session ends cleanly |
-| 13.2 | Check deregistration | `cat ~/.claude/agent-comm/state.json \| python3 -m json.tool` | Agent removed from `agents` |
-| 13.3 | Check broadcast | Look for "Session ended" in messages array | Message present with session ID |
-| 13.4 | Check auto-commit | `cd ~/.claude && git log --oneline -1` | Shows auto-commit with session ID (session-end hook auto-inits git repo if needed) |
+| 13.2 | Check hook log | `cat ~/.claude/hooks.log` | Shows "session-end" entry |
+| 13.3 | Check auto-commit | `cd ~/.claude && git log --oneline -1` | Shows auto-commit with session ID (session-end hook auto-inits git repo if needed) |
 
 ## 14. Summary Checklist
 
@@ -171,6 +169,6 @@ Use `git stash` explicitly before rebase, then `git stash pop` after resolving c
 
 ## Known Expected Failures
 
-1. **Session hooks reference `~/.claude/`**: The session-start.js and session-end.js hooks have hardcoded `~/.claude/` paths for knowledge repo and agent-comm. These work when using the default install root but may need adjustment for custom roots.
+1. **Session hooks reference `~/.claude/`**: The session-start.js and session-end.js hooks have hardcoded `~/.claude/` paths for knowledge repo and hook logs. These work when using the default install root but may need adjustment for custom roots.
 
 2. **`project-CLAUDE.md` template needs customization**: The template includes placeholder commands. Users need to fill in the actual type-check, lint, and test commands for their language/framework.

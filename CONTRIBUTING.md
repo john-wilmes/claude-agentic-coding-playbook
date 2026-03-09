@@ -97,8 +97,22 @@ This project follows the [Contributor Covenant v2.1](https://www.contributor-cov
 The install script supports a `--dry-run` flag that prints actions without modifying your system. Always test with dry-run before reporting an installation bug.
 
 ```bash
-bash install.sh --profile dev --dry-run
+bash install.sh --dry-run
 ```
+
+### Running Tests
+
+Unit tests for hooks and investigation scoring can be run directly with Node:
+
+```bash
+node tests/hooks/model-router.test.js
+node tests/hooks/session-hooks.test.js
+node tests/hooks/prompt-injection-guard.test.js
+node tests/hooks/post-tool-verify.test.js
+node tests/investigate/score.test.js
+```
+
+**Note:** The E2E dogfood tests (`scripts/dogfood-e2e.sh`, `scripts/ec2-dogfood.sh`) require the `claude` CLI to be installed and must be run outside of Claude Code.
 
 CI runs automatically on every push to `master` and validates that the install script completes without error in a clean environment.
 

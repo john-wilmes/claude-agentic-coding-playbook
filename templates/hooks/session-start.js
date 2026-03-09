@@ -1,38 +1,21 @@
-// SessionStart hook: auto-registers with agent-comm and injects recent messages into context.
-// Also injects Lessons Learned from memory and relevant knowledge entries.
+// SessionStart hook: injects memory, knowledge entries, and git context into session.
+// Also checks MEMORY.md and CLAUDE.md size thresholds and warns when exceeded.
 // No agent decision needed -- this runs automatically on every session start.
 
 const fs = require("fs");
 const path = require("path");
-const crypto = require("crypto");
 const os = require("os");
 const { execSync } = require("child_process");
 
-const STATE_DIR = path.join(os.homedir(), ".claude", "agent-comm");
-const STATE_FILE = path.join(STATE_DIR, "state.json");
-const LOG_FILE = path.join(STATE_DIR, "agent-comm.log");
+const LOG_DIR = path.join(os.homedir(), ".claude");
+const LOG_FILE = path.join(LOG_DIR, "hooks.log");
 
 function log(msg) {
   try {
     const line = `[${new Date().toISOString()}] session-start: ${msg}\n`;
-    fs.mkdirSync(STATE_DIR, { recursive: true });
+    fs.mkdirSync(LOG_DIR, { recursive: true });
     fs.appendFileSync(LOG_FILE, line);
   } catch {}
-}
-
-function readState() {
-  try {
-    return JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
-  } catch {
-    return { agents: {}, messages: [], tasks: [] };
-  }
-}
-
-function writeState(state) {
-  fs.mkdirSync(STATE_DIR, { recursive: true });
-  const tmp = path.join(os.tmpdir(), `agent-comm-${crypto.randomUUID()}.json`);
-  fs.writeFileSync(tmp, JSON.stringify(state, null, 2));
-  fs.renameSync(tmp, STATE_FILE);
 }
 
 // Detect project context from working directory
@@ -160,39 +143,7 @@ process.stdin.on("end", () => {
     const sessionId = hookInput.session_id || "";
     const cwd = hookInput.cwd || process.cwd();
 
-    // Derive agent name from working directory
-    const agentName = path.basename(cwd) || "unknown";
-
-    const state = readState();
-    const now = new Date().toISOString();
-
-    // Auto-register
-    const existing = state.agents[agentName];
-    state.agents[agentName] = {
-      name: agentName,
-      role: existing?.role || "auto",
-      workingOn: `session ${sessionId.slice(0, 8)}`,
-      workingDirectory: cwd,
-      lastSeen: now,
-      registeredAt: existing?.registeredAt || now,
-    };
-
-    // Get recent messages (last 2 hours, max 15)
-    const cutoff = Date.now() - 2 * 60 * 60 * 1000;
-    const recent = state.messages
-      .filter((m) => new Date(m.timestamp).getTime() > cutoff)
-      .slice(-15);
-
-    // Get active agents (seen in last 30 minutes, excluding self)
-    const activeCutoff = Date.now() - 30 * 60 * 1000;
-    const activeAgents = Object.values(state.agents).filter(
-      (a) =>
-        a.name !== agentName &&
-        new Date(a.lastSeen).getTime() > activeCutoff
-    );
-
-    writeState(state);
-    log(`registered ${agentName} (session ${sessionId.slice(0, 8)})`);
+    log(`session ${sessionId.slice(0, 8)} started in ${cwd}`);
 
     // Pull latest knowledge entries if knowledge repo exists
     try {
@@ -251,23 +202,21 @@ process.stdin.on("end", () => {
       }
     } catch {}
 
+    // Inject recent git commits for context
+    let recentCommits = "";
+    try {
+      recentCommits = execSync("git log --oneline -5 2>/dev/null", {
+        cwd,
+        timeout: 3000,
+        encoding: "utf8",
+      }).trim();
+    } catch {}
+
     // Build context string
-    const parts = [`Registered as "${agentName}" with agent-comm.`];
+    const parts = [];
 
-    if (activeAgents.length > 0) {
-      const agentLines = activeAgents.map(
-        (a) => `  ${a.name} (${a.role}) -- ${a.workingOn}`
-      );
-      parts.push(`Active agents:\n${agentLines.join("\n")}`);
-    }
-
-    if (recent.length > 0) {
-      const msgLines = recent.map((m) => {
-        const target = m.to ? ` -> ${m.to}` : "";
-        const time = m.timestamp.slice(11, 19);
-        return `  [${time}] ${m.from}${target}: ${m.content}`;
-      });
-      parts.push(`Recent cross-session messages:\n${msgLines.join("\n")}`);
+    if (recentCommits) {
+      parts.push(`Recent commits:\n${recentCommits}`);
     }
 
     if (currentWork) {
