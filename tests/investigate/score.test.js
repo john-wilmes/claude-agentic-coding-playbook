@@ -292,6 +292,135 @@ test("18. VNSE-4821 exact match scores 4", () => {
   } finally { cleanup(); }
 });
 
+// ─── Tests: new ground truth files ───────────────────────────────────────────
+
+console.log("\nscorer — new ground truth:");
+
+test("23. NOVU-3001 exact match (collectDigest + transactionId dedup) scores 4", () => {
+  const gtPath = path.join(GT_DIR, "NOVU-3001.json");
+  if (!fs.existsSync(gtPath)) { passed++; return; }
+  const { dir, cleanup } = createTempInvestigation({
+    findings: `# Findings: NOVU-3001\n\n## Answer\n\nThe root cause is in digest.step.ts at line 395, in the collectDigest function (see 001). It uses Redis LRANGE to retrieve all entries from the digest list but does NOT deduplicate by transactionId (see 001). When a trigger is retried by the SDK, the same entry is appended again via rpush, and collectDigest returns both copies. Using a Redis sorted set keyed by transactionId would prevent duplicate entries (see 001).\n\n## Evidence Summary\n\n| # | Slug | Observation |\n|---|------|-------------|\n| 001 | no-dedup | collectDigest lacks transactionId dedup |\n\n## Implications\n\nAdd Set-based dedup on transactionId in collectDigest.\n`,
+  });
+  try {
+    const { metrics } = runScorer(dir, ["--ground-truth", gtPath]);
+    assert.strictEqual(metrics.ground_truth_score.score, 4, `Expected 4, got ${metrics.ground_truth_score.score}`);
+  } finally { cleanup(); }
+});
+
+test("24. NOVU-3001 anti-pattern (blames BullMQ dedup) caps at 2", () => {
+  const gtPath = path.join(GT_DIR, "NOVU-3001.json");
+  if (!fs.existsSync(gtPath)) { passed++; return; }
+  const { dir, cleanup } = createTempInvestigation({
+    findings: `# Findings: NOVU-3001\n\n## Answer\n\nThe digest step collects entries without dedup (see 001). However, the primary issue\nis that BullMQ's job dedup should prevent the duplicate job from running, but the\nbullmq dedup configuration is incorrect (see 001).\n\n## Evidence Summary\n\n| # | Slug | Observation |\n|---|------|-------------|\n| 001 | bullmq | BullMQ job dedup not working |\n\n## Implications\n\nFix BullMQ dedup configuration.\n`,
+  });
+  try {
+    const { metrics } = runScorer(dir, ["--ground-truth", gtPath]);
+    assert.ok(metrics.ground_truth_score.score <= 2, `Expected <=2, got ${metrics.ground_truth_score.score}`);
+    assert.ok(metrics.ground_truth_score.anti_pattern_hit);
+  } finally { cleanup(); }
+});
+
+test("25. CALC-4502 exact match (pagination >= vs >) scores 4", () => {
+  const gtPath = path.join(GT_DIR, "CALC-4502.json");
+  if (!fs.existsSync(gtPath)) { passed++; return; }
+  const { dir, cleanup } = createTempInvestigation({
+    findings: `# Findings: CALC-4502\n\n## Answer\n\nThe pagination module at pagination.ts line 87 uses a >= comparison on the sort key\nin the cursor-based fallback path (see 001). This includes the boundary record on both\npages. The fix is to use > instead of >= (see 001).\n\n## Evidence Summary\n\n| # | Slug | Observation |\n|---|------|-------------|\n| 001 | cursor | cursor fallback uses >= instead of > |\n\n## Implications\n\nChange >= to > in the cursor comparison at pagination.ts:87.\n`,
+  });
+  try {
+    const { metrics } = runScorer(dir, ["--ground-truth", gtPath]);
+    assert.strictEqual(metrics.ground_truth_score.score, 4, `Expected 4, got ${metrics.ground_truth_score.score}`);
+  } finally { cleanup(); }
+});
+
+test("26. CALC-4502 anti-pattern (blames caching) caps at 2", () => {
+  const gtPath = path.join(GT_DIR, "CALC-4502.json");
+  if (!fs.existsSync(gtPath)) { passed++; return; }
+  const { dir, cleanup } = createTempInvestigation({
+    findings: `# Findings: CALC-4502\n\n## Answer\n\nThe pagination uses >= in the cursor path (see 001). But the real issue is frontend\nclient caching returning stale page data (see 001).\n\n## Evidence Summary\n\n| # | Slug | Observation |\n|---|------|-------------|\n| 001 | cache | client caching causes duplicates |\n\n## Implications\n\nClear client cache.\n`,
+  });
+  try {
+    const { metrics } = runScorer(dir, ["--ground-truth", gtPath]);
+    assert.ok(metrics.ground_truth_score.score <= 2, `Expected <=2, got ${metrics.ground_truth_score.score}`);
+    assert.ok(metrics.ground_truth_score.anti_pattern_hit);
+  } finally { cleanup(); }
+});
+
+test("27. CONFIG-5104 exact match (DATABASE_URL vs DATABASE_URI) scores 4", () => {
+  const gtPath = path.join(GT_DIR, "CONFIG-5104.json");
+  if (!fs.existsSync(gtPath)) { passed++; return; }
+  const { dir, cleanup } = createTempInvestigation({
+    findings: `# Findings: CONFIG-5104\n\n## Answer\n\nThe database config at database.ts line 12 reads process.env.DATABASE_URL, but the\nstaging deployment template sets DATABASE_URI (see 001). The undefined value triggers\na silent fallback to localhost:5432, masking the mismatch (see 001).\n\n## Evidence Summary\n\n| # | Slug | Observation |\n|---|------|-------------|\n| 001 | env-mismatch | DATABASE_URL vs DATABASE_URI name mismatch |\n\n## Implications\n\nAlign env var name: use DATABASE_URL everywhere.\n`,
+  });
+  try {
+    const { metrics } = runScorer(dir, ["--ground-truth", gtPath]);
+    assert.strictEqual(metrics.ground_truth_score.score, 4, `Expected 4, got ${metrics.ground_truth_score.score}`);
+  } finally { cleanup(); }
+});
+
+test("28. CONFIG-5104 anti-pattern (blames firewall) caps at 2", () => {
+  const gtPath = path.join(GT_DIR, "CONFIG-5104.json");
+  if (!fs.existsSync(gtPath)) { passed++; return; }
+  const { dir, cleanup } = createTempInvestigation({
+    findings: `# Findings: CONFIG-5104\n\n## Answer\n\nThe URL vs URI mismatch exists (see 001). But the primary cause is a firewall rule\nblocking the staging database port (see 001).\n\n## Evidence Summary\n\n| # | Slug | Observation |\n|---|------|-------------|\n| 001 | fw | network firewall blocks staging DB |\n\n## Implications\n\nUpdate firewall rules.\n`,
+  });
+  try {
+    const { metrics } = runScorer(dir, ["--ground-truth", gtPath]);
+    assert.ok(metrics.ground_truth_score.score <= 2, `Expected <=2, got ${metrics.ground_truth_score.score}`);
+    assert.ok(metrics.ground_truth_score.anti_pattern_hit);
+  } finally { cleanup(); }
+});
+
+test("29. AUTH-6038 exact match (userId=0 falsy coercion) scores 4", () => {
+  const gtPath = path.join(GT_DIR, "AUTH-6038.json");
+  if (!fs.existsSync(gtPath)) { passed++; return; }
+  const { dir, cleanup } = createTempInvestigation({
+    findings: `# Findings: AUTH-6038\n\n## Answer\n\nThe auth middleware at auth.ts line 28 checks \`if (!userId)\` (see 001). For the first\nuser with userId=0, JavaScript's falsy coercion makes \`!0\` evaluate to true, rejecting\na valid user (see 001). The fix is to use \`userId === null || userId === undefined\`.\n\n## Evidence Summary\n\n| # | Slug | Observation |\n|---|------|-------------|\n| 001 | falsy | !userId treats 0 as false |\n\n## Implications\n\nReplace falsy check with explicit null/undefined check.\n`,
+  });
+  try {
+    const { metrics } = runScorer(dir, ["--ground-truth", gtPath]);
+    assert.strictEqual(metrics.ground_truth_score.score, 4, `Expected 4, got ${metrics.ground_truth_score.score}`);
+  } finally { cleanup(); }
+});
+
+test("30. AUTH-6038 anti-pattern (blames JWT generation) caps at 2", () => {
+  const gtPath = path.join(GT_DIR, "AUTH-6038.json");
+  if (!fs.existsSync(gtPath)) { passed++; return; }
+  const { dir, cleanup } = createTempInvestigation({
+    findings: `# Findings: AUTH-6038\n\n## Answer\n\nThe auth middleware uses falsy check on userId (see 001). However, the root cause is\nthat the JWT token generation signs the token incorrectly for userId=0 (see 001).\n\n## Evidence Summary\n\n| # | Slug | Observation |\n|---|------|-------------|\n| 001 | jwt | JWT generation fails for userId 0 |\n\n## Implications\n\nFix JWT generation.\n`,
+  });
+  try {
+    const { metrics } = runScorer(dir, ["--ground-truth", gtPath]);
+    assert.ok(metrics.ground_truth_score.score <= 2, `Expected <=2, got ${metrics.ground_truth_score.score}`);
+    assert.ok(metrics.ground_truth_score.anti_pattern_hit);
+  } finally { cleanup(); }
+});
+
+test("31. API-7291 exact match (req.body vs req.user ownerId) scores 4", () => {
+  const gtPath = path.join(GT_DIR, "API-7291.json");
+  if (!fs.existsSync(gtPath)) { passed++; return; }
+  const { dir, cleanup } = createTempInvestigation({
+    findings: `# Findings: API-7291\n\n## Answer\n\nThe resource controller at resource.controller.ts line 45 reads ownerId from req.body\ninstead of req.user.id (see 001). This allows any authenticated user to spoof ownership\nby including an ownerId field in the PUT payload (see 001).\n\n## Evidence Summary\n\n| # | Slug | Observation |\n|---|------|-------------|\n| 001 | authz | ownerId from req.body not req.user |\n\n## Implications\n\nSource ownerId from req.user.id, not req.body.\n`,
+  });
+  try {
+    const { metrics } = runScorer(dir, ["--ground-truth", gtPath]);
+    assert.strictEqual(metrics.ground_truth_score.score, 4, `Expected 4, got ${metrics.ground_truth_score.score}`);
+  } finally { cleanup(); }
+});
+
+test("32. API-7291 anti-pattern (blames CORS) caps at 2", () => {
+  const gtPath = path.join(GT_DIR, "API-7291.json");
+  if (!fs.existsSync(gtPath)) { passed++; return; }
+  const { dir, cleanup } = createTempInvestigation({
+    findings: `# Findings: API-7291\n\n## Answer\n\nThe controller reads ownerId from req.body (see 001). But the real problem is a CORS misconfiguration that allows cross-origin requests to the update endpoint (see 001).\n\n## Evidence Summary\n\n| # | Slug | Observation |\n|---|------|-------------|\n| 001 | cors | CORS allows cross-origin writes |\n\n## Implications\n\nFix CORS configuration.\n`,
+  });
+  try {
+    const { metrics } = runScorer(dir, ["--ground-truth", gtPath]);
+    assert.ok(metrics.ground_truth_score.score <= 2, `Expected <=2, got ${metrics.ground_truth_score.score}`);
+    assert.ok(metrics.ground_truth_score.anti_pattern_hit);
+  } finally { cleanup(); }
+});
+
 // ─── Tests: scorer robustness ─────────────────────────────────────────────────
 
 console.log("\nscorer — robustness:");
