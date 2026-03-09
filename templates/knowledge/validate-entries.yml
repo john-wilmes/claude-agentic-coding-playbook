@@ -68,7 +68,7 @@ jobs:
 
             # Check for generic secret patterns
             if grep -qiE '(password|secret|token|api_key|apikey)\s*[=:]\s*["'"'"']?[A-Za-z0-9+/]{8,}' "$entry"; then
-              echo "WARNING: $entry may contain credentials"
+              echo "BLOCKED: $entry may contain credentials"
               errors=$((errors + 1))
             fi
 

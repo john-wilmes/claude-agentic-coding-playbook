@@ -35,7 +35,7 @@ Do not duplicate information already in memory. Read the current memory file fir
 Check the MEMORY.md line count for the current project. If over 120 lines, suggest splitting:
 
 ```text
-MEMORY.md is <N>/150 lines. Suggest splitting:
+MEMORY.md is <N>/120 lines. Suggest splitting:
   - Move Lessons Learned → lessons-learned.md
   - Move stable reference data → data-facts.md
   - Keep only Current Work + Key Pointers in MEMORY.md

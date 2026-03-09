@@ -170,7 +170,7 @@ Read BRIEF.md. Extract:
 
 If `## Repo` is absent or contains `"none"` or is blank: set `HAS_REPO = false`. Otherwise `HAS_REPO = true`.
 
-Count existing evidence files in EVIDENCE/ using Glob(`EVIDENCE/??-*.md`). Call this `EXISTING_COUNT`.
+Count existing evidence files in EVIDENCE/ using Glob(`EVIDENCE/???-*.md`). Call this `EXISTING_COUNT`.
 
 ### Step 3: Detect repo capabilities
 

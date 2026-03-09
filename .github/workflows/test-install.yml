@@ -70,12 +70,8 @@ jobs:
           fi
 
   test-install:
-    strategy:
-      fail-fast: false
-      matrix:
-        profile: [dev, research]
     runs-on: ubuntu-latest
-    name: ubuntu / ${{ matrix.profile }}
+    name: ubuntu / combined
 
     steps:
       - uses: actions/checkout@v4
@@ -84,7 +80,7 @@ jobs:
 
       - name: "Dry-run install"
         run: |
-          output=$(bash install.sh --profile ${{ matrix.profile }} --dry-run 2>&1)
+          output=$(bash install.sh --dry-run 2>&1)
           echo "$output"
           echo "$output" | grep -q '\[DRY RUN\] INSTALL'
 
@@ -99,7 +95,7 @@ jobs:
       # ── Phase 2: Real install ─────────────────────────────────────
 
       - name: "Install"
-        run: bash install.sh --profile ${{ matrix.profile }} --force
+        run: bash install.sh --force
 
       # ── Phase 2b: Verify installed files ──────────────────────────
 
@@ -124,13 +120,10 @@ jobs:
       - name: "Verify CLAUDE.md content"
         run: |
           file="$HOME/.claude/CLAUDE.md"
-          if [ "${{ matrix.profile }}" = "dev" ]; then
-            grep -q "Explore, Plan, Code, Verify, Commit" "$file"
-            echo "OK: dev workflow string found"
-          else
-            grep -q "Question, Collect, Synthesize, Close" "$file"
-            echo "OK: research workflow string found"
-          fi
+          grep -q "Explore, Plan, Code, Verify, Commit" "$file"
+          echo "OK: dev workflow string found"
+          grep -q "Question, Collect, Synthesize, Close" "$file"
+          echo "OK: research workflow string found"
 
       - name: "Verify pre-commit hook is executable"
         run: |
@@ -142,8 +135,7 @@ jobs:
           fi
           echo "OK: pre-commit hook is executable"
 
-      - name: "Verify dev profile skills"
-        if: matrix.profile == 'dev'
+      - name: "Verify all skills installed"
         run: |
           failed=0
           check() {
@@ -155,6 +147,7 @@ jobs:
             fi
           }
 
+          # Dev skills
           check "$HOME/.claude/skills/checkpoint/SKILL.md"
           check "$HOME/.claude/skills/continue/SKILL.md"
           check "$HOME/.claude/skills/playbook/SKILL.md"
@@ -162,23 +155,8 @@ jobs:
           check "$HOME/.claude/skills/learn/SKILL.md"
           check "$HOME/.claude/skills/promote/SKILL.md"
 
-          exit $failed
-
-      - name: "Verify research profile skills and extras"
-        if: matrix.profile == 'research'
-        run: |
-          failed=0
-          check() {
-            if [ ! -e "$1" ]; then
-              echo "MISSING: $1"
-              failed=1
-            else
-              echo "OK: $1"
-            fi
-          }
-
+          # Research skills
           check "$HOME/.claude/skills/investigate/SKILL.md"
-          check "$HOME/.claude/skills/continue/SKILL.md"
           check "$HOME/.claude/investigations/_patterns/"
           check "$HOME/.claude/templates/investigation/brief.md"
 
@@ -257,7 +235,6 @@ jobs:
       # ── Phase 2c: Research profile template verification ─────────
 
       - name: "Verify research profile templates"
-        if: matrix.profile == 'research'
         run: |
           failed=0
           check() {
@@ -279,7 +256,6 @@ jobs:
           exit $failed
 
       - name: "Verify sanitize.sh is executable"
-        if: matrix.profile == 'research'
         run: |
           script="$HOME/.claude/scripts/sanitize.sh"
           if [ ! -x "$script" ]; then
@@ -292,7 +268,7 @@ jobs:
       # ── Phase 3: Idempotency ─────────────────────────────────────
 
       - name: "Re-install (idempotency check)"
-        run: bash install.sh --profile ${{ matrix.profile }} --force
+        run: bash install.sh --force
 
       - name: "Verify files still intact after re-install"
         run: |
@@ -447,7 +423,7 @@ jobs:
       # ── Phase 5b: sanitize.sh smoke test ────────────────────────
 
       - name: "sanitize.sh: no arguments exits with error"
-        if: matrix.profile == 'research'
+
         run: |
           script="$HOME/.claude/scripts/sanitize.sh"
           if "$script" 2>/dev/null; then
@@ -457,7 +433,7 @@ jobs:
           echo "OK: sanitize.sh exits non-zero with no arguments"
 
       - name: "sanitize.sh: missing presidio.yaml degrades gracefully"
-        if: matrix.profile == 'research'
+
         run: |
           # Use isolated HOME so there's no presidio.yaml
           export HOME=$(mktemp -d)
@@ -468,7 +444,7 @@ jobs:
           echo "OK: sanitize.sh exits 0 when presidio.yaml is missing"
 
       - name: "sanitize.sh: no Presidio installed degrades gracefully"
-        if: matrix.profile == 'research'
+
         run: |
           # Config exists but Presidio Python packages are not installed
           export HOME=$(mktemp -d)
@@ -491,7 +467,7 @@ jobs:
           echo "Using isolated HOME=$HOME"
 
           # Install fresh
-          bash install.sh --profile ${{ matrix.profile }} --force
+          bash install.sh --force
 
           # Create a sample project
           proj=$(mktemp -d)
@@ -546,7 +522,7 @@ jobs:
           done
 
       - name: "Scaffold an investigation (research profile)"
-        if: matrix.profile == 'research'
+
         run: |
           inv_dir="$HOME/.claude/investigations/TEST-001"
           mkdir -p "$inv_dir/EVIDENCE"
@@ -571,87 +547,7 @@ jobs:
           test -d "$HOME/.claude/investigations/_patterns"
           echo "OK: _patterns directory exists for cross-investigation patterns"
 
-      # ── Phase 7: Cross-profile switching ───────────────────────────
-
-      - name: "Cross-profile: dev -> research -> dev"
-        run: |
-          set -euo pipefail
-
-          # Use isolated HOME
-          export HOME=$(mktemp -d)
-          echo "CROSS_PROFILE_HOME=$HOME" >> "$GITHUB_ENV"
-          echo "Using isolated HOME=$HOME"
-
-          # Step 1: Install dev profile
-          bash install.sh --profile dev --force
-          echo "--- Dev profile installed ---"
-
-          # Verify dev skills present
-          test -d "$HOME/.claude/skills/checkpoint"  && echo "OK: checkpoint present"
-          test -d "$HOME/.claude/skills/create-project" && echo "OK: create-project present"
-          test -d "$HOME/.claude/skills/playbook"    && echo "OK: playbook present"
-          test -d "$HOME/.claude/skills/continue"    && echo "OK: continue present"
-          test -d "$HOME/.claude/skills/learn"       && echo "OK: learn present"
-          test -d "$HOME/.claude/skills/promote"     && echo "OK: promote present"
-
-          # Step 2: Switch to research profile
-          bash install.sh --profile research --force
-          echo "--- Switched to research profile ---"
-
-          # Verify dev-only skills removed
-          for skill in checkpoint create-project playbook learn promote; do
-            if [ -d "$HOME/.claude/skills/$skill" ]; then
-              echo "FAIL: dev-only skill /$skill should have been removed"
-              exit 1
-            fi
-            echo "OK: /$skill removed"
-          done
-
-          # Verify research skills present
-          test -d "$HOME/.claude/skills/investigate" && echo "OK: investigate present"
-          test -d "$HOME/.claude/skills/continue"    && echo "OK: continue still present"
-
-          # Verify CLAUDE.md switched to research
-          grep -q "Question, Collect, Synthesize, Close" "$HOME/.claude/CLAUDE.md"
-          echo "OK: CLAUDE.md has research workflow"
-
-          # Step 3: Switch back to dev profile
-          bash install.sh --profile dev --force
-          echo "--- Switched back to dev profile ---"
-
-          # Verify research-only skills removed
-          if [ -d "$HOME/.claude/skills/investigate" ]; then
-            echo "FAIL: research-only skill /investigate should have been removed"
-            exit 1
-          fi
-          echo "OK: /investigate removed"
-
-          # Verify dev skills restored
-          test -d "$HOME/.claude/skills/checkpoint"  && echo "OK: checkpoint restored"
-          test -d "$HOME/.claude/skills/create-project" && echo "OK: create-project restored"
-          test -d "$HOME/.claude/skills/playbook"    && echo "OK: playbook restored"
-          test -d "$HOME/.claude/skills/continue"    && echo "OK: continue still present"
-          test -d "$HOME/.claude/skills/learn"       && echo "OK: learn restored"
-          test -d "$HOME/.claude/skills/promote"     && echo "OK: promote restored"
-
-          # Verify CLAUDE.md switched back to dev
-          grep -q "Explore, Plan, Code, Verify, Commit" "$HOME/.claude/CLAUDE.md"
-          echo "OK: CLAUDE.md has dev workflow"
-
-      # ── Phase 8: Invalid profile error ───────────────────────────
-
-      - name: "Invalid profile: rejects unknown profile"
-        run: |
-          output=$(bash install.sh --profile bogus 2>&1 || true)
-          echo "$output"
-          if echo "$output" | grep -q "Unknown profile"; then
-            echo "OK: bash rejects unknown profile with error message"
-          else
-            echo "FAIL: expected 'Unknown profile' error"
-            exit 1
-          fi
-
-      # ── Phase 9: Knowledge repo integration ─────────────────────
+      # ── Phase 7: Knowledge repo integration ─────────────────────
 
       - name: "Knowledge repo: install with --knowledge-repo"
         run: |
@@ -687,7 +583,7 @@ jobs:
           git -C "$work" push
 
           # Run install with --knowledge-repo pointing to local bare repo
-          bash install.sh --profile dev --force --knowledge-repo "$bare_repo"
+          bash install.sh --force --knowledge-repo "$bare_repo"
 
           # Verify knowledge directory exists and has entries
           test -d "$HOME/.claude/knowledge/.git" && echo "OK: knowledge repo cloned (.git exists)"
@@ -707,7 +603,7 @@ jobs:
 
           # Create a minimal PATH with only basic tools (no node)
           export PATH="$hide_dir:/usr/bin:/bin"
-          output=$(bash install.sh --profile dev --dry-run 2>&1 || true)
+          output=$(bash install.sh --dry-run 2>&1 || true)
           echo "$output"
           if echo "$output" | grep -q "not found on PATH"; then
             echo "OK: install.sh detects missing node"
@@ -716,7 +612,7 @@ jobs:
             exit 1
           fi
 
-      # ── Phase 10: Session hooks syntax validation ─────────────────
+      # ── Phase 8: Session hooks syntax validation ─────────────────
 
       - name: "Session hooks: JavaScript syntax valid"
         run: |

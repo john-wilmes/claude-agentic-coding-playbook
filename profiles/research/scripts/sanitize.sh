@@ -97,7 +97,8 @@ if not results:
 # Build operator config from yaml
 operators = {}
 for entity, op in config.get('anonymizer', {}).get('operators', {}).items():
-    operators[entity] = OperatorConfig(op['type'], {'new_value': op['new_value']})
+    params = {k: v for k, v in op.items() if k != 'type'}
+    operators[entity] = OperatorConfig(op['type'], params)
 
 # Anonymize
 anonymizer = AnonymizerEngine()

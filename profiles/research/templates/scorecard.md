@@ -83,7 +83,7 @@ What should the agent have done that it didn't?
 
 ## Overall quality
 
-**Composite**: (accuracy × 0.5) + (completeness/5 × 0.3) + (efficiency/5 × 0.2) = ___
+**Composite**: (accuracy/4 × 0.5) + (completeness/5 × 0.3) + (efficiency/5 × 0.2) = ___
 
 **Would you trust this investigation's findings enough to act on them?**
 - [ ] Yes, with high confidence

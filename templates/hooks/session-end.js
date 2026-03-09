@@ -100,7 +100,7 @@ process.stdin.on("end", () => {
         log("memory auto-commit: no changes");
       } catch {
         // diff --quiet exits non-zero when there ARE staged changes
-        const msg = `auto: ${agentName} session ${sessionId.slice(0, 8)}`;
+        const msg = `auto: ${agentName.replace(/[`$"\\]/g, "")} session ${sessionId.slice(0, 8)}`;
         execSync(`git commit -m "${msg}"`, gitOpts);
         log("memory auto-commit: committed");
         // Push to remote (non-blocking, best-effort)

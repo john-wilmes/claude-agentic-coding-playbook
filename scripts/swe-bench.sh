@@ -221,7 +221,6 @@ for i in $(seq 0 $((TASK_COUNT - 1))); do
 
   say "  Cloning repo..."
   setup_task "$TASK_ID" "$TASK_REPO" "$TASK_COMMIT" "$BDIR"
-  cp -r "$BDIR/repo" "$PDIR_repo_tmp" 2>/dev/null || true
   mkdir -p "$PDIR"
   cp -r "$BDIR/repo" "$PDIR/repo"
 

@@ -36,7 +36,7 @@ fi
 
 # Extract all cited evidence numbers from FINDINGS.md Answer section
 # Matches patterns like (Evidence 001), (Evidence 001, 002), (inferred from Evidence 003)
-cited_numbers=$(grep -oP 'Evidence\s+\K[0-9]{3}' "$FINDINGS" | sort -u)
+cited_numbers=$(grep -oE 'Evidence[[:space:]]+[0-9]{3}' "$FINDINGS" | grep -oE '[0-9]{3}$' | sort -u)
 
 cited_count=$(echo "$cited_numbers" | grep -c '[0-9]' 2>/dev/null || echo 0)
 
@@ -59,5 +59,9 @@ else
 fi
 
 # Output JSON
-uncited_json=$(printf '%s\n' "${uncited[@]}" | jq -R . | jq -s .)
+if [ ${#uncited[@]} -eq 0 ]; then
+  uncited_json="[]"
+else
+  uncited_json=$(printf '%s\n' "${uncited[@]}" | jq -R . | jq -s .)
+fi
 echo "{\"total_evidence\": $total, \"cited_count\": $cited_count, \"citation_rate\": $citation_rate, \"uncited_count\": $uncited_count, \"uncited_files\": $uncited_json}"

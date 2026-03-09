@@ -224,7 +224,7 @@ test("12. Read tool -> hook skips entirely (no additionalContext)", (env) => {
     // Should be a quick allow with no test context
     const ctx = result.json.hookSpecificOutput && result.json.hookSpecificOutput.additionalContext;
     assert.ok(!ctx, `Read tool should not trigger tests, got: ${ctx}`);
-    assert.strictEqual(result.json.decision, "allow");
+    assert.strictEqual(result.json.decision, undefined, "PostToolUse should not use decision field");
   } finally {
     try { fs.rmSync(projDir, { recursive: true, force: true }); } catch {}
   }

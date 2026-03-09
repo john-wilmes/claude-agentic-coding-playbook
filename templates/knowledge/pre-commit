@@ -5,7 +5,7 @@ set -euo pipefail
 
 errors=0
 
-for file in $(git diff --cached --name-only --diff-filter=ACM); do
+while IFS= read -r file; do
   # Only validate entry.md files
   case "$file" in
     entries/*/entry.md) ;;
@@ -41,7 +41,7 @@ for file in $(git diff --cached --name-only --diff-filter=ACM); do
     echo "BLOCKED: $file may contain credentials"
     errors=$((errors + 1))
   fi
-done
+done < <(git diff --cached --name-only --diff-filter=ACM)
 
 if [ $errors -gt 0 ]; then
   echo ""

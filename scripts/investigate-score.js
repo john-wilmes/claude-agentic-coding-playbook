@@ -273,7 +273,13 @@ if (groundTruthPath) {
     console.error(`Ground truth file not found: ${groundTruthPath}`);
     process.exit(1);
   }
-  const gt = JSON.parse(readFile(groundTruthPath));
+  let gt;
+  try {
+    gt = JSON.parse(readFile(groundTruthPath));
+  } catch (e) {
+    console.error(`Invalid JSON in ground truth file: ${groundTruthPath}`);
+    process.exit(1);
+  }
   metrics.ground_truth_id    = gt.investigation_id || path.basename(groundTruthPath, ".json");
   metrics.ground_truth_score = computeGroundTruth(findings, gt);
 }

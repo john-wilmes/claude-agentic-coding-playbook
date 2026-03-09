@@ -88,7 +88,7 @@ process.stdin.on("end", () => {
 
     // Only act on Edit or Write tool calls
     if (toolName !== "Edit" && toolName !== "Write") {
-      process.stdout.write(JSON.stringify({ decision: "allow" }));
+      process.stdout.write(JSON.stringify({}));
       process.exit(0);
     }
 
@@ -96,7 +96,7 @@ process.stdin.on("end", () => {
 
     // Skip non-code files
     if (shouldSkipFile(filePath)) {
-      process.stdout.write(JSON.stringify({ decision: "allow" }));
+      process.stdout.write(JSON.stringify({}));
       process.exit(0);
     }
 
@@ -107,19 +107,19 @@ process.stdin.on("end", () => {
       claudeMdContent = fs.readFileSync(claudeMdPath, "utf8");
     } catch {
       // No CLAUDE.md — can't verify
-      process.stdout.write(JSON.stringify({ decision: "allow" }));
+      process.stdout.write(JSON.stringify({}));
       process.exit(0);
     }
 
     const testCommand = extractTestCommand(claudeMdContent);
     if (!testCommand) {
-      process.stdout.write(JSON.stringify({ decision: "allow" }));
+      process.stdout.write(JSON.stringify({}));
       process.exit(0);
     }
 
     // Debounce: skip if run too recently for this cwd
     if (isDebounced(cwd)) {
-      process.stdout.write(JSON.stringify({ decision: "allow" }));
+      process.stdout.write(JSON.stringify({}));
       process.exit(0);
     }
 

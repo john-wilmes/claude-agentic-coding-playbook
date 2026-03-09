@@ -23,12 +23,19 @@ let passed = 0;
 let failed = 0;
 const failures = [];
 
+let skipped = 0;
+
 function test(name, fn) {
   try {
     fn();
     passed++;
     console.log(`  ✓ ${name}`);
   } catch (err) {
+    if (err.message.startsWith("SKIPPED:")) {
+      skipped++;
+      console.log(`  ⊘ ${name} (skipped)`);
+      return;
+    }
     failed++;
     failures.push({ name, error: err.message });
     console.log(`  ✗ ${name}`);
@@ -223,9 +230,7 @@ console.log("\nscorer — ground truth:");
 test("14. MMA-2847 exact match (backward-trace.ts:43 + colon split) scores 4", () => {
   const gtPath = path.join(GT_DIR, "MMA-2847.json");
   if (!fs.existsSync(gtPath)) {
-    console.log("    (skipped — ground-truth file not found)");
-    passed++; // count as passing if GT file missing
-    return;
+    throw new Error("SKIPPED: ground-truth file not found at " + gtPath);
   }
   const { dir, cleanup } = createTempInvestigation({
     findings: `# Findings: MMA-2847\n\n## Answer\n\nThe root cause is in backward-trace.ts at line 43 (see 001). The function calls\nsplit(":")[0] which returns the Windows drive letter instead of the file path on\nWindows absolute paths (see 001). The colon collision causes all tree lookups to\nfail silently (see 001).\n\n## Evidence Summary\n\n| # | Slug | Observation |\n|---|------|-------------|\n| 001 | colon-split-43 | split(":")[0] breaks on Windows drive letters |\n\n## Implications\n\nReplace split(":")[0] with lastIndexOf(":") as used at line 105.\n`,
@@ -239,7 +244,7 @@ test("14. MMA-2847 exact match (backward-trace.ts:43 + colon split) scores 4", (
 
 test("15. MMA-2847 mechanism only (no line number) scores 3", () => {
   const gtPath = path.join(GT_DIR, "MMA-2847.json");
-  if (!fs.existsSync(gtPath)) { passed++; return; }
+  if (!fs.existsSync(gtPath)) { throw new Error("SKIPPED: ground-truth file not found at " + gtPath); }
   const { dir, cleanup } = createTempInvestigation({
     findings: `# Findings: MMA-2847\n\n## Answer\n\nThe backward-trace module calls split(":")[0] which returns the Windows drive\nletter colon instead of the expected path separator. This causes the colon-based\nsplit to produce "D" on Windows absolute paths (see 001).\n\n## Evidence Summary\n\n| # | Slug | Observation |\n|---|------|-------------|\n| 001 | colon-split | split fails on Windows |\n\n## Implications\n\nNeeds a fix in the FQN parsing code.\n`,
   });
@@ -254,7 +259,7 @@ test("15. MMA-2847 mechanism only (no line number) scores 3", () => {
 
 test("16. MMA-2847 anti-pattern (blames git) caps score at 2", () => {
   const gtPath = path.join(GT_DIR, "MMA-2847.json");
-  if (!fs.existsSync(gtPath)) { passed++; return; }
+  if (!fs.existsSync(gtPath)) { throw new Error("SKIPPED: ground-truth file not found at " + gtPath); }
   const { dir, cleanup } = createTempInvestigation({
     findings: `# Findings: MMA-2847\n\n## Answer\n\nThe colon split in backward-trace.ts is wrong (see 001). However, the primary\nroot cause is a git bug that produces incorrect path output on Windows (see 001).\n\n## Evidence Summary\n\n| # | Slug | Observation |\n|---|------|-------------|\n| 001 | git-bug | git output is wrong on Windows |\n\n## Implications\n\nFix the git configuration.\n`,
   });
@@ -270,7 +275,7 @@ test("16. MMA-2847 anti-pattern (blames git) caps score at 2", () => {
 
 test("17. MMA-2847 total miss scores 0", () => {
   const gtPath = path.join(GT_DIR, "MMA-2847.json");
-  if (!fs.existsSync(gtPath)) { passed++; return; }
+  if (!fs.existsSync(gtPath)) { throw new Error("SKIPPED: ground-truth file not found at " + gtPath); }
   const { dir, cleanup } = createTempInvestigation({
     findings: `# Findings: MMA-2847\n\n## Answer\n\nThe issue is caused by a Unicode encoding problem in the database connection\nstring on Windows. The locale settings differ between Mac and Windows (see 001).\n\n## Evidence Summary\n\n| # | Slug | Observation |\n|---|------|-------------|\n| 001 | encoding | Unicode locale mismatch |\n\n## Implications\n\nFix locale settings in CI.\n`,
   });
@@ -282,7 +287,7 @@ test("17. MMA-2847 total miss scores 0", () => {
 
 test("18. VNSE-4821 exact match scores 4", () => {
   const gtPath = path.join(GT_DIR, "VNSE-4821.json");
-  if (!fs.existsSync(gtPath)) { passed++; return; }
+  if (!fs.existsSync(gtPath)) { throw new Error("SKIPPED: ground-truth file not found at " + gtPath); }
   const { dir, cleanup } = createTempInvestigation({
     findings: `# Findings: VNSE-4821\n\n## Answer\n\nThe 53 failing listings are BULL type, which use the raw GraphQL path for\ncreateEPDProfile (see 001). The raw client.graphql() call does not auto-inject the\nowner field, but AppSync owner-auth requires it in the mutation input (see 001).\nAmplify's client.models.X.create() would inject owner automatically, but the EPD\npath bypasses it (see 001). Missing owner field in the mutation input causes\nAppSync authorization to reject the request (see 001).\n\n## Evidence Summary\n\n| # | Slug | Observation |\n|---|------|-------------|\n| 001 | owner-field-missing | Raw GraphQL mutation missing owner field |\n\n## Implications\n\nAdd owner field from Cognito session to createEPDProfile mutation input.\n`,
   });
@@ -298,7 +303,7 @@ console.log("\nscorer — new ground truth:");
 
 test("23. NOVU-3001 exact match (collectDigest + transactionId dedup) scores 4", () => {
   const gtPath = path.join(GT_DIR, "NOVU-3001.json");
-  if (!fs.existsSync(gtPath)) { passed++; return; }
+  if (!fs.existsSync(gtPath)) { throw new Error("SKIPPED: ground-truth file not found at " + gtPath); }
   const { dir, cleanup } = createTempInvestigation({
     findings: `# Findings: NOVU-3001\n\n## Answer\n\nThe root cause is in digest.step.ts at line 395, in the collectDigest function (see 001). It uses Redis LRANGE to retrieve all entries from the digest list but does NOT deduplicate by transactionId (see 001). When a trigger is retried by the SDK, the same entry is appended again via rpush, and collectDigest returns both copies. Using a Redis sorted set keyed by transactionId would prevent duplicate entries (see 001).\n\n## Evidence Summary\n\n| # | Slug | Observation |\n|---|------|-------------|\n| 001 | no-dedup | collectDigest lacks transactionId dedup |\n\n## Implications\n\nAdd Set-based dedup on transactionId in collectDigest.\n`,
   });
@@ -310,7 +315,7 @@ test("23. NOVU-3001 exact match (collectDigest + transactionId dedup) scores 4",
 
 test("24. NOVU-3001 anti-pattern (blames BullMQ dedup) caps at 2", () => {
   const gtPath = path.join(GT_DIR, "NOVU-3001.json");
-  if (!fs.existsSync(gtPath)) { passed++; return; }
+  if (!fs.existsSync(gtPath)) { throw new Error("SKIPPED: ground-truth file not found at " + gtPath); }
   const { dir, cleanup } = createTempInvestigation({
     findings: `# Findings: NOVU-3001\n\n## Answer\n\nThe digest step collects entries without dedup (see 001). However, the primary issue\nis that BullMQ's job dedup should prevent the duplicate job from running, but the\nbullmq dedup configuration is incorrect (see 001).\n\n## Evidence Summary\n\n| # | Slug | Observation |\n|---|------|-------------|\n| 001 | bullmq | BullMQ job dedup not working |\n\n## Implications\n\nFix BullMQ dedup configuration.\n`,
   });
@@ -323,7 +328,7 @@ test("24. NOVU-3001 anti-pattern (blames BullMQ dedup) caps at 2", () => {
 
 test("25. CALC-4502 exact match (pagination >= vs >) scores 4", () => {
   const gtPath = path.join(GT_DIR, "CALC-4502.json");
-  if (!fs.existsSync(gtPath)) { passed++; return; }
+  if (!fs.existsSync(gtPath)) { throw new Error("SKIPPED: ground-truth file not found at " + gtPath); }
   const { dir, cleanup } = createTempInvestigation({
     findings: `# Findings: CALC-4502\n\n## Answer\n\nThe pagination module at pagination.ts line 87 uses a >= comparison on the sort key\nin the cursor-based fallback path (see 001). This includes the boundary record on both\npages. The fix is to use > instead of >= (see 001).\n\n## Evidence Summary\n\n| # | Slug | Observation |\n|---|------|-------------|\n| 001 | cursor | cursor fallback uses >= instead of > |\n\n## Implications\n\nChange >= to > in the cursor comparison at pagination.ts:87.\n`,
   });
@@ -335,7 +340,7 @@ test("25. CALC-4502 exact match (pagination >= vs >) scores 4", () => {
 
 test("26. CALC-4502 anti-pattern (blames caching) caps at 2", () => {
   const gtPath = path.join(GT_DIR, "CALC-4502.json");
-  if (!fs.existsSync(gtPath)) { passed++; return; }
+  if (!fs.existsSync(gtPath)) { throw new Error("SKIPPED: ground-truth file not found at " + gtPath); }
   const { dir, cleanup } = createTempInvestigation({
     findings: `# Findings: CALC-4502\n\n## Answer\n\nThe pagination uses >= in the cursor path (see 001). But the real issue is frontend\nclient caching returning stale page data (see 001).\n\n## Evidence Summary\n\n| # | Slug | Observation |\n|---|------|-------------|\n| 001 | cache | client caching causes duplicates |\n\n## Implications\n\nClear client cache.\n`,
   });
@@ -348,7 +353,7 @@ test("26. CALC-4502 anti-pattern (blames caching) caps at 2", () => {
 
 test("27. CONFIG-5104 exact match (DATABASE_URL vs DATABASE_URI) scores 4", () => {
   const gtPath = path.join(GT_DIR, "CONFIG-5104.json");
-  if (!fs.existsSync(gtPath)) { passed++; return; }
+  if (!fs.existsSync(gtPath)) { throw new Error("SKIPPED: ground-truth file not found at " + gtPath); }
   const { dir, cleanup } = createTempInvestigation({
     findings: `# Findings: CONFIG-5104\n\n## Answer\n\nThe database config at database.ts line 12 reads process.env.DATABASE_URL, but the\nstaging deployment template sets DATABASE_URI (see 001). The undefined value triggers\na silent fallback to localhost:5432, masking the mismatch (see 001).\n\n## Evidence Summary\n\n| # | Slug | Observation |\n|---|------|-------------|\n| 001 | env-mismatch | DATABASE_URL vs DATABASE_URI name mismatch |\n\n## Implications\n\nAlign env var name: use DATABASE_URL everywhere.\n`,
   });
@@ -360,7 +365,7 @@ test("27. CONFIG-5104 exact match (DATABASE_URL vs DATABASE_URI) scores 4", () =
 
 test("28. CONFIG-5104 anti-pattern (blames firewall) caps at 2", () => {
   const gtPath = path.join(GT_DIR, "CONFIG-5104.json");
-  if (!fs.existsSync(gtPath)) { passed++; return; }
+  if (!fs.existsSync(gtPath)) { throw new Error("SKIPPED: ground-truth file not found at " + gtPath); }
   const { dir, cleanup } = createTempInvestigation({
     findings: `# Findings: CONFIG-5104\n\n## Answer\n\nThe URL vs URI mismatch exists (see 001). But the primary cause is a firewall rule\nblocking the staging database port (see 001).\n\n## Evidence Summary\n\n| # | Slug | Observation |\n|---|------|-------------|\n| 001 | fw | network firewall blocks staging DB |\n\n## Implications\n\nUpdate firewall rules.\n`,
   });
@@ -373,7 +378,7 @@ test("28. CONFIG-5104 anti-pattern (blames firewall) caps at 2", () => {
 
 test("29. AUTH-6038 exact match (userId=0 falsy coercion) scores 4", () => {
   const gtPath = path.join(GT_DIR, "AUTH-6038.json");
-  if (!fs.existsSync(gtPath)) { passed++; return; }
+  if (!fs.existsSync(gtPath)) { throw new Error("SKIPPED: ground-truth file not found at " + gtPath); }
   const { dir, cleanup } = createTempInvestigation({
     findings: `# Findings: AUTH-6038\n\n## Answer\n\nThe auth middleware at auth.ts line 28 checks \`if (!userId)\` (see 001). For the first\nuser with userId=0, JavaScript's falsy coercion makes \`!0\` evaluate to true, rejecting\na valid user (see 001). The fix is to use \`userId === null || userId === undefined\`.\n\n## Evidence Summary\n\n| # | Slug | Observation |\n|---|------|-------------|\n| 001 | falsy | !userId treats 0 as false |\n\n## Implications\n\nReplace falsy check with explicit null/undefined check.\n`,
   });
@@ -385,7 +390,7 @@ test("29. AUTH-6038 exact match (userId=0 falsy coercion) scores 4", () => {
 
 test("30. AUTH-6038 anti-pattern (blames JWT generation) caps at 2", () => {
   const gtPath = path.join(GT_DIR, "AUTH-6038.json");
-  if (!fs.existsSync(gtPath)) { passed++; return; }
+  if (!fs.existsSync(gtPath)) { throw new Error("SKIPPED: ground-truth file not found at " + gtPath); }
   const { dir, cleanup } = createTempInvestigation({
     findings: `# Findings: AUTH-6038\n\n## Answer\n\nThe auth middleware uses falsy check on userId (see 001). However, the root cause is\nthat the JWT token generation signs the token incorrectly for userId=0 (see 001).\n\n## Evidence Summary\n\n| # | Slug | Observation |\n|---|------|-------------|\n| 001 | jwt | JWT generation fails for userId 0 |\n\n## Implications\n\nFix JWT generation.\n`,
   });
@@ -398,7 +403,7 @@ test("30. AUTH-6038 anti-pattern (blames JWT generation) caps at 2", () => {
 
 test("31. API-7291 exact match (req.body vs req.user ownerId) scores 4", () => {
   const gtPath = path.join(GT_DIR, "API-7291.json");
-  if (!fs.existsSync(gtPath)) { passed++; return; }
+  if (!fs.existsSync(gtPath)) { throw new Error("SKIPPED: ground-truth file not found at " + gtPath); }
   const { dir, cleanup } = createTempInvestigation({
     findings: `# Findings: API-7291\n\n## Answer\n\nThe resource controller at resource.controller.ts line 45 reads ownerId from req.body\ninstead of req.user.id (see 001). This allows any authenticated user to spoof ownership\nby including an ownerId field in the PUT payload (see 001).\n\n## Evidence Summary\n\n| # | Slug | Observation |\n|---|------|-------------|\n| 001 | authz | ownerId from req.body not req.user |\n\n## Implications\n\nSource ownerId from req.user.id, not req.body.\n`,
   });
@@ -410,7 +415,7 @@ test("31. API-7291 exact match (req.body vs req.user ownerId) scores 4", () => {
 
 test("32. API-7291 anti-pattern (blames CORS) caps at 2", () => {
   const gtPath = path.join(GT_DIR, "API-7291.json");
-  if (!fs.existsSync(gtPath)) { passed++; return; }
+  if (!fs.existsSync(gtPath)) { throw new Error("SKIPPED: ground-truth file not found at " + gtPath); }
   const { dir, cleanup } = createTempInvestigation({
     findings: `# Findings: API-7291\n\n## Answer\n\nThe controller reads ownerId from req.body (see 001). But the real problem is a CORS misconfiguration that allows cross-origin requests to the update endpoint (see 001).\n\n## Evidence Summary\n\n| # | Slug | Observation |\n|---|------|-------------|\n| 001 | cors | CORS allows cross-origin writes |\n\n## Implications\n\nFix CORS configuration.\n`,
   });
@@ -461,7 +466,7 @@ test("22. Ground truth file not found exits 1", () => {
 // ─── Summary ──────────────────────────────────────────────────────────────────
 
 console.log(`\n${"─".repeat(60)}`);
-console.log(`Results: ${passed} passed, ${failed} failed (${passed + failed} total)`);
+console.log(`Results: ${passed} passed, ${failed} failed, ${skipped} skipped (${passed + failed + skipped} total)`);
 
 if (failures.length > 0) {
   console.log("\nFailures:");
