@@ -392,6 +392,88 @@ if [ -f "$SCRIPT_DIR/templates/hooks/model-router.js" ]; then
   fi
 fi
 
+# Prompt injection guard hook (PreToolUse -- blocks high-confidence injection patterns in Bash)
+if [ -f "$SCRIPT_DIR/templates/hooks/prompt-injection-guard.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/prompt-injection-guard.js" "$CLAUDE_DIR/hooks/prompt-injection-guard.js" "prompt injection guard: prompt-injection-guard.js"
+
+  # Merge PreToolUse hook entry into settings.json
+  echo ""
+  echo "--- Configuring prompt-injection-guard in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  GUARD_CMD="node $CLAUDE_DIR/hooks/prompt-injection-guard.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add PreToolUse hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    if grep -q "prompt-injection-guard" "$SETTINGS_FILE" 2>/dev/null; then
+      echo "ALREADY CONFIGURED: prompt-injection-guard hook in settings.json"
+    else
+      node -e "
+        const fs = require('fs');
+        const path = require('path');
+        const settingsPath = path.resolve(process.argv[1]);
+        const hookCmd = process.argv[2];
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (!settings.hooks) settings.hooks = {};
+        if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+        settings.hooks.PreToolUse.push({
+          matcher: 'Bash',
+          hooks: [{ type: 'command', command: hookCmd }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      " "$SETTINGS_FILE" "$GUARD_CMD"
+      echo "CONFIGURED: prompt-injection-guard hook in settings.json"
+    fi
+  fi
+fi
+
+# Post-tool verify hook (PostToolUse -- auto-runs tests after Edit/Write on code files)
+if [ -f "$SCRIPT_DIR/templates/hooks/post-tool-verify.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/post-tool-verify.js" "$CLAUDE_DIR/hooks/post-tool-verify.js" "post-tool verify: post-tool-verify.js"
+
+  # Merge PostToolUse hook entries into settings.json
+  echo ""
+  echo "--- Configuring post-tool-verify in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  VERIFY_CMD="node $CLAUDE_DIR/hooks/post-tool-verify.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add PostToolUse hooks to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    if grep -q "post-tool-verify" "$SETTINGS_FILE" 2>/dev/null; then
+      echo "ALREADY CONFIGURED: post-tool-verify hook in settings.json"
+    else
+      node -e "
+        const fs = require('fs');
+        const path = require('path');
+        const settingsPath = path.resolve(process.argv[1]);
+        const hookCmd = process.argv[2];
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (!settings.hooks) settings.hooks = {};
+        if (!settings.hooks.PostToolUse) settings.hooks.PostToolUse = [];
+        settings.hooks.PostToolUse.push({
+          matcher: 'Edit',
+          hooks: [{ type: 'command', command: hookCmd }]
+        });
+        settings.hooks.PostToolUse.push({
+          matcher: 'Write',
+          hooks: [{ type: 'command', command: hookCmd }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      " "$SETTINGS_FILE" "$VERIFY_CMD"
+      echo "CONFIGURED: post-tool-verify hook in settings.json"
+    fi
+  fi
+fi
+
 # Knowledge base templates
 if [ -d "$SCRIPT_DIR/templates/knowledge" ]; then
   echo ""

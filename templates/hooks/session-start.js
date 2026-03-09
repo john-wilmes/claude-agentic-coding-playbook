@@ -212,6 +212,7 @@ process.stdin.on("end", () => {
     // Read Current Work and Lessons Learned from memory file
     let currentWork = "";
     let lessonsLearned = "";
+    let memorySizeWarning = "";
     try {
       const cwdEncoded = cwd.replace(/:/g, "-").replace(/[\\/]/g, "-").replace(/^-/, "");
       const memoryPath = path.join(os.homedir(), ".claude", "projects", cwdEncoded, "memory", "MEMORY.md");
@@ -224,9 +225,31 @@ process.stdin.on("end", () => {
       if (llMatch) {
         lessonsLearned = llMatch[1].trim();
       }
+      // Check MEMORY.md size — warn before silent truncation
+      const memLineCount = memoryContent.split("\n").length;
+      if (memLineCount > 120) {
+        memorySizeWarning = `\u26a0 MEMORY.md is ${memLineCount} lines (limit: 150, truncation: 200). Run /checkpoint to split topic files.`;
+      }
     } catch {
       // No memory file for this project -- that's fine
     }
+
+    // Check combined CLAUDE.md size
+    let claudeSizeWarning = "";
+    try {
+      let totalClaudeLines = 0;
+      const globalClaudePath = path.join(os.homedir(), ".claude", "CLAUDE.md");
+      if (fs.existsSync(globalClaudePath)) {
+        totalClaudeLines += fs.readFileSync(globalClaudePath, "utf8").split("\n").length;
+      }
+      const projectClaudePath = path.join(cwd, "CLAUDE.md");
+      if (fs.existsSync(projectClaudePath)) {
+        totalClaudeLines += fs.readFileSync(projectClaudePath, "utf8").split("\n").length;
+      }
+      if (totalClaudeLines > 700) {
+        claudeSizeWarning = `\u26a0 Combined CLAUDE.md is ${totalClaudeLines} lines. Consider moving stable sections to .claude/rules/ files.`;
+      }
+    } catch {}
 
     // Build context string
     const parts = [`Registered as "${agentName}" with agent-comm.`];
@@ -253,6 +276,13 @@ process.stdin.on("end", () => {
 
     if (lessonsLearned) {
       parts.push(`Lessons Learned (from memory):\n${lessonsLearned}`);
+    }
+
+    if (memorySizeWarning) {
+      parts.push(memorySizeWarning);
+    }
+    if (claudeSizeWarning) {
+      parts.push(claudeSizeWarning);
     }
 
     // Inject relevant knowledge entries

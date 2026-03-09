@@ -394,11 +394,67 @@ Body text.`;
   assert.strictEqual(fm.confidence, "high");
 });
 
+// ─── Size warning tests ─────────────────────────────────────────────────────
+
+console.log("\nsession-start.js size warnings:");
+
+test("19. MEMORY.md >120 lines triggers size warning", (env) => {
+  const projDir = createProjectDir({ git: true });
+  // Create a MEMORY.md with 130 lines
+  const lines = ["# Memory\n", "## Current Work\n", "Working on tests.\n"];
+  for (let i = 0; i < 130; i++) lines.push(`Line ${i}\n`);
+  createMemoryFile(env.home, projDir, lines.join(""));
+
+  const result = runHook(SESSION_START, {
+    session_id: "test-size-warn",
+    cwd: projDir,
+  }, { HOME: env.home, USERPROFILE: env.home });
+
+  const ctx = result.json.hookSpecificOutput.additionalContext;
+  assert.ok(ctx.includes("MEMORY.md is"), "Should warn about MEMORY.md size");
+  assert.ok(ctx.includes("/checkpoint"), "Should suggest /checkpoint");
+});
+
+test("20. MEMORY.md <120 lines does NOT trigger size warning", (env) => {
+  const projDir = createProjectDir({ git: true });
+  const memContent = "# Memory\n\n## Current Work\n\nSmall file.\n";
+  createMemoryFile(env.home, projDir, memContent);
+
+  const result = runHook(SESSION_START, {
+    session_id: "test-no-warn",
+    cwd: projDir,
+  }, { HOME: env.home, USERPROFILE: env.home });
+
+  const ctx = result.json.hookSpecificOutput.additionalContext;
+  assert.ok(!ctx.includes("MEMORY.md is"), "Should NOT warn about small MEMORY.md");
+});
+
+test("21. Combined CLAUDE.md >700 lines triggers size warning", (env) => {
+  const projDir = createProjectDir({ git: true });
+  // Create a large global CLAUDE.md
+  const lines = ["# CLAUDE.md\n"];
+  for (let i = 0; i < 400; i++) lines.push(`Rule ${i}\n`);
+  fs.mkdirSync(path.join(env.home, ".claude"), { recursive: true });
+  fs.writeFileSync(path.join(env.home, ".claude", "CLAUDE.md"), lines.join(""));
+  // Create a large project CLAUDE.md
+  const projLines = ["# Project\n"];
+  for (let i = 0; i < 350; i++) projLines.push(`Project rule ${i}\n`);
+  fs.writeFileSync(path.join(projDir, "CLAUDE.md"), projLines.join(""));
+
+  const result = runHook(SESSION_START, {
+    session_id: "test-claude-warn",
+    cwd: projDir,
+  }, { HOME: env.home, USERPROFILE: env.home });
+
+  const ctx = result.json.hookSpecificOutput.additionalContext;
+  assert.ok(ctx.includes("Combined CLAUDE.md"), "Should warn about combined CLAUDE.md size");
+});
+
 // ─── Cross-agent isolation test ──────────────────────────────────────────────
 
 console.log("\nsession-end.js cross-agent isolation:");
 
-test("18. session-end only stages its OWN project MEMORY.md, not other projects'", (env) => {
+test("22. session-end only stages its OWN project MEMORY.md, not other projects'", (env) => {
   // Set up a git repo in the temp ~/.claude dir (simulates a real multi-project install)
   const gitEnv = { HOME: env.home, USERPROFILE: env.home, GIT_AUTHOR_NAME: "Test", GIT_COMMITTER_NAME: "Test", GIT_AUTHOR_EMAIL: "t@t.com", GIT_COMMITTER_EMAIL: "t@t.com" };
   const gitIn = { cwd: env.claudeDir, encoding: "utf8", env: { ...process.env, ...gitEnv } };

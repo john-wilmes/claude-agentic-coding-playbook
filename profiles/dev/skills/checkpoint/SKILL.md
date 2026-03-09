@@ -30,7 +30,24 @@ If `$ARGUMENTS` is provided, use it as the next-steps summary.
 
 Do not duplicate information already in memory. Read the current memory file first.
 
-### 1b. Capture knowledge entries (if applicable)
+### 1b. Audit memory file sizes
+
+Check the MEMORY.md line count for the current project. If over 120 lines, suggest splitting:
+
+```text
+MEMORY.md is <N>/150 lines. Suggest splitting:
+  - Move Lessons Learned → lessons-learned.md
+  - Move stable reference data → data-facts.md
+  - Keep only Current Work + Key Pointers in MEMORY.md
+
+Split now? [y/N]
+```
+
+If the user confirms, perform the split using the topic file pattern documented in global CLAUDE.md (create topic files in the same memory directory, link from MEMORY.md).
+
+If under 120 lines, skip silently.
+
+### 1c. Capture knowledge entries (if applicable)
 
 If non-obvious discoveries, bugs, or workarounds were encountered this session — things a future agent working with the same tools would benefit from knowing — suggest capturing them:
 
@@ -61,6 +78,21 @@ Check if `coderabbit` is on PATH (`command -v coderabbit`). If available:
 - If a finding is not actionable or conflicts with project architecture, skip it
 
 If `coderabbit` is not on PATH, skip this step.
+
+### 2c. Evolve CLAUDE.md (opt-in)
+
+Check the Lessons Learned section of MEMORY.md. For each lesson, check whether it describes a constraint not already captured in the project's CLAUDE.md. If a candidate rule is found:
+
+```text
+Lessons Learned contains a pattern not yet in CLAUDE.md:
+  Lesson: "<lesson summary>"
+  Suggested rule: "<candidate rule text>"
+  Target section: <section name in CLAUDE.md>
+
+Add this rule? [y/N]
+```
+
+Only apply on user confirmation. Skip if no new patterns are found or if MEMORY.md has no Lessons Learned section.
 
 ### 3. Commit and push
 
@@ -102,18 +134,28 @@ base=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remot
 git rev-list --count "$base"..HEAD 2>/dev/null
 ```
 
-If the branch is **5+ commits ahead** and any of the changed files are documentation or configuration (`.md`, `.yaml`, `.json`, `.toml`, `.mdc`), suggest a devil's advocate review:
+Trigger the suggestion when **either** condition is met:
+1. The branch is **5+ commits ahead** and any changed files are documentation or configuration (`.md`, `.yaml`, `.json`, `.toml`, `.mdc`).
+2. The branch has **3+ code files changed** (`.js`, `.ts`, `.py`, `.go`, `.rs`, `.java`, `.tsx`, `.jsx`).
 
+For condition 1:
 ```text
 This branch has <N> commits with doc/config changes. Consider a devil's advocate review before creating a PR:
 - Verify external claims (URLs, prices, versions) against live sources
 - Check file paths and cross-references
 - Challenge assumptions and cite file:line for findings
-
-This is optional but high-value for documentation-heavy changes. Run it? [y/N]
 ```
 
-If the user declines or the conditions are not met, skip.
+For condition 2:
+```text
+This branch changes <N> code files. Consider a writer/reviewer split:
+- Writer (this session): focused on forward progress
+- Reviewer (fresh session): read the diff, check edge cases, naming, test coverage
+
+Alternatively, run a self-review now focusing on accidental complexity and test gaps.
+```
+
+Both are optional. If the user declines or the conditions are not met, skip.
 
 ### 5. Suggest new session
 

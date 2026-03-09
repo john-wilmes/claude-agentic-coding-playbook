@@ -65,6 +65,34 @@ Example for Node/TypeScript:
 - Test: `npm test`
 ```
 
+### 5b. Create AGENTS.md
+
+Generate an `AGENTS.md` file at the project root. This is a cross-tool convention (60k+ repos) that tells any AI coding assistant how to build, test, and lint the project.
+
+Populate sections from the quality gate commands chosen in step 5:
+
+```markdown
+# AGENTS.md
+
+## Build
+
+<build command from quality gates, or "No build step configured.">
+
+## Test
+
+<test command from quality gates, e.g. "npm test">
+
+## Lint
+
+<lint command from quality gates, e.g. "npx eslint .">
+
+## General
+
+- Follow existing code style and naming conventions.
+- Write tests for new functionality.
+- Do not commit credentials or secrets.
+```
+
 ### 6. Create package.json or equivalent
 
 Use `npm init -y` for Node projects. Set name, description, and version. For Python, create `pyproject.toml`.

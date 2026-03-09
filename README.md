@@ -73,14 +73,22 @@ The installer **will not overwrite** existing skills or configuration without pr
 **Development:**
 - **`/checkpoint`** -- Save all work, update memory with Current Work section, run quality gates, commit, push. Designed for clean session handoffs.
 - **`/continue`** -- Read the Current Work section from memory and present what was done, current state, and next steps. Start every session here.
-- **`/create-project`** -- Scaffold a new project with git, .gitignore, CLAUDE.md, GitHub repo. Projects are created as siblings to `.claude/`.
+- **`/create-project`** -- Scaffold a new project with git, .gitignore, CLAUDE.md, AGENTS.md, GitHub repo. Projects are created as siblings to `.claude/`.
 - **`/playbook`** -- Analyze your CLAUDE.md configuration and suggest improvements. Modes: `global`, `project`, `check`.
 - **`/learn`** -- Capture a non-obvious lesson as a structured knowledge entry for future sessions.
 - **`/promote`** -- Promote a project-level lesson to global scope.
+- **`/export`** -- Export CLAUDE.md rules to `.cursorrules`, `AGENTS.md`, and `.windsurfrules` for cross-tool portability.
 
 **Research:**
 - **`/investigate`** -- Full investigation lifecycle with multi-agent evidence collection, synthesis, tagging, and PHI sanitization. Subcommands: `new`, `run`, `collect`, `synthesize`, `close`, `status`, `list`, `search`.
 - **`/continue`** -- Lists open investigations and resumes work. Same skill as above — auto-detects context.
+
+### Hooks
+
+- **Session start** -- Auto-registers with agent-comm, injects memory and knowledge, warns when MEMORY.md or CLAUDE.md exceed size thresholds.
+- **Model router** -- Auto-selects Haiku/Sonnet/Opus for Task tool calls based on prompt signals.
+- **Prompt injection guard** -- Blocks high-confidence injection patterns in Bash commands (zero false positives by design).
+- **Post-tool verify** -- Auto-runs project tests after Edit/Write on code files with debouncing.
 
 ### CLAUDE.md Rules
 
@@ -119,6 +127,23 @@ The wizard will:
 - **[Best Practices Guide](docs/best-practices.md)** -- the full evidence-backed guide with 34 verified citations
 - **[Project CLAUDE.md Template](templates/project-CLAUDE.md)** -- starting point for per-project instructions
 - **[Dogfood Playbook](docs/dogfood-playbook.md)** -- manual interactive testing checklist for verifying the full user experience
+
+## Benchmarks
+
+The playbook includes a SWE-Bench benchmarking script that compares Claude Code's performance on real-world bug fixes with and without the playbook installed.
+
+```bash
+# Validate setup (no API calls)
+bash scripts/swe-bench.sh --dry-run
+
+# Run 5 SWE-Bench Lite tasks (~$10-25 in API costs)
+bash scripts/swe-bench.sh
+
+# Full 25-task run (~$100-250)
+bash scripts/swe-bench.sh --full
+```
+
+See [docs/swe-bench-methodology.md](docs/swe-bench-methodology.md) for task selection, scoring, and limitations.
 
 ## Contributing
 
