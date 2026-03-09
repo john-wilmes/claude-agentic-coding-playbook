@@ -126,6 +126,7 @@ The wizard will:
 
 - **[Best Practices Guide](docs/best-practices.md)** -- the full evidence-backed guide with 34 verified citations
 - **[Project CLAUDE.md Template](templates/project-CLAUDE.md)** -- starting point for per-project instructions
+- **[Dogfooding Guide](docs/dogfooding.md)** -- how to design and run a sustained dogfood campaign against real codebases, with a 100-task worked example
 - **[Dogfood Playbook](docs/dogfood-playbook.md)** -- manual interactive testing checklist for verifying the full user experience
 
 ## Benchmarks
