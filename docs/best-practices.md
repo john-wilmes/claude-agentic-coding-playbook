@@ -1414,7 +1414,7 @@ surface language server information that a standalone CLI cannot access.
 
 ---
 
-## 12. Multi-Agent Coordination
+## 13. Multi-Agent Coordination
 
 ### Within-session: subagents
 

@@ -10,7 +10,7 @@ Thank you for your interest in contributing. This guide explains how to submit i
 Open a GitHub issue with a clear title and description. For factual corrections, include the specific claim, why it is wrong, and a source supporting the correction.
 
 **Submitting pull requests**
-1. Fork the repository and create a branch from `master`.
+1. Fork the repository and create a branch from the default branch.
 2. Make your changes following the style guide below.
 3. Open a pull request with a concise description of what changed and why.
 4. Address reviewer feedback promptly.
@@ -41,7 +41,7 @@ N. **Author/Org -- Title.** URL -- Key findings.
 35. **McKinsey -- The economic potential of generative AI.** https://example.com -- Developers using AI assistants completed tasks 55% faster in controlled studies.
 ```
 
-Citations are numbered sequentially in order of first appearance in `best-practices.md`. Do not reuse numbers. If a source is cited more than once, use the same number throughout. In body text, reference citations with bracket notation: `[N]`.
+Citations are numbered sequentially in order of first appearance in `best-practices.md`. Do not skip numbers. If a source is cited more than once, use the same number throughout. In body text, reference citations with bracket notation: `[N]`.
 
 Before submitting a PR that adds or modifies citations, verify each URL is live and the quoted finding accurately reflects the source.
 

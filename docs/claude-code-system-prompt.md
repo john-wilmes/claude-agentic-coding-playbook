@@ -153,7 +153,7 @@ Important:
 
 # auto memory
 
-You have a persistent auto memory directory at `C:\Users\johnw\.claude\projects\C--Users-johnw-Documents-agentic-coding-playbook\memory\`. Its contents persist across conversations.
+You have a persistent auto memory directory at `<HOME>/.claude/projects/<project-key>/memory/`. Its contents persist across conversations.
 
 As you work, consult your memory files to build on previous experience.
 

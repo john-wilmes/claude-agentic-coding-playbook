@@ -398,7 +398,7 @@ Body text.`;
 
 console.log("\nsession-start.js size warnings:");
 
-test("19. MEMORY.md >120 lines triggers size warning", (env) => {
+test("18. MEMORY.md >120 lines triggers size warning", (env) => {
   const projDir = createProjectDir({ git: true });
   // Create a MEMORY.md with 130 lines
   const lines = ["# Memory\n", "## Current Work\n", "Working on tests.\n"];
@@ -415,7 +415,7 @@ test("19. MEMORY.md >120 lines triggers size warning", (env) => {
   assert.ok(ctx.includes("/checkpoint"), "Should suggest /checkpoint");
 });
 
-test("20. MEMORY.md <120 lines does NOT trigger size warning", (env) => {
+test("19. MEMORY.md <120 lines does NOT trigger size warning", (env) => {
   const projDir = createProjectDir({ git: true });
   const memContent = "# Memory\n\n## Current Work\n\nSmall file.\n";
   createMemoryFile(env.home, projDir, memContent);
@@ -429,7 +429,7 @@ test("20. MEMORY.md <120 lines does NOT trigger size warning", (env) => {
   assert.ok(!ctx.includes("MEMORY.md is"), "Should NOT warn about small MEMORY.md");
 });
 
-test("21. Combined CLAUDE.md >700 lines triggers size warning", (env) => {
+test("20. Combined CLAUDE.md >700 lines triggers size warning", (env) => {
   const projDir = createProjectDir({ git: true });
   // Create a large global CLAUDE.md
   const lines = ["# CLAUDE.md\n"];
@@ -454,7 +454,7 @@ test("21. Combined CLAUDE.md >700 lines triggers size warning", (env) => {
 
 console.log("\nsession-end.js cross-agent isolation:");
 
-test("22. session-end only stages its OWN project MEMORY.md, not other projects'", (env) => {
+test("21. session-end only stages its OWN project MEMORY.md, not other projects'", (env) => {
   // Set up a git repo in the temp ~/.claude dir (simulates a real multi-project install)
   const gitEnv = { HOME: env.home, USERPROFILE: env.home, GIT_AUTHOR_NAME: "Test", GIT_COMMITTER_NAME: "Test", GIT_AUTHOR_EMAIL: "t@t.com", GIT_COMMITTER_EMAIL: "t@t.com" };
   const gitIn = { cwd: env.claudeDir, encoding: "utf8", env: { ...process.env, ...gitEnv } };
