@@ -135,6 +135,16 @@ Bugs should be **plausible** — the kind of mistake a human might actually make
 
 **Do not** seed bugs that would be caught by a compiler or type checker before the agent even runs tests. The bug should survive initial compilation and only surface during testing, analysis, or runtime.
 
+### When to plant seeds
+
+**Plant each seed just before its task, not all at once.** If Task 1 is "run the full test suite," any seed that causes a test or build failure will be found immediately — before the agent reaches the intended [SEEDED] task. This burns the seed (E1/K1 data is lost for that task) and worse, the agent may log "fixed seeded bug" in its memory, priming it to look for planted bugs in all future tasks.
+
+In a real campaign, three of four seeds in one project were discovered during Task 1 because they caused test failures, build errors, or lint warnings when the existing suite ran. The fourth seed (an unanchored regex) survived because no tests exercised that code path yet.
+
+**The rule:** a seed must only be discoverable by the new code the agent writes for its specific task. If the existing test suite would catch it, either:
+- Plant it just before the [SEEDED] task starts (not at campaign start)
+- Choose a bug type that requires new tests to surface (e.g., an unanchored regex in untested code, not a broken import that fails the build)
+
 ### Documenting seeds
 
 Keep a private manifest mapping task numbers to planted bugs. Store it outside the project repos — in a separate coordinator directory or in the playbook's own memory. Agents working on the target projects should not have access to this file:
