@@ -311,6 +311,45 @@ Each project gets its own agent session running in a loop. A session loop is a w
 
 The agent reads its task queue on `/continue`, finds the first unchecked task, works through it, appends results, and checkpoints. The loop respawns for the next task. No human intervention is needed during normal execution — review results periodically and investigate any failed features.
 
+## Real-World Results: Focused Campaign (v2)
+
+The following results come from a 14-task focused campaign run across two production projects (a React/Vite auction platform and a TypeScript monorepo static analysis toolchain). The campaign validated 7 playbook features using 7 tasks per project.
+
+### Feature results
+
+| Feature | Description | Project A | Project B |
+|---------|-------------|-----------|-----------|
+| K1 | Spontaneous `/learn` after discoveries | PASS | PASS |
+| PR | `/promote` lesson to global scope | PASS | PASS |
+| K2 | Knowledge injection in next session | PASS | SKIP (deferred) |
+| R1 | `/investigate` full lifecycle | PASS | PASS |
+| P1 | Plan mode for multi-file changes | PASS | pending |
+| MR | Model-router auto-selects tier | PASS | pending |
+| L1 | `/checkpoint` sentinel exit | PASS | pending |
+
+Project A completed all 7 tasks (7/7 PASS). Project B completed 4/7 (3 pending due to session limits).
+
+### Emergent findings
+
+The most valuable outcomes were **unplanned discoveries** — behaviors not covered by any task's success criteria:
+
+1. **Context safeguards fail on multi-file edits.** Instruction-based thresholds ("compact at 60%") are ignored when a single turn edits 14+ files. Each Edit/Read tool call returns file contents, spiking context 20-30% in one turn. **Fix:** System-level PostToolUse hooks that track cumulative tool result size, not instruction-based reminders.
+
+2. **Post-compaction amnesia.** After auto-compaction, agents lose awareness of task queues and go freelance — working on whatever seems interesting rather than the next queued task. Memory files survive but the agent doesn't re-read them without a fresh `/continue`. **Fix:** Session loop (`claude-loop`) that respawns after compaction with `/continue` as the first prompt.
+
+3. **Agents don't self-advance through task queues.** "Work through tasks in order" is insufficient. Agents complete one task and wait for user input. **Fix:** `claude-loop --task-queue` flag that auto-advances, or explicit "after completing this task, read the queue and start the next one" instructions.
+
+4. **Hook output structure is silently fragile.** The model-router hook's `updatedInput` field must be nested inside `hookSpecificOutput`, not at the top level of the JSON output. Top-level placement silently fails — the hook executes without error but the input modification is ignored. No warning, no log entry. **Fix:** Integration tests for hook output structure, not just hook execution.
+
+5. **Seeded bug tags defeat their purpose.** Marking tasks with `[SEEDED]` tells the agent a bug exists, turning discovery into treasure hunting. The agent searches for anomalies rather than discovering them through normal work. **Fix:** Plant bugs silently before the session, or use naturally-occurring bugs instead.
+
+### Implications for the playbook
+
+These findings led to three new infrastructure components:
+- **context-guard hook** — PostToolUse hook that tracks cumulative tool result size and warns/blocks at configurable thresholds
+- **claude-loop --task-queue** — automation flag that advances through a task queue file across session boundaries
+- **model-router fix** — corrected JSON nesting for `updatedInput` in `hookSpecificOutput`
+
 ## Interpreting Results
 
 ### Feature-level analysis
