@@ -1,0 +1,10 @@
+language: en-US
+reviews:
+  auto_review:
+    enabled: true
+    drafts: false
+  path_instructions:
+    - path: "best-practices.md"
+      instructions: "This is the main deliverable. Check claims against evidence. Flag unsupported assertions."
+    - path: "*.sh"
+      instructions: "Check for shellcheck issues, quoting, and edge cases."
