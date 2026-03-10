@@ -88,22 +88,31 @@ process.stdin.on("end", () => {
       state.warned = true;
       saveState(stateFile, state);
       process.stdout.write(JSON.stringify({
-        additionalContext:
-          `Context warning: estimated usage is ${pct}% ${stats}. ` +
-          `Run /compact or /checkpoint soon. Do not start new multi-file work.` + perCallWarning,
+        hookSpecificOutput: {
+          hookEventName: "PostToolUse",
+          additionalContext:
+            `Context warning: estimated usage is ${pct}% ${stats}. ` +
+            `Run /compact or /checkpoint soon. Do not start new multi-file work.` + perCallWarning,
+        },
       }));
     } else if (usage >= SUBAGENT_THRESHOLD && !state.subagentWarned) {
       state.subagentWarned = true;
       saveState(stateFile, state);
       process.stdout.write(JSON.stringify({
-        additionalContext:
-          `Context note: estimated usage is ${pct}% ${stats}. ` +
-          `If remaining work touches 3+ files, delegate to a subagent to protect parent context.` + perCallWarning,
+        hookSpecificOutput: {
+          hookEventName: "PostToolUse",
+          additionalContext:
+            `Context note: estimated usage is ${pct}% ${stats}. ` +
+            `If remaining work touches 3+ files, delegate to a subagent to protect parent context.` + perCallWarning,
+        },
       }));
     } else if (perCallWarning) {
       saveState(stateFile, state);
       process.stdout.write(JSON.stringify({
-        additionalContext: `Context note:${perCallWarning}`,
+        hookSpecificOutput: {
+          hookEventName: "PostToolUse",
+          additionalContext: `Context note:${perCallWarning}`,
+        },
       }));
     } else {
       process.stdout.write(JSON.stringify({}));

@@ -112,7 +112,7 @@ test("2. 3 identical calls: warning in additionalContext", () => {
 test("3. 5 identical calls: blocked", () => {
   const sessionId = newSessionId();
   try {
-    const payload = { command: "npm test" };
+    const payload = { command: "cat README.md" };
     for (let i = 0; i < 4; i++) {
       runDetector(sessionId, "Bash", payload);
     }
@@ -164,6 +164,23 @@ test("5. After block at 5, different call resets (no block, no warning)", () => 
     assert.ok(result.json, "Should output valid JSON");
     assert.strictEqual(result.json.decision, undefined, "Should not block after reset");
     assert.strictEqual(result.json.hookSpecificOutput, undefined, "Should not warn after reset");
+  } finally {
+    cleanupSession(sessionId);
+  }
+});
+
+// Test 7: Whitelisted test commands are never flagged as stuck
+test("7. Whitelisted test commands: never warned or blocked", () => {
+  const sessionId = newSessionId();
+  try {
+    const payload = { command: "npm test" };
+    for (let i = 0; i < 6; i++) {
+      const result = runDetector(sessionId, "Bash", payload);
+      assert.strictEqual(result.status, 0, `Call ${i + 1} should exit 0`);
+      assert.ok(result.json, `Call ${i + 1} should output valid JSON`);
+      assert.strictEqual(result.json.decision, undefined, `Call ${i + 1} should not block`);
+      assert.strictEqual(result.json.hookSpecificOutput, undefined, `Call ${i + 1} should not warn`);
+    }
   } finally {
     cleanupSession(sessionId);
   }

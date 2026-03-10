@@ -71,7 +71,8 @@ function upsertSnapshot(memFile, snapshotSection) {
   try { existing = fs.readFileSync(memFile, "utf8"); } catch {}
 
   // If a previous Pre-compact snapshot section exists, replace it.
-  // Otherwise prepend before any existing content.
+  // Otherwise append at the end — avoids pushing Current Work past
+  // the 200-line truncation boundary.
   const HEADER = "## Pre-compact snapshot";
   if (existing.includes(HEADER)) {
     // Replace from the header to the next ## section (or end of file)
@@ -81,8 +82,9 @@ function upsertSnapshot(memFile, snapshotSection) {
     );
     fs.writeFileSync(memFile, replaced + (replaced.endsWith("\n") ? "" : "\n"));
   } else {
-    // Prepend the snapshot so it is always visible at the top
-    fs.writeFileSync(memFile, snapshotSection + "\n" + existing);
+    // Append at the end so it does not push existing content past truncation
+    const sep = existing.endsWith("\n") ? "\n" : "\n\n";
+    fs.writeFileSync(memFile, existing + sep + snapshotSection);
   }
 }
 
