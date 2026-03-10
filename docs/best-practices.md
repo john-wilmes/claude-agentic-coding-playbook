@@ -55,6 +55,7 @@ source; every recommendation is grounded in evidence.
 13. [Multi-Agent Coordination](#13-multi-agent-coordination)
 14. [Shared Knowledge Base](#14-shared-knowledge-base)
 15. [Getting Started](#15-getting-started)
+16. [The Physics of Context](#16-the-physics-of-context)
 - [Citations](#citations)
 
 ---
@@ -1904,7 +1905,285 @@ Ubuntu instance.
 
 ---
 
-Last updated: 2026-03-09
+## 16. The Physics of Context
+
+Context windows are not uniform containers. Transformer architecture imposes non-uniform
+internal topology: some positions accumulate more attention weight than others, and
+performance degrades non-linearly as fill increases. This section synthesizes the
+research so that design decisions — compaction thresholds, instruction placement,
+evaluation methodology — have explicit empirical grounding.
+
+### 16.1 Context Window Topology
+
+#### Context rot
+
+Chroma Research (2025) tested 18 frontier models across controlled fill levels and
+found non-linear performance degradation in all of them [37]. The practical ceiling —
+the fill level at which accuracy drops materially — is 60-70% of advertised maximum.
+Counterintuitively, coherently structured content (e.g., a well-organized codebase)
+degrades faster than shuffled haystacks, because the model's attention patterns over
+coherent text are more sensitive to position than over random orderings.
+
+#### Lost in the middle
+
+Liu et al. (Stanford, TACL 2023/2024) documented a U-shaped retrieval performance
+curve: information near the beginning and end of context is retrieved reliably;
+information in the middle degrades 15-30%. At fill levels above 50%, models shift
+to recency-only bias, effectively ignoring early context [39].
+
+#### NUMA-aware context engineering
+
+Patel (Substack 2025) introduced a framework treating context windows as Non-Uniform
+Memory Access (NUMA) in classical computing [39]. The mechanism:
+
+- **Causal masking**: every token attends to all prior tokens; early tokens accumulate
+  attention weight across the entire sequence
+- **RoPE position encoding**: introduces long-term decay — tokens far from the query
+  position receive attenuated attention
+
+Practical consequence: anchor critical facts at front and end, compress the middle
+aggressively. Semantic pruning (remove low-relevance content) outperforms recency
+pruning (remove oldest content) because the middle zone accumulates regardless of
+insertion order.
+
+#### Context length alone hurts
+
+arXiv:2510.05381 (2025) isolated the length effect from retrieval quality [48].
+Even with perfect retrieval — all and only the relevant files present — performance
+degrades 13.9-85% as input length increases. Adding relevant files still imposes a
+context-length penalty from increased sequence processing burden.
+
+#### Observation token concentration
+
+JetBrains Research (arXiv:2508.21433, 2025) profiled SWE-bench agent runs and found
+that tool observations (file reads, grep output, bash results) comprise approximately
+84% of agent context tokens [38]. The implication is direct: multi-file edit sessions
+spike context not because of agent reasoning, but because each tool call appends its
+full output to the sequence. A single `/read` on a 500-line file adds ~3,000 tokens.
+
+**Summary table**
+
+| Finding | Source | Practical threshold |
+|---------|--------|---------------------|
+| Effective capacity 60-70% of maximum | Chroma [37] | Compact at 60% |
+| 15-30% retrieval loss for mid-context | Liu et al. [39] | Put critical facts first/last |
+| Length penalty 13.9-85% despite perfect retrieval | arXiv:2510.05381 [48] | Minimize total input |
+| 84% of tokens are tool observations | JetBrains [38] | Mask old tool outputs |
+| Auto-compaction fires at ~80% | Anthropic [1] | 80% is already degraded |
+
+The 60% compact threshold used in this playbook is validated by multiple independent
+findings. The 80% auto-compaction threshold fires inside the already-degraded zone;
+if compaction is not triggered manually, the agent is operating on degraded context
+before the session ends.
+
+---
+
+### 16.2 Observation Management
+
+Tool outputs are the dominant cost driver and the highest-leverage compression
+target. The techniques below are ranked by token savings and performance impact.
+
+| Technique | Token savings | Performance impact | Source |
+|-----------|--------------|-------------------|--------|
+| Observation masking (replace old tool outputs with summary placeholders) | 52.7% cost reduction | +1.4% solve rate (improved) | JetBrains [38] |
+| Read-once deduplication (block re-reads of unchanged files) | 38-40% file-read savings | Neutral | Community PreToolUse hook |
+| Verbatim compaction (preserve exact text, drop redundancy) | 50-70% compression | 98% retention | Morph [40] |
+| LLM summarization (Claude Code auto-compact at 80%) | 80-90% compression | 37% multi-session retention | Morph [40] |
+
+The counterintuitive finding: LLM summarization — the method Claude Code uses at
+80% auto-compaction — is the worst-performing approach for coding agents. It
+destroys file paths, error codes, and variable names. The agent after auto-compaction
+cannot reliably reconstruct the exact state it was in. Observation masking, by
+contrast, *improves* solve rate while cutting costs, because it removes noise without
+destroying precision.
+
+Verbatim compaction (Morph 2025) achieves 98% retention at 50-70% compression by
+dropping redundant content while preserving exact text for anything referenced.
+
+#### The MemGPT mental model
+
+Zheng et al. (arXiv:2310.08560, 2023) framed LLM context management as operating
+system memory paging [41]: main context is RAM, external storage is disk, and
+explicit paging operations move content between them. This framework, which evolved
+into the Letta platform, maps cleanly to Claude Code session management:
+
+- **Page-out** = PreCompact hook writing task state, file hashes, and key findings
+  to MEMORY.md before compaction discards them
+- **Page-in** = session-start `/continue` reading MEMORY.md and restoring task state
+
+The gap in most setups is that page-in is not automatic after auto-compaction. The
+agent resumes with summarized context and no explicit re-read of MEMORY.md, producing
+the post-compaction amnesia documented in the Lessons Learned section.
+
+Cline's production finding is consistent: proactive session handoff at 50% fill, not
+80%. Waiting for the model-enforced threshold means the agent is already in the
+degraded zone when handoff occurs.
+
+---
+
+### 16.3 Instruction Reliability
+
+Instructions in CLAUDE.md are text. Text is probabilistic. The research quantifies
+how unreliable that is in agentic scenarios.
+
+#### The reliability spectrum
+
+| Level | Mechanism | Reliability | Example |
+|-------|-----------|-------------|---------|
+| 1. Pure instruction | CLAUDE.md text | 30-80% | "Use plan mode for multi-file changes" |
+| 2. Hybrid (instruction + soft signal) | Hook injects warning at decision point | 60-90% | Context-guard 60% warning |
+| 3. Hard enforcement | Hook blocks execution | >95% | Context-guard 70% block |
+| 4. Architectural | System structure prevents violation | ~100% | claude-loop task queue, flock |
+
+#### Research findings
+
+**AgentIF** (Tsinghua University, arXiv:2505.16944, 2025): benchmark of 707
+instructions across 50 real applications [42]. GPT-4o drops from 87% on the
+standard IFEval benchmark to 58.5% on agentic instructions. Best models perfectly
+follow fewer than 30% of instructions in real agentic scenarios. Performance
+approaches zero when instructions exceed 6,000 words.
+
+**Control Illusion** (arXiv:2502.15851, 2025): measured primary obedience rate
+across six models [43]. Result: 9.6-45.8%. Larger models did not reliably outperform
+smaller ones. System prompt vs user prompt separation provides weak enforcement —
+the separation is a convention, not a barrier.
+
+**Instruction ceiling** (HumanLayer 2025): uniform compliance degradation begins
+around 150-200 instructions [50]. Claude Code's built-in system prompt uses
+approximately 50 of that budget, leaving ~100-150 for user-defined rules before
+degradation begins.
+
+**Prompt brittleness** (ICLR 2024): semantically equivalent prompt variants produced
+accuracy ranges spanning 76 percentage points [49]. The same instruction written
+differently can fail or succeed depending on phrasing, not semantics.
+
+#### Practical recommendations
+
+- Place rationale clauses alongside instructions: compliance improves ~30% when the
+  agent understands why a rule exists (BRICS Econ 2024).
+- Make block messages directive, not explanatory. "BLOCKED. Run /checkpoint now."
+  is more reliable than a paragraph explaining context degradation.
+- Accept that any workflow behavior requiring >90% reliability must be enforced
+  architecturally. "Guidelines live in prompts, fail-safes live in code" reflects
+  industry consensus as of 2025-2026.
+- AgentSpec (arXiv:2503.18666, ICSE 2026) provides a hook-based enforcement
+  framework that prevents >90% of unsafe agent executions with millisecond overhead
+  [51]. The context-guard hook in this playbook implements the same pattern.
+
+---
+
+### 16.4 Process Supervision for Autonomous Agents
+
+Autonomous agents introduce a class of failure that interactive sessions do not
+have: the agent continues running after the user disengages. Two variants:
+
+1. **Process orphans**: the agent process continues after the terminal closes or the
+   user forgets about it. It may consume tokens indefinitely or take unintended
+   actions.
+2. **Semantic orphans**: the agent is alive but stuck in a loop — retrying the same
+   failing action, or waiting for input that will never arrive.
+
+#### Supervision patterns
+
+**Registry + heartbeat**: on session start, write `{pid, task, started_at}` to a
+known location. Update `last_seen` on each tool call. On read, prune entries where
+`last_seen` is stale. A monitoring process can detect orphans by scanning the
+registry. `claude-loop` implements this with `flock` for mutual exclusion.
+
+**Stuck-detection**: OpenHands (arXiv:2511.03690, 2025) detects stuck agents by
+monitoring for repeated identical actions [47]. An event-sourced log captures every
+action with its full context; the supervisor scans for cycles and triggers auto-abort.
+The pause/resume API allows human intervention without killing the process.
+
+**Erlang/OTP "let it crash"**: do not write defensive error handling inside the
+agent. Handle crashes externally in the supervisor process. An agent that catches
+its own exceptions and retries silently is harder to supervise than one that fails
+fast and lets the supervisor decide the restart policy.
+
+**Exponential backoff**: Kubernetes CrashLoopBackOff is the canonical solution to
+fast crash loops: 10s → 20s → 40s → 80s → 160s, capped at 300s, with a 10-minute
+reset threshold. `claude-loop` adopts the same pattern with `MAX_TASK_ATTEMPTS=3`
+before marking a task `[FAIL]` and advancing to the next one.
+
+#### The thin orchestrator finding
+
+NVIDIA (2025) found that a specialized small orchestrator — a deterministic process
+routing tasks to workers — consistently outperformed larger monolithic LLMs at
+orchestration tasks. The implication: keep routing, scheduling, and loop-control
+logic in deterministic code, not in the LLM. The LLM is the worker; the shell
+script is the supervisor.
+
+---
+
+### 16.5 Evaluation Without Confounding
+
+Measuring agent capability without confounding infrastructure effects is harder than
+it appears. The dominant failure mode: using automated test pass rates as a proxy
+for actual output quality.
+
+#### The holistic gap
+
+METR (August 2025) evaluated agents on a coding benchmark and found 38% test-pass
+rate but 0% of outputs mergeable as-is [44]. Automated tests passed; the code
+required substantial rework. The gap between test-pass rate and mergeable-as-is is
+the holistic gap — and it makes automated benchmarks unreliable predictors of real
+deployment value.
+
+#### Self-reporting is not evidence
+
+Agents exhibit two distinct gaps: a knowledge-identification gap (cannot correctly
+identify which instructions apply) and an identification-execution gap (correctly
+identifies the instruction but does not execute it). An agent claiming "I used plan
+mode for this change" is not evidence the Plan tool was invoked. Only the session
+JSON — the actual tool call log — is evidence.
+
+#### Isolating infrastructure effects
+
+Cognition AI's "Devin-Base" approach (2024) uses a 2x2 factorial design [45]:
+
+|  | No infrastructure | Full infrastructure |
+|--|------------------|---------------------|
+| **Old model** | baseline | infra effect on old model |
+| **New model** | model effect | combined effect |
+
+The delta-of-deltas isolates infrastructure contribution from model capability
+contribution. Without this isolation, a measured improvement could be entirely due
+to a better base model, not the infrastructure changes under evaluation.
+
+#### Metrics
+
+**pass@k vs pass^k** (Anthropic 2025) [46]: for infrastructure evaluation, reliability
+matters more than peak capability.
+
+- `pass@k`: at least one of k runs succeeds. Measures capability ceiling.
+- `pass^k`: all k runs succeed. Measures reliability floor.
+
+An infrastructure change that improves `pass@k` but degrades `pass^k` increased
+peak capability while reducing reliability. For production systems, `pass^k` is the
+decision-relevant metric.
+
+**IFEval principle**: if a behavior cannot be checked objectively, it cannot be
+measured reliably. Redesign workflow instructions as verifiable constraints (a tool
+was or was not called) rather than subjective assessments (the agent "followed
+the workflow").
+
+#### Recommended evaluation checklist
+
+- Log `(task hash, model version, infrastructure commit SHA, outcome)` per run so
+  results are reproducible and attributable.
+- Pre-register expected behaviors before running to prevent post-hoc rationalization.
+- Use a 5-point holistic score alongside test pass rate:
+  - 0 = requires restart
+  - 1 = major rework needed
+  - 2 = minor rework needed
+  - 3 = cosmetic changes only
+  - 4 = merge as-is
+- Track token consumption alongside task outcome. A solution that passes all tests
+  but costs 10x the baseline is not an improvement for production use.
+
+---
+
+Last updated: 2026-03-10
 
 ---
 
@@ -1981,3 +2260,33 @@ Last updated: 2026-03-09
 35. **Anthropic -- Claude Code MCP.** https://code.claude.com/docs/en/mcp -- MCP server configuration, scopes (project/user/local), environment variable expansion, Tool Search activation, MAX_MCP_OUTPUT_TOKENS, transport options (stdio/HTTP).
 
 36. **Model Context Protocol -- Introduction.** https://modelcontextprotocol.io/introduction -- MCP architecture overview; primitives (tools/resources/prompts); JSON-RPC 2.0 transport; stdio and streamable HTTP transports; open standard specification.
+
+37. **Chroma Research -- Context Rot.** https://research.trychroma.com/context-rot -- Non-linear performance degradation across 18 frontier models at controlled fill levels; practical ceiling at 60-70% of advertised maximum; coherent content degrades faster than shuffled haystacks.
+
+38. **JetBrains Research -- Agent Observation Token Analysis (arXiv:2508.21433).** https://arxiv.org/abs/2508.21433 -- Tool observations comprise 84% of agent context tokens in SWE-bench runs; observation masking achieves 52.7% cost reduction with +1.4% solve rate.
+
+39. **Liu et al. -- Lost in the Middle: How Language Models Use Long Contexts (Stanford, TACL 2024).** https://arxiv.org/abs/2307.03172 -- U-shaped retrieval performance curve; 15-30% degradation for mid-context information; recency-only bias above 50% fill; basis for NUMA-style context engineering frameworks.
+
+40. **Morph -- Compaction vs Summarization.** https://www.morphllm.com/compaction-vs-summarization -- Verbatim compaction achieves 98% retention at 50-70% compression; LLM summarization achieves 37% multi-session retention at 80-90% compression; zero hallucination risk from deletion-based approach.
+
+41. **Zheng et al. -- MemGPT: Towards LLMs as Operating Systems (arXiv:2310.08560).** https://arxiv.org/abs/2310.08560 -- LLM context management framed as OS memory paging; main context as RAM, external storage as disk; explicit page-in/page-out operations; evolved into the Letta platform.
+
+42. **AgentIF -- Benchmarking Agent Instruction Following (Tsinghua, arXiv:2505.16944).** https://arxiv.org/abs/2505.16944 -- 707 instructions across 50 real applications; GPT-4o drops from 87% (IFEval) to 58.5% on agentic instructions; best models follow fewer than 30% of instructions; performance approaches zero beyond 6,000 words.
+
+43. **Control Illusion (arXiv:2502.15851).** https://arxiv.org/abs/2502.15851 -- Primary obedience rate of 9.6-45.8% across six models; larger models did not reliably outperform smaller ones; system/user prompt separation provides weak enforcement.
+
+44. **METR -- Algorithmic vs Holistic Evaluation (August 2025).** https://metr.org/blog/2025-08-12-research-update-towards-reconciling-slowdown-with-time-horizons/ -- 38% test-pass rate but 0% of outputs mergeable as-is; gap between automated scoring and real-world code quality.
+
+45. **Cognition AI -- Evaluating Coding Agents.** https://cognition.ai/blog/evaluating-coding-agents -- "Devin-Base" component-swap evaluation methodology; internal "cognition-golden" benchmark on production-scale codebases; isolating model contribution from infrastructure contribution.
+
+46. **Yao et al. -- τ-bench: Tool-Agent-User Interaction Benchmark (arXiv:2406.12045).** https://arxiv.org/abs/2406.12045 -- pass^k metric measuring reliability (all k trials succeed) vs pass@k measuring capability (at least one succeeds); adopted by Anthropic for Claude evaluation.
+
+47. **OpenHands -- Stuck Agent Detection (arXiv:2511.03690).** https://arxiv.org/abs/2511.03690 -- Event-sourced action logging; cycle detection for repeated identical actions; auto-abort for stuck agents; pause/resume API for human intervention without process termination.
+
+48. **Context Length Penalty (arXiv:2510.05381).** https://arxiv.org/abs/2510.05381 -- Isolated length effect from retrieval quality; 13.9-85% performance degradation from input length alone; adding only relevant files still imposes a processing penalty.
+
+49. **Sclar et al. -- Prompt Format Sensitivity (ICLR 2024).** https://arxiv.org/abs/2310.11324 -- Up to 76 percentage point accuracy variation across semantically equivalent prompt formats; sensitivity persists across model sizes and instruction tuning.
+
+50. **HumanLayer -- Instruction Ceiling.** https://www.humanlayer.dev/blog/writing-a-good-claude-md -- Uniform compliance degradation begins around 150-200 instructions; Claude Code's system prompt consumes ~50 of that budget. (See also [5].)
+
+51. **AgentSpec -- Hook-Based Agent Enforcement (arXiv:2503.18666, ICSE 2026).** https://arxiv.org/abs/2503.18666 -- Prevents >90% of unsafe agent executions with millisecond overhead; hook-based enforcement framework; specification-driven safety guarantees.
