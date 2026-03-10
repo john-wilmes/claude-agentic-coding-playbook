@@ -7,8 +7,8 @@
 // PreToolUse (no matcher — fires on ALL tools):
 //   Reads state file only (~100 bytes). If lastUsageRatio >= 60%, hard-blocks
 //   the tool (prevents execution). Allows:
+//   - Skill, Bash, Task tools (so /checkpoint can fire, run git ops, delegate)
 //   - Tools with file_path under ~/.claude/ (so /checkpoint can update memory)
-//   - The Skill tool (so /checkpoint and /compact can fire)
 //
 // Primary: reads actual token counts from the session transcript JSONL.
 // Fallback: estimates from tool I/O sizes when transcript is unavailable.
@@ -168,9 +168,9 @@ process.stdin.on("end", () => {
     if (isPreToolUse) {
       const state = loadState(stateFile);
       if (state.lastUsageRatio >= BLOCK_THRESHOLD) {
-        // Allow Skill tool so /checkpoint and /compact can fire
+        // Allow Skill, Bash, Task so /checkpoint can fire, run git, and delegate
         const toolName = hookInput.tool_name || "";
-        if (toolName === "Skill") {
+        if (toolName === "Skill" || toolName === "Bash" || toolName === "Task") {
           process.stdout.write(JSON.stringify({}));
           process.exit(0);
         }
@@ -243,9 +243,11 @@ process.stdin.on("end", () => {
         context: { mode: "post", ratio: ctx.ratio, pct, tokens: ctx.tokens },
       });
       output = {
-        decision: "block",
-        reason:
-          `BLOCKED: ${pct}% context used ${ctx.stats}. Run /checkpoint now.`,
+        hookSpecificOutput: {
+          hookEventName: "PostToolUse",
+          additionalContext:
+            `CRITICAL: ${pct}% context used ${ctx.stats}. Run /checkpoint NOW. Do not start new work.`,
+        },
       };
     } else if (ctx.ratio >= WARN_THRESHOLD && !state.warned) {
       state.warned = true;
