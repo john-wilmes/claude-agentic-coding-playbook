@@ -177,6 +177,90 @@ test("13. curl with plain URL (no env var) -> allow", (env) => {
   assert.strictEqual(result.json.decision, "allow");
 });
 
+// ─── Destructive command pattern tests ───────────────────────────────────────
+
+console.log("\nprompt-injection-guard.js (destructive command patterns):");
+
+// --- BLOCK cases ---
+
+test("D1. rm -rf / -> block", (env) => {
+  const result = runGuard("rm -rf /", env);
+
+  assert.strictEqual(result.status, 0);
+  assert.strictEqual(result.json.decision, "block");
+  assert.ok(result.json.reason.includes("rm -rf"), `Reason was: ${result.json.reason}`);
+});
+
+test("D2. rm -rf ~/ -> block", (env) => {
+  const result = runGuard("rm -rf ~/", env);
+
+  assert.strictEqual(result.status, 0);
+  assert.strictEqual(result.json.decision, "block");
+  assert.ok(result.json.reason.includes("rm -rf"), `Reason was: ${result.json.reason}`);
+});
+
+test("D3. git push --force origin main -> block", (env) => {
+  const result = runGuard("git push --force origin main", env);
+
+  assert.strictEqual(result.status, 0);
+  assert.strictEqual(result.json.decision, "block");
+  assert.ok(result.json.reason.includes("force-push"), `Reason was: ${result.json.reason}`);
+});
+
+test("D4. git reset --hard -> block", (env) => {
+  const result = runGuard("git reset --hard HEAD~1", env);
+
+  assert.strictEqual(result.status, 0);
+  assert.strictEqual(result.json.decision, "block");
+  assert.ok(result.json.reason.includes("reset --hard"), `Reason was: ${result.json.reason}`);
+});
+
+test("D5. git clean -fd -> block", (env) => {
+  const result = runGuard("git clean -fd", env);
+
+  assert.strictEqual(result.status, 0);
+  assert.strictEqual(result.json.decision, "block");
+  assert.ok(result.json.reason.includes("git clean"), `Reason was: ${result.json.reason}`);
+});
+
+test("D6. DROP TABLE users -> block", (env) => {
+  const result = runGuard("psql -c 'DROP TABLE users;'", env);
+
+  assert.strictEqual(result.status, 0);
+  assert.strictEqual(result.json.decision, "block");
+  assert.ok(result.json.reason.includes("DROP"), `Reason was: ${result.json.reason}`);
+});
+
+// --- PASS cases (false-positive avoidance) ---
+
+test("D7. rm -rf node_modules/ (scoped path) -> allow", (env) => {
+  const result = runGuard("rm -rf node_modules/", env);
+
+  assert.strictEqual(result.status, 0);
+  assert.strictEqual(result.json.decision, "allow");
+});
+
+test("D8. git push --force origin feature-branch (not main/master) -> allow", (env) => {
+  const result = runGuard("git push --force origin feature-branch", env);
+
+  assert.strictEqual(result.status, 0);
+  assert.strictEqual(result.json.decision, "allow");
+});
+
+test("D9. git clean -fdn (dry-run) -> allow", (env) => {
+  const result = runGuard("git clean -fdn", env);
+
+  assert.strictEqual(result.status, 0);
+  assert.strictEqual(result.json.decision, "allow");
+});
+
+test("D10. SELECT * FROM users (non-destructive SQL) -> allow", (env) => {
+  const result = runGuard("psql -c 'SELECT * FROM users;'", env);
+
+  assert.strictEqual(result.status, 0);
+  assert.strictEqual(result.json.decision, "allow");
+});
+
 // ─── Unit tests (checkCommand exported function) ──────────────────────────────
 
 console.log("\nprompt-injection-guard.js (checkCommand unit tests):");

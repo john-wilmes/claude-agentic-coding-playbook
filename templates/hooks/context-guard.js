@@ -32,7 +32,7 @@ function loadState(stateFile) {
   try {
     return JSON.parse(fs.readFileSync(stateFile, "utf8"));
   } catch {
-    return { totalChars: 0, toolCalls: 0, subagentWarned: false, warned: false, blocked: false };
+    return { totalChars: 0, toolCalls: 0, subagentWarned: false, warned: false };
   }
 }
 
@@ -70,8 +70,13 @@ process.stdin.on("end", () => {
     const pct = Math.round(usage * 100);
     const stats = `(${state.toolCalls} tool calls, ~${Math.round(estimatedTokens)} tokens from results)`;
 
-    if (usage >= BLOCK_THRESHOLD && !state.blocked) {
-      state.blocked = true;
+    // Per-call size warning: flag individual large tool results
+    const PER_CALL_WARN_CHARS = 10000;
+    const perCallWarning = responseChars > PER_CALL_WARN_CHARS
+      ? ` Large tool output (~${Math.round(responseChars / CHARS_PER_TOKEN)} tokens this call). Delegate multi-file work to subagents.`
+      : "";
+
+    if (usage >= BLOCK_THRESHOLD) {
       saveState(stateFile, state);
       process.stdout.write(JSON.stringify({
         decision: "block",
@@ -85,7 +90,7 @@ process.stdin.on("end", () => {
       process.stdout.write(JSON.stringify({
         additionalContext:
           `Context warning: estimated usage is ${pct}% ${stats}. ` +
-          `Run /compact or /checkpoint soon. Do not start new multi-file work.`,
+          `Run /compact or /checkpoint soon. Do not start new multi-file work.` + perCallWarning,
       }));
     } else if (usage >= SUBAGENT_THRESHOLD && !state.subagentWarned) {
       state.subagentWarned = true;
@@ -93,7 +98,12 @@ process.stdin.on("end", () => {
       process.stdout.write(JSON.stringify({
         additionalContext:
           `Context note: estimated usage is ${pct}% ${stats}. ` +
-          `If remaining work touches 3+ files, delegate to a subagent to protect parent context.`,
+          `If remaining work touches 3+ files, delegate to a subagent to protect parent context.` + perCallWarning,
+      }));
+    } else if (perCallWarning) {
+      saveState(stateFile, state);
+      process.stdout.write(JSON.stringify({
+        additionalContext: `Context note:${perCallWarning}`,
       }));
     } else {
       process.stdout.write(JSON.stringify({}));

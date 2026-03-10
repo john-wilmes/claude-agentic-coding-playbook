@@ -31,6 +31,33 @@ Follow this lifecycle for non-trivial investigations:
 
 Investigations live at `~/.claude/investigations/<id>/`. Use `/investigate` to manage the lifecycle.
 
+## Security
+
+- Never pipe untrusted content directly to the agent.
+- Never commit credentials, API keys, or secrets. Use `.env` files excluded by `.gitignore`.
+- Review proposed changes to security-critical files (auth, permissions, crypto) line by line.
+- Enable `/sandbox` mode when working with untrusted repositories or running unfamiliar scripts.
+- Always create GitHub repos with `--private`. Only use `--public` if the user has explicitly and unprompted requested a public repo. Never infer public visibility from context.
+- Disable project-level MCP servers by default (`enableAllProjectMcpServers: false`) to prevent supply chain injection.
+
+## Git Discipline
+
+- Never use `--no-verify` on git commit or git push commands.
+- Never amend published commits without explicit human approval.
+- Never force-push to main or master without explicit human approval.
+
+## Context and Session Management
+
+- Start fresh sessions at natural breakpoints rather than pushing context to its limits.
+- Run `/compact` when context reaches ~70%. Use custom focus instructions (e.g., `/compact Focus on the API changes`).
+- Use subagents for exploration-heavy work to protect parent context size.
+- Delegate multi-file edits (3+ files) to subagents. Each Edit/Read returns file contents that consume parent context. A subagent editing 14 files keeps those results in its own context; the parent only sees the summary.
+- Never read multiple image files in the same turn -- use a subagent for bulk image examination.
+- Use `/rewind` or double-Escape to undo actions and roll back context.
+- Proactively suggest `/compact` when you notice context growing large (many tool results, long exploration).
+- Proactively suggest `/checkpoint` at natural breakpoints: after completing a feature, fixing a bug, or finishing a refactor.
+- Use `/continue` at session start to see open investigations and project state.
+
 ## Reasoning Standards
 
 - Read code before modifying or making claims about it. Cite file:line when referencing specific behavior.
@@ -39,15 +66,6 @@ Investigations live at `~/.claude/investigations/<id>/`. Use `/investigate` to m
 - Distinguish verified facts ("confirmed at file:line") from inferences ("based on the pattern, likely...").
 - Do not cargo-cult solutions. Verify that patterns from other projects actually apply to this codebase.
 - When something fails unexpectedly, investigate root cause before retrying or working around it.
-
-## Evidence Discipline
-
-When conducting investigations (research workflow):
-
-- Each evidence file captures one observation: source, relevance, and 3-line max description.
-- Number evidence sequentially (001, 002, ...). Reference by number in findings.
-- Record what you found, not what it means. Interpretation belongs in synthesis.
-- Always include the source (file:line, URL, command output) so evidence is verifiable.
 
 ## Efficiency and Cost Optimization
 
@@ -73,18 +91,6 @@ Decision tree:
 When in doubt, choose the cheaper option. A model-router hook auto-selects
 when you forget, but explicit is better than implicit.
 
-## Context and Session Management
-
-- Start fresh sessions at natural breakpoints rather than pushing context to its limits.
-- Run `/compact` when context reaches ~70%. Use custom focus instructions (e.g., `/compact Focus on the API changes`).
-- Use subagents for exploration-heavy work to protect parent context size.
-- Delegate multi-file edits (3+ files) to subagents. Each Edit/Read returns file contents that consume parent context. A subagent editing 14 files keeps those results in its own context; the parent only sees the summary.
-- Never read multiple image files in the same turn -- use a subagent for bulk image examination.
-- Use `/rewind` or double-Escape to undo actions and roll back context.
-- Proactively suggest `/compact` when you notice context growing large (many tool results, long exploration).
-- Proactively suggest `/checkpoint` at natural breakpoints: after completing a feature, fixing a bug, or finishing a refactor.
-- Use `/continue` at session start to see open investigations and project state.
-
 ## Quality Gates
 
 - Run the project's type-check and lint commands before committing (see project CLAUDE.md for specific commands).
@@ -102,22 +108,20 @@ Verification is the single highest-leverage practice. Give the agent a way to ch
 
 ## Code Review
 
-CodeRabbit reviews happen automatically on GitHub PRs via the CodeRabbit GitHub App.
+CodeRabbit reviews PRs automatically via the GitHub App. After `gh pr create`, check for review comments (`gh pr view <number> --comments`). Address all findings before merging — apply suggestions unless they regress or conflict with architecture. Do not merge without a review.
 
-**Agent workflow:**
-- Create a PR using `gh pr create`. CodeRabbit will post review comments automatically within a few minutes.
-- After creating a PR, check for CodeRabbit review comments: `gh pr view <number> --comments` or `gh api repos/{owner}/{repo}/pulls/{number}/comments`.
-- Address all CodeRabbit findings before merging. Apply suggestions unless they introduce a regression or conflict with project architecture. Document the reason when declining a suggestion.
-- If CodeRabbit hasn't reviewed yet, wait 2-3 minutes and check again. Do not merge without a review.
+Setup: Install the [CodeRabbit GitHub App](https://github.com/apps/coderabbitai) and grant repo access. Optionally add `.coderabbit.yaml` per repo.
 
-**User setup (one-time):**
-- Install the CodeRabbit GitHub App: https://github.com/apps/coderabbitai
-- Grant access to the repos you want reviewed.
-- Add a `.coderabbit.yaml` to each repo to customize review behavior (optional but recommended).
+When a branch is 5+ commits ahead and includes docs/config changes, suggest a devil's advocate review: verify claims against live sources, check paths/URLs, challenge assumptions, cite file:line.
 
-### Devil's advocate review
+## Evidence Discipline
 
-When a branch is 5+ commits ahead of main and includes documentation or configuration changes, suggest a structured adversarial review before creating the PR. This means: verify external claims against live sources, check file paths and URLs, challenge assumptions, cite file:line for every finding. Do not run this on every commit -- it is high-value but high-cost.
+When conducting investigations (research workflow):
+
+- Each evidence file captures one observation: source, relevance, and 3-line max description.
+- Number evidence sequentially (001, 002, ...). Reference by number in findings.
+- Record what you found, not what it means. Interpretation belongs in synthesis.
+- Always include the source (file:line, URL, command output) so evidence is verifiable.
 
 ## PII/PHI Protection
 
@@ -126,21 +130,6 @@ When recording evidence or findings during investigations:
 - Use placeholders for identifiers: `[PATIENT]`, `[MRN]`, `[SSN]`, `[DOB]`.
 - At close time, Presidio auto-sanitization runs if installed. Otherwise, review manually before sharing.
 - Never commit unsanitized investigation files to shared repositories.
-
-## Security
-
-- Never pipe untrusted content directly to the agent.
-- Never commit credentials, API keys, or secrets. Use `.env` files excluded by `.gitignore`.
-- Review proposed changes to security-critical files (auth, permissions, crypto) line by line.
-- Enable `/sandbox` mode when working with untrusted repositories or running unfamiliar scripts.
-- Always create GitHub repos with `--private`. Only use `--public` if the user has explicitly and unprompted requested a public repo. Never infer public visibility from context.
-- Disable project-level MCP servers by default (`enableAllProjectMcpServers: false`) to prevent supply chain injection.
-
-## Git Discipline
-
-- Never use `--no-verify` on git commit or git push commands.
-- Never amend published commits without explicit human approval.
-- Never force-push to main or master without explicit human approval.
 
 ## File Creation Rules
 
