@@ -623,6 +623,54 @@ test("26. PreToolUse blocks Task tool at 60% threshold", () => {
   }
 });
 
+// Test 27: PostToolUse block writes checkpoint-exit flag file
+test("27. PostToolUse block writes /tmp/claude-checkpoint-exit flag", () => {
+  const sessionId = newSessionId();
+  const flagFile = path.join(os.tmpdir(), "claude-checkpoint-exit");
+  // 65% of 200k = 130,000 tokens — above block threshold
+  const transcript = createFakeTranscript([makeAssistantMessage(130000)]);
+  try {
+    // Clean up any pre-existing flag file
+    try { fs.rmSync(flagFile); } catch {}
+
+    const result = runGuard(sessionId, { transcriptPath: transcript });
+    assert.strictEqual(result.status, 0);
+    assert.strictEqual(result.json.decision, "block", "Should block at 65%");
+
+    // Flag file should have been written
+    assert.ok(fs.existsSync(flagFile), "Should write claude-checkpoint-exit flag file");
+    const flag = JSON.parse(fs.readFileSync(flagFile, "utf8"));
+    assert.ok(flag.ratio >= 0.60, `Flag ratio should be >= 0.60, got ${flag.ratio}`);
+    assert.ok(flag.timestamp > 0, "Flag should have a timestamp");
+    assert.ok(Date.now() - flag.timestamp < 5000, "Flag timestamp should be recent");
+  } finally {
+    cleanupSession(sessionId);
+    try { fs.rmSync(transcript); } catch {}
+    try { fs.rmSync(flagFile); } catch {}
+  }
+});
+
+// Test 28: PostToolUse below block threshold does NOT write flag file
+test("28. PostToolUse warn (50%) does not write checkpoint-exit flag", () => {
+  const sessionId = newSessionId();
+  const flagFile = path.join(os.tmpdir(), "claude-checkpoint-exit");
+  // 55% — warn but not block
+  const transcript = createFakeTranscript([makeAssistantMessage(110000)]);
+  try {
+    try { fs.rmSync(flagFile); } catch {}
+
+    const result = runGuard(sessionId, { transcriptPath: transcript });
+    assert.strictEqual(result.status, 0);
+    assert.ok(result.json.hookSpecificOutput, "Should warn at 55%");
+    assert.strictEqual(result.json.decision, undefined, "Should not block");
+    assert.ok(!fs.existsSync(flagFile), "Should NOT write flag file below block threshold");
+  } finally {
+    cleanupSession(sessionId);
+    try { fs.rmSync(transcript); } catch {}
+    try { fs.rmSync(flagFile); } catch {}
+  }
+});
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
 console.log(`\n${"─".repeat(60)}`);

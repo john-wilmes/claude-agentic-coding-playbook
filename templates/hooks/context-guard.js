@@ -214,6 +214,14 @@ process.stdin.on("end", () => {
 
     let output;
     if (ctx.ratio >= BLOCK_THRESHOLD) {
+      // Write flag file so /checkpoint can deterministically decide to exit.
+      // Uses a fixed path — checkpoint reads this instead of guessing usage.
+      try {
+        fs.writeFileSync(
+          path.join(os.tmpdir(), "claude-checkpoint-exit"),
+          JSON.stringify({ ratio: ctx.ratio, timestamp: Date.now() })
+        );
+      } catch {}
       output = {
         decision: "block",
         reason:
