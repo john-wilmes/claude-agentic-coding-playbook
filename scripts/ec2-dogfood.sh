@@ -179,7 +179,11 @@ confidence: "high"
 # Test
 Test knowledge entry.
 EOF
-git -C "$work" add . && git -C "$work" commit -m "seed" && git -C "$work" push
+if git -C "$work" add . && git -C "$work" commit -m "seed" && git -C "$work" push; then
+  pass "seeded knowledge entry pushed"
+else
+  fail "failed to seed knowledge entry"
+fi
 
 bash "$REPO_DIR/install.sh" --profile dev --force --knowledge-repo "$bare"
 

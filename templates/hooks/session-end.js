@@ -51,7 +51,7 @@ process.stdin.on("end", () => {
       const memoryPath = `projects/${encodedCwd}/memory/MEMORY.md`;
 
       try {
-        execSync(`git add "${memoryPath}"`, gitOpts);
+        execSync("git add -- " + JSON.stringify(memoryPath), gitOpts);
       } catch {
         // Memory file may not exist yet -- skip
       }
