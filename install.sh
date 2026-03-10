@@ -522,7 +522,8 @@ if [ -f "$SCRIPT_DIR/templates/hooks/context-guard.js" ]; then
       }
     " "$SETTINGS_FILE" "$CTXGUARD_CMD"
 
-    # PreToolUse entry: matcher Edit|Write (hard-blocks file mutations at 70%).
+    # PreToolUse entry: no matcher (hard-blocks ALL tools at 60%).
+    # Upgrades old Edit|Write-only entries to no-matcher.
     node -e "
       const fs = require('fs');
       const path = require('path');
@@ -531,16 +532,20 @@ if [ -f "$SCRIPT_DIR/templates/hooks/context-guard.js" ]; then
       const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
       if (!settings.hooks) settings.hooks = {};
       if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
-      const hasEntry = settings.hooks.PreToolUse.some(e =>
-        e.hooks && e.hooks.some(h => h.command && h.command.includes('context-guard'))
+      // Check if a no-matcher context-guard entry already exists
+      const hasNoMatcher = settings.hooks.PreToolUse.some(e =>
+        !e.matcher && e.hooks && e.hooks.some(h => h.command && h.command.includes('context-guard'))
       );
-      if (!hasEntry) {
+      if (!hasNoMatcher) {
+        // Remove any old matcher-constrained context-guard entries
+        settings.hooks.PreToolUse = settings.hooks.PreToolUse.filter(e =>
+          !(e.hooks && e.hooks.some(h => h.command && h.command.includes('context-guard')))
+        );
         settings.hooks.PreToolUse.push({
-          matcher: 'Edit|Write',
           hooks: [{ type: 'command', command: hookCmd, timeout: 3 }]
         });
         fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
-        console.log('CONFIGURED: context-guard PreToolUse hook (Edit|Write)');
+        console.log('CONFIGURED: context-guard PreToolUse hook (no matcher, all tools)');
       } else {
         console.log('ALREADY CONFIGURED: context-guard PreToolUse hook in settings.json');
       }

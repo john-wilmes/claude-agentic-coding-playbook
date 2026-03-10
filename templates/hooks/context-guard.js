@@ -1,13 +1,14 @@
 // Dual-mode context guard: PreToolUse (hard block) + PostToolUse (measure & warn).
 //
 // PostToolUse (no matcher — fires on ALL tools):
-//   Reads transcript, computes usage, warns at 40%/60%, advisory block at 70%.
+//   Reads transcript, computes usage, warns at 35%/50%, advisory block at 60%.
 //   Writes lastUsageRatio to state file for PreToolUse to read.
 //
-// PreToolUse (matcher: Edit|Write — fires before file mutations):
-//   Reads state file only (~100 bytes). If lastUsageRatio >= 70%, hard-blocks
-//   the tool (prevents execution). Allows writes to ~/.claude/ paths so
-//   /checkpoint can update memory.
+// PreToolUse (no matcher — fires on ALL tools):
+//   Reads state file only (~100 bytes). If lastUsageRatio >= 60%, hard-blocks
+//   the tool (prevents execution). Allows:
+//   - Tools with file_path under ~/.claude/ (so /checkpoint can update memory)
+//   - The Skill tool (so /checkpoint and /compact can fire)
 //
 // Primary: reads actual token counts from the session transcript JSONL.
 // Fallback: estimates from tool I/O sizes when transcript is unavailable.
@@ -21,9 +22,9 @@ const CHARS_PER_TOKEN = 4;
 // Default context window size in tokens
 const CONTEXT_WINDOW = 200000;
 
-const SUBAGENT_THRESHOLD = 0.40;
-const WARN_THRESHOLD = 0.60;
-const BLOCK_THRESHOLD = 0.70;
+const SUBAGENT_THRESHOLD = 0.35;
+const WARN_THRESHOLD = 0.50;
+const BLOCK_THRESHOLD = 0.60;
 
 // State file tracks warning flags and fallback accumulator across invocations
 function getStateFile(sessionId) {
@@ -158,27 +159,34 @@ process.stdin.on("end", () => {
     const stateFile = getStateFile(sessionId);
 
     // ── PreToolUse fast path ──────────────────────────────────────────────
-    // Reads only the state file (~100 bytes). Hard-blocks Edit/Write on
-    // project files when usage >= 70%. Allows ~/.claude/ writes for checkpoint.
+    // Reads only the state file (~100 bytes). Hard-blocks ALL tools when
+    // usage >= 60%. Allows Skill tool and ~/.claude/ file paths for checkpoint.
     if (isPreToolUse) {
       const state = loadState(stateFile);
       if (state.lastUsageRatio >= BLOCK_THRESHOLD) {
-        // Allow writes to ~/.claude/ paths (memory/config needed for checkpoint)
-        const filePath = (hookInput.tool_input && hookInput.tool_input.file_path) || "";
-        const homeDir = os.homedir();
-        const claudeDir = path.join(homeDir, ".claude");
-        const normalizedFile = path.normalize(filePath);
-        const normalizedClaude = path.normalize(claudeDir);
-        if (normalizedFile.startsWith(normalizedClaude + path.sep)) {
+        // Allow Skill tool so /checkpoint and /compact can fire
+        const toolName = hookInput.tool_name || "";
+        if (toolName === "Skill") {
           process.stdout.write(JSON.stringify({}));
           process.exit(0);
+        }
+        // Allow tools targeting ~/.claude/ paths (memory/config needed for checkpoint)
+        const filePath = (hookInput.tool_input && hookInput.tool_input.file_path) || "";
+        if (filePath) {
+          const homeDir = os.homedir();
+          const claudeDir = path.join(homeDir, ".claude");
+          const normalizedFile = path.normalize(filePath);
+          const normalizedClaude = path.normalize(claudeDir);
+          if (normalizedFile.startsWith(normalizedClaude + path.sep)) {
+            process.stdout.write(JSON.stringify({}));
+            process.exit(0);
+          }
         }
         const pct = Math.round(state.lastUsageRatio * 100);
         process.stdout.write(JSON.stringify({
           decision: "block",
           reason:
-            `Context guard: usage is ${pct}% (from last measurement). ` +
-            `Run /checkpoint before continuing. Edit/Write blocked until context is saved.`,
+            `BLOCKED: ${pct}% context used. Run /checkpoint now.`,
         }));
         process.exit(0);
       }
@@ -209,18 +217,17 @@ process.stdin.on("end", () => {
       output = {
         decision: "block",
         reason:
-          `Context guard: usage is ${pct}% ${ctx.stats}. ` +
-          `Run /checkpoint before continuing. Edit/Write are hard-blocked until context is saved.`,
+          `BLOCKED: ${pct}% context used ${ctx.stats}. Run /checkpoint now.`,
       };
     } else if (ctx.ratio >= WARN_THRESHOLD && !state.warned) {
       state.warned = true;
-      state.subagentWarned = true; // 60% implies 40% already passed
+      state.subagentWarned = true; // 50% implies 35% already passed
       output = {
         hookSpecificOutput: {
           hookEventName: "PostToolUse",
           additionalContext:
-            `Context warning: usage is ${pct}% ${ctx.stats}. ` +
-            `Run /compact or /checkpoint soon. Do not start new multi-file work.` + perCallWarning,
+            `Context warning: ${pct}% used ${ctx.stats}. ` +
+            `Finish current subtask, externalize state, then run /checkpoint.` + perCallWarning,
         },
       };
     } else if (ctx.ratio >= SUBAGENT_THRESHOLD && !state.subagentWarned) {
