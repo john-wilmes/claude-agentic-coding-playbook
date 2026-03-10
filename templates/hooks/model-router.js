@@ -76,12 +76,9 @@ process.stdin.on("end", () => {
     const { model, reason } = classifyTask(toolInput);
 
     const output = {
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        permissionDecision: "allow",
-        updatedInput: { ...toolInput, model },
-        additionalContext: `Model auto-selected: ${model} (${reason}). Override with explicit model parameter.`,
-      },
+      decision: "allow",
+      updatedInput: { ...toolInput, model },
+      additionalContext: `Model auto-selected: ${model} (${reason}). Override with explicit model parameter.`,
     };
 
     process.stdout.write(JSON.stringify(output));
