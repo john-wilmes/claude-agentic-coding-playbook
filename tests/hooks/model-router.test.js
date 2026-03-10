@@ -57,9 +57,9 @@ test("1. Explore subagent_type -> haiku", (env) => {
 
   assert.strictEqual(result.status, 0);
   assert.ok(result.json, "Should output valid JSON");
-  assert.strictEqual(result.json.decision, "allow");
-  assert.strictEqual(result.json.updatedInput.model, "haiku");
-  assert.ok(result.json.additionalContext.includes("haiku"));
+  assert.strictEqual(result.json.decision, undefined);
+  assert.strictEqual(result.json.hookSpecificOutput.updatedInput.model, "haiku");
+  assert.ok(result.json.hookSpecificOutput.additionalContext.includes("haiku"));
 });
 
 test("2. claude-code-guide subagent_type -> haiku", (env) => {
@@ -68,7 +68,7 @@ test("2. claude-code-guide subagent_type -> haiku", (env) => {
     prompt: "How do I configure MCP servers?",
   }, env);
 
-  assert.strictEqual(result.json.updatedInput.model, "haiku");
+  assert.strictEqual(result.json.hookSpecificOutput.updatedInput.model, "haiku");
 });
 
 test("3. Prompt with only search keywords -> haiku", (env) => {
@@ -77,8 +77,8 @@ test("3. Prompt with only search keywords -> haiku", (env) => {
     prompt: "Search the codebase and find all API endpoint definitions. List them.",
   }, env);
 
-  assert.strictEqual(result.json.updatedInput.model, "haiku");
-  assert.ok(result.json.additionalContext.includes("read-only"));
+  assert.strictEqual(result.json.hookSpecificOutput.updatedInput.model, "haiku");
+  assert.ok(result.json.hookSpecificOutput.additionalContext.includes("read-only"));
 });
 
 test("4. Prompt with write keywords -> sonnet", (env) => {
@@ -87,8 +87,8 @@ test("4. Prompt with write keywords -> sonnet", (env) => {
     prompt: "Implement a new utility function that validates email addresses. Write tests.",
   }, env);
 
-  assert.strictEqual(result.json.updatedInput.model, "sonnet");
-  assert.ok(result.json.additionalContext.includes("sonnet"));
+  assert.strictEqual(result.json.hookSpecificOutput.updatedInput.model, "sonnet");
+  assert.ok(result.json.hookSpecificOutput.additionalContext.includes("sonnet"));
 });
 
 test("5. Prompt with architecture keywords -> opus", (env) => {
@@ -97,8 +97,8 @@ test("5. Prompt with architecture keywords -> opus", (env) => {
     prompt: "Debug the root cause of the authentication failure across multiple files. Investigate the architectural issue.",
   }, env);
 
-  assert.strictEqual(result.json.updatedInput.model, "opus");
-  assert.ok(result.json.additionalContext.includes("opus"));
+  assert.strictEqual(result.json.hookSpecificOutput.updatedInput.model, "opus");
+  assert.ok(result.json.hookSpecificOutput.additionalContext.includes("opus"));
 });
 
 test("6. Explicit model set -> no override", (env) => {
@@ -108,8 +108,8 @@ test("6. Explicit model set -> no override", (env) => {
     prompt: "Design the architecture for the new auth system",
   }, env);
 
-  assert.strictEqual(result.json.decision, "allow");
-  assert.strictEqual(result.json.updatedInput, undefined, "Should not set updatedInput when model is explicit");
+  assert.strictEqual(result.json.decision, undefined);
+  assert.strictEqual(result.json.hookSpecificOutput, undefined, "Should not set hookSpecificOutput when model is explicit");
 });
 
 test("7. Mixed signals (search + write) -> sonnet (conservative)", (env) => {
@@ -118,7 +118,7 @@ test("7. Mixed signals (search + write) -> sonnet (conservative)", (env) => {
     prompt: "Search for the validation logic and fix the bug in the email parser",
   }, env);
 
-  assert.strictEqual(result.json.updatedInput.model, "sonnet");
+  assert.strictEqual(result.json.hookSpecificOutput.updatedInput.model, "sonnet");
 });
 
 test("8. Mixed signals (search + architecture) -> opus (highest wins)", (env) => {
@@ -127,7 +127,7 @@ test("8. Mixed signals (search + architecture) -> opus (highest wins)", (env) =>
     prompt: "Find the database queries and debug the root cause of the performance issue",
   }, env);
 
-  assert.strictEqual(result.json.updatedInput.model, "opus");
+  assert.strictEqual(result.json.hookSpecificOutput.updatedInput.model, "opus");
 });
 
 test("9. No model, no clear signals -> sonnet (safe default)", (env) => {
@@ -136,8 +136,8 @@ test("9. No model, no clear signals -> sonnet (safe default)", (env) => {
     prompt: "Process the data according to the specifications",
   }, env);
 
-  assert.strictEqual(result.json.updatedInput.model, "sonnet");
-  assert.ok(result.json.additionalContext.includes("safe default"));
+  assert.strictEqual(result.json.hookSpecificOutput.updatedInput.model, "sonnet");
+  assert.ok(result.json.hookSpecificOutput.additionalContext.includes("safe default"));
 });
 
 test("10. Non-Task tool -> allow without changes", (env) => {
@@ -147,8 +147,8 @@ test("10. Non-Task tool -> allow without changes", (env) => {
   }, { HOME: env.home, USERPROFILE: env.home });
 
   assert.strictEqual(result.status, 0);
-  assert.strictEqual(result.json.decision, "allow");
-  assert.strictEqual(result.json.updatedInput, undefined);
+  assert.strictEqual(result.json.decision, undefined);
+  assert.strictEqual(result.json.hookSpecificOutput, undefined);
 });
 
 test("11. Empty prompt -> sonnet (safe default)", (env) => {
@@ -157,15 +157,15 @@ test("11. Empty prompt -> sonnet (safe default)", (env) => {
     prompt: "",
   }, env);
 
-  assert.strictEqual(result.json.updatedInput.model, "sonnet");
+  assert.strictEqual(result.json.hookSpecificOutput.updatedInput.model, "sonnet");
 });
 
-test("12. Malformed JSON input -> exits 0 with allow", (env) => {
+test("12. Malformed JSON input -> exits 0 with {}", (env) => {
   const result = runHook(MODEL_ROUTER, "not valid json", { HOME: env.home, USERPROFILE: env.home });
 
   assert.strictEqual(result.status, 0);
   assert.ok(result.json, "Should still output JSON");
-  assert.strictEqual(result.json.decision, "allow");
+  assert.deepStrictEqual(result.json, {});
 });
 
 test("13. Route event writes JSONL log entry", (env) => {
@@ -174,7 +174,7 @@ test("13. Route event writes JSONL log entry", (env) => {
     prompt: "Find all TypeScript files",
   }, env);
 
-  assert.strictEqual(result.json.updatedInput.model, "haiku");
+  assert.strictEqual(result.json.hookSpecificOutput.updatedInput.model, "haiku");
 
   const logDir = path.join(env.home, ".claude", "logs");
   const today = new Date().toISOString().slice(0, 10);

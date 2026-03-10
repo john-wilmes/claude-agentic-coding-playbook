@@ -1441,6 +1441,56 @@ session. Disable servers that serve different projects or workflows before
 starting a new task. Context budget spent on idle tool schemas is context
 unavailable for code and reasoning.
 
+### Scaling past built-in Tool Search
+
+Claude Code's built-in MCP Tool Search handles moderate tool counts well. When
+you have 40+ MCP tools and Tool Search still consumes significant context, the
+**dynamic toolset** pattern offers further reduction [37].
+
+The idea: replace N tool definitions with three meta-tools:
+
+| Meta-tool | Purpose |
+|---|---|
+| `search_tools` | Semantic search over tool names and descriptions |
+| `describe_tools` | Load full schema only for tools the agent will call |
+| `execute_tool` | Run the selected tool with parameters |
+
+This separates discovery from execution. The agent never loads schemas it does
+not intend to use, cutting input tokens by 90-97% in benchmarks with 40-400
+tools [37]. The tradeoff is 2-3x more tool calls per task and roughly 50%
+longer wall-clock time.
+
+**When to consider it:**
+
+- You have **40+ MCP tools** active in a single session (multiple servers, large
+  API surfaces).
+- Token cost dominates your budget -- the per-call overhead matters less than
+  the per-turn schema overhead.
+- Built-in Tool Search is active but you still see high context consumption from
+  tool definitions.
+
+**When to skip it:**
+
+- Fewer than 20 MCP tools. Built-in Tool Search or simply disabling unused
+  servers is sufficient.
+- Latency-sensitive workflows where the extra round-trips outweigh the token
+  savings.
+- You use mostly built-in tools (Read, Write, Bash, Grep, Glob). These are
+  baked into the system prompt and cannot be dynamically loaded.
+
+**Implementation approach:**
+
+Build a proxy MCP server that wraps multiple downstream servers behind the three
+meta-tools. The proxy maintains an index of all tool names and descriptions, and
+forwards `execute_tool` calls to the appropriate downstream server. This is an
+MCP server that serves other MCP servers -- the agent sees three tools instead
+of hundreds.
+
+Alternatively, if you control the MCP server, restructure it to expose a
+categorical overview alongside semantic search rather than flat tool lists. This
+restores discoverability -- without category hints, agents may not attempt to
+search for tools they do not know exist [37].
+
 ### Common patterns
 
 **Database access**: Connect to PostgreSQL, MySQL, or other databases with a
@@ -1464,6 +1514,21 @@ scratch.
 ```bash
 claude mcp add --transport stdio playwright -- npx -y @playwright/mcp@latest
 ```
+
+**Semantic code navigation**: The Serena MCP server provides LSP-powered
+symbol-level navigation (`find_symbol`, `find_referencing_symbols`,
+`insert_after_symbol`) instead of grep-and-read-whole-file cycles [53]. This
+cuts exploration tokens significantly in large codebases with deep type
+hierarchies. Skip it for small projects where grep is sufficient.
+
+```bash
+claude mcp add serena -- uvx --from git+https://github.com/oraios/serena \
+  serena start-mcp-server --context claude-code --project-from-cwd
+```
+
+The `--context claude-code` flag disables tools that duplicate Claude Code
+built-ins. `--project-from-cwd` auto-detects the project from the working
+directory at launch.
 
 **IDE integration**: MCP servers can expose editor state -- open files, active
 diagnostics, cursor position -- to the agent. This is how VS Code and Cursor
@@ -2273,6 +2338,8 @@ Last updated: 2026-03-10
 
 36. **Model Context Protocol -- Introduction.** https://modelcontextprotocol.io/introduction -- MCP architecture overview; primitives (tools/resources/prompts); JSON-RPC 2.0 transport; stdio and streamable HTTP transports; open standard specification.
 
+37. **Speakeasy -- How We Reduced Token Usage by 100x: Dynamic Toolsets.** https://www.speakeasy.com/blog/how-we-reduced-token-usage-by-100x-dynamic-toolsets-v2 -- Three-tool pattern (search/describe/execute) replacing static MCP tool schemas; benchmarks showing 91-97% input token reduction at 40-400 tools; tradeoff analysis (2-3x more calls, ~50% longer execution).
+
 37. **Chroma Research -- Context Rot.** https://research.trychroma.com/context-rot -- Non-linear performance degradation across 18 frontier models at controlled fill levels; practical ceiling at 60-70% of advertised maximum; coherent content degrades faster than shuffled haystacks.
 
 38. **JetBrains Research -- Agent Observation Token Analysis (arXiv:2508.21433).** https://arxiv.org/abs/2508.21433 -- Tool observations comprise 84% of agent context tokens in SWE-bench runs; observation masking achieves 52.7% cost reduction with +1.4% solve rate.
@@ -2304,3 +2371,5 @@ Last updated: 2026-03-10
 51. **AgentSpec -- Hook-Based Agent Enforcement (arXiv:2503.18666, ICSE 2026).** https://arxiv.org/abs/2503.18666 -- Prevents >90% of unsafe agent executions with millisecond overhead; hook-based enforcement framework; specification-driven safety guarantees.
 
 52. **Conikee -- NUMA-Aware Context Engineering (Substack 2025).** https://substack.com/@conikee -- Framework treating LLM context windows as Non-Uniform Memory Access; causal masking and RoPE position encoding create position-dependent attention; anchor critical facts at front and end, compress the middle.
+
+53. **Serena -- LSP-Powered Code Navigation MCP Server.** https://github.com/oraios/serena -- Symbol-level find, reference lookup, and scoped editing via Language Server Protocol; `--context claude-code` disables tools that duplicate built-ins; `--project-from-cwd` for automatic project detection.

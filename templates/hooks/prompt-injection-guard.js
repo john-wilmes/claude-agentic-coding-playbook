@@ -79,7 +79,7 @@ process.stdin.on("end", () => {
 
     // Only intercept Bash tool calls
     if (toolName !== "Bash") {
-      process.stdout.write(JSON.stringify({ decision: "allow" }));
+      process.stdout.write(JSON.stringify({}));
       process.exit(0);
     }
 
@@ -95,15 +95,21 @@ process.stdin.on("end", () => {
         details: reason,
         context: { command: log.promptHead(command, 100) },
       });
-      process.stdout.write(JSON.stringify({ decision: "block", reason }));
+      process.stdout.write(JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason: reason,
+        },
+      }));
       process.exit(0);
     }
 
-    process.stdout.write(JSON.stringify({ decision: "allow" }));
+    process.stdout.write(JSON.stringify({}));
     process.exit(0);
   } catch {
     // Never block tool execution on errors
-    process.stdout.write(JSON.stringify({ decision: "allow" }));
+    process.stdout.write(JSON.stringify({}));
     process.exit(0);
   }
 });

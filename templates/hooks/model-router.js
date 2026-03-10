@@ -65,13 +65,13 @@ process.stdin.on("end", () => {
 
     // Only intercept Task tool calls
     if (toolName !== "Task") {
-      process.stdout.write(JSON.stringify({ decision: "allow" }));
+      process.stdout.write(JSON.stringify({}));
       process.exit(0);
     }
 
     // If model is already set, respect the agent's explicit choice
     if (toolInput.model) {
-      process.stdout.write(JSON.stringify({ decision: "allow" }));
+      process.stdout.write(JSON.stringify({}));
       process.exit(0);
     }
 
@@ -88,16 +88,18 @@ process.stdin.on("end", () => {
     });
 
     const output = {
-      decision: "allow",
-      updatedInput: { ...toolInput, model },
-      additionalContext: `Model auto-selected: ${model} (${reason}). Override with explicit model parameter.`,
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        updatedInput: { ...toolInput, model },
+        additionalContext: `Model auto-selected: ${model} (${reason}). Override with explicit model parameter.`,
+      },
     };
 
     process.stdout.write(JSON.stringify(output));
     process.exit(0);
   } catch {
     // Never block tool execution on errors
-    process.stdout.write(JSON.stringify({ decision: "allow" }));
+    process.stdout.write(JSON.stringify({}));
     process.exit(0);
   }
 });

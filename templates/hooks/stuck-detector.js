@@ -128,10 +128,13 @@ process.stdin.on("end", () => {
         context: { consecutive, tool: toolName },
       });
       process.stdout.write(JSON.stringify({
-        decision: "block",
-        reason:
-          "Stuck detector: 5 identical actions in a row. You appear to be stuck. " +
-          "Try a completely different approach or ask the user for help.",
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason:
+            "Stuck detector: 5 identical actions in a row. You appear to be stuck. " +
+            "Try a completely different approach or ask the user for help.",
+        },
       }));
       process.exit(0);
     }

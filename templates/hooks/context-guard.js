@@ -196,9 +196,11 @@ process.stdin.on("end", () => {
           context: { mode: "pre", ratio: state.lastUsageRatio, pct },
         });
         process.stdout.write(JSON.stringify({
-          decision: "block",
-          reason:
-            `BLOCKED: ${pct}% context used. Run /checkpoint now.`,
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: `BLOCKED: ${pct}% context used. Run /checkpoint now.`,
+          },
         }));
         process.exit(0);
       }
