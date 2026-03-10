@@ -1,8 +1,13 @@
-// PostToolUse hook: tracks context usage via session transcript.
-// Three thresholds:
-//   40% — warn to use subagents for remaining multi-file work
-//   60% — warn to compact or checkpoint soon
-//   70% — BLOCK further edits until agent checkpoints
+// Dual-mode context guard: PreToolUse (hard block) + PostToolUse (measure & warn).
+//
+// PostToolUse (no matcher — fires on ALL tools):
+//   Reads transcript, computes usage, warns at 40%/60%, advisory block at 70%.
+//   Writes lastUsageRatio to state file for PreToolUse to read.
+//
+// PreToolUse (matcher: Edit|Write — fires before file mutations):
+//   Reads state file only (~100 bytes). If lastUsageRatio >= 70%, hard-blocks
+//   the tool (prevents execution). Allows writes to ~/.claude/ paths so
+//   /checkpoint can update memory.
 //
 // Primary: reads actual token counts from the session transcript JSONL.
 // Fallback: estimates from tool I/O sizes when transcript is unavailable.
@@ -35,9 +40,10 @@ function loadState(stateFile) {
       warned: raw.warned || false,
       cumulativeEstimatedTokens: raw.cumulativeEstimatedTokens || 0,
       toolCalls: raw.toolCalls || 0,
+      lastUsageRatio: raw.lastUsageRatio || 0,
     };
   } catch {
-    return { subagentWarned: false, warned: false, cumulativeEstimatedTokens: 0, toolCalls: 0 };
+    return { subagentWarned: false, warned: false, cumulativeEstimatedTokens: 0, toolCalls: 0, lastUsageRatio: 0 };
   }
 }
 
@@ -145,14 +151,48 @@ process.stdin.on("end", () => {
       process.exit(0);
     }
 
-    const sessionId = hookInput.session_id || "unknown";
+    // Mode detection: PreToolUse has no tool_response field.
+    const isPreToolUse = !("tool_response" in hookInput);
 
+    const sessionId = hookInput.session_id || "unknown";
     const stateFile = getStateFile(sessionId);
+
+    // ── PreToolUse fast path ──────────────────────────────────────────────
+    // Reads only the state file (~100 bytes). Hard-blocks Edit/Write on
+    // project files when usage >= 70%. Allows ~/.claude/ writes for checkpoint.
+    if (isPreToolUse) {
+      const state = loadState(stateFile);
+      if (state.lastUsageRatio >= BLOCK_THRESHOLD) {
+        // Allow writes to ~/.claude/ paths (memory/config needed for checkpoint)
+        const filePath = (hookInput.tool_input && hookInput.tool_input.file_path) || "";
+        const homeDir = os.homedir();
+        const claudeDir = path.join(homeDir, ".claude");
+        if (filePath.startsWith(claudeDir + "/") || filePath.startsWith(claudeDir + path.sep)) {
+          process.stdout.write(JSON.stringify({}));
+          process.exit(0);
+        }
+        const pct = Math.round(state.lastUsageRatio * 100);
+        process.stdout.write(JSON.stringify({
+          decision: "block",
+          reason:
+            `Context guard: usage is ${pct}% (from last measurement). ` +
+            `Run /checkpoint before continuing. Edit/Write blocked until context is saved.`,
+        }));
+        process.exit(0);
+      }
+      process.stdout.write(JSON.stringify({}));
+      process.exit(0);
+    }
+
+    // ── PostToolUse path ──────────────────────────────────────────────────
     const state = loadState(stateFile);
     state.toolCalls += 1;
 
     const ctx = getContextUsage(hookInput, state);
     const pct = Math.round(ctx.ratio * 100);
+
+    // Store ratio for PreToolUse to read on next call
+    state.lastUsageRatio = ctx.ratio;
 
     // Per-call size warning: flag individual large tool results
     const responseStr = JSON.stringify(hookInput.tool_response || {});
@@ -168,7 +208,7 @@ process.stdin.on("end", () => {
         decision: "block",
         reason:
           `Context guard: usage is ${pct}% ${ctx.stats}. ` +
-          `Run /checkpoint before continuing. No more edits until context is saved.`,
+          `Run /checkpoint before continuing. Edit/Write are hard-blocked until context is saved.`,
       };
     } else if (ctx.ratio >= WARN_THRESHOLD && !state.warned) {
       state.warned = true;
