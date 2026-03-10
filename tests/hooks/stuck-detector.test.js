@@ -199,6 +199,41 @@ test("6. Malformed JSON input: exits 0 with {}", () => {
   assert.deepStrictEqual(result.json, {}, "Should output empty object on error");
 });
 
+// Test 8: Block event writes JSONL log entry
+test("8. Block event writes JSONL log entry", () => {
+  const sessionId = newSessionId();
+  const env = require("./test-helpers").createTempHome();
+  try {
+    const payload = { command: "echo stuck" };
+    for (let i = 0; i < 4; i++) {
+      runHook(STUCK_DETECTOR, {
+        session_id: sessionId,
+        tool_name: "Bash",
+        tool_input: payload,
+      }, { HOME: env.home, USERPROFILE: env.home });
+    }
+    runHook(STUCK_DETECTOR, {
+      session_id: sessionId,
+      tool_name: "Bash",
+      tool_input: payload,
+    }, { HOME: env.home, USERPROFILE: env.home });
+
+    const logDir = path.join(env.home, ".claude", "logs");
+    const today = new Date().toISOString().slice(0, 10);
+    const logFile = path.join(logDir, `${today}.jsonl`);
+    assert.ok(fs.existsSync(logFile), "Log file should exist");
+    const lines = fs.readFileSync(logFile, "utf8").trim().split("\n");
+    const entries = lines.map(l => JSON.parse(l)).filter(e => e.hook === "stuck-detector");
+    assert.ok(entries.length > 0, "Should have stuck-detector log entries");
+    const blockEntry = entries.find(e => e.event === "block");
+    assert.ok(blockEntry, "Should have a block entry");
+    assert.ok(blockEntry.details.includes("5"), "Details should mention 5 identical actions");
+  } finally {
+    cleanupSession(sessionId);
+    env.cleanup();
+  }
+});
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
 console.log(`\n${"─".repeat(60)}`);

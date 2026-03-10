@@ -5,6 +5,7 @@
 // Run: node tests/hooks/model-router.test.js
 
 const assert = require("assert");
+const fs = require("fs");
 const path = require("path");
 
 const { runHook, createTempHome } = require("./test-helpers");
@@ -165,6 +166,26 @@ test("12. Malformed JSON input -> exits 0 with allow", (env) => {
   assert.strictEqual(result.status, 0);
   assert.ok(result.json, "Should still output JSON");
   assert.strictEqual(result.json.decision, "allow");
+});
+
+test("13. Route event writes JSONL log entry", (env) => {
+  const result = runRouter({
+    subagent_type: "Explore",
+    prompt: "Find all TypeScript files",
+  }, env);
+
+  assert.strictEqual(result.json.updatedInput.model, "haiku");
+
+  const logDir = path.join(env.home, ".claude", "logs");
+  const today = new Date().toISOString().slice(0, 10);
+  const logFile = path.join(logDir, `${today}.jsonl`);
+  assert.ok(fs.existsSync(logFile), "Log file should exist");
+  const lines = fs.readFileSync(logFile, "utf8").trim().split("\n");
+  const entries = lines.map(l => JSON.parse(l)).filter(e => e.hook === "model-router");
+  assert.ok(entries.length > 0, "Should have model-router log entry");
+  assert.strictEqual(entries[0].event, "route");
+  assert.ok(entries[0].details.includes("haiku"), `Details: ${entries[0].details}`);
+  assert.ok(entries[0].context.model === "haiku");
 });
 
 // ─── Summary ─────────────────────────────────────────────────────────────────

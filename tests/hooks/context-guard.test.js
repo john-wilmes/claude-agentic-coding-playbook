@@ -671,6 +671,36 @@ test("28. PostToolUse warn (50%) does not write checkpoint-exit flag", () => {
   }
 });
 
+// Test 29: PostToolUse block writes JSONL log entry
+test("29. PostToolUse block writes JSONL log entry", () => {
+  const sessionId = newSessionId();
+  const env = require("./test-helpers").createTempHome();
+  const transcript = createFakeTranscript([makeAssistantMessage(130000)]);
+  try {
+    runHook(CONTEXT_GUARD, {
+      session_id: sessionId,
+      tool_input: {},
+      tool_response: {},
+      transcript_path: transcript,
+    }, { HOME: env.home, USERPROFILE: env.home });
+
+    const logDir = path.join(env.home, ".claude", "logs");
+    const today = new Date().toISOString().slice(0, 10);
+    const logFile = path.join(logDir, `${today}.jsonl`);
+    assert.ok(fs.existsSync(logFile), "Log file should exist");
+    const lines = fs.readFileSync(logFile, "utf8").trim().split("\n");
+    const blockEntries = lines.map(l => JSON.parse(l)).filter(e => e.hook === "context-guard" && e.event === "block");
+    assert.ok(blockEntries.length > 0, "Should have at least one context-guard block log entry");
+    assert.strictEqual(blockEntries[0].hook, "context-guard");
+    assert.strictEqual(blockEntries[0].event, "block");
+    assert.ok(blockEntries[0].context.pct >= 60, "Should log pct >= 60");
+  } finally {
+    cleanupSession(sessionId);
+    try { fs.rmSync(transcript); } catch {}
+    env.cleanup();
+  }
+});
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
 console.log(`\n${"─".repeat(60)}`);

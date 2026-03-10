@@ -13,6 +13,9 @@ const path = require("path");
 const os = require("os");
 const crypto = require("crypto");
 
+let log;
+try { log = require("./log"); } catch { log = { writeLog() {} }; }
+
 const WINDOW_SIZE = 5;
 const WARN_THRESHOLD = 3;
 const BLOCK_THRESHOLD = 5;
@@ -116,6 +119,14 @@ process.stdin.on("end", () => {
     saveState(stateFile, state);
 
     if (consecutive >= BLOCK_THRESHOLD) {
+      log.writeLog({
+        hook: "stuck-detector",
+        event: "block",
+        session_id: hookInput.session_id,
+        tool_use_id: hookInput.tool_use_id,
+        details: `Blocked: ${consecutive} identical actions (${toolName})`,
+        context: { consecutive, tool: toolName },
+      });
       process.stdout.write(JSON.stringify({
         decision: "block",
         reason:
@@ -126,6 +137,14 @@ process.stdin.on("end", () => {
     }
 
     if (consecutive >= WARN_THRESHOLD) {
+      log.writeLog({
+        hook: "stuck-detector",
+        event: "warn",
+        session_id: hookInput.session_id,
+        tool_use_id: hookInput.tool_use_id,
+        details: `Warning: ${consecutive} identical actions (${toolName})`,
+        context: { consecutive, tool: toolName },
+      });
       process.stdout.write(JSON.stringify({
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
