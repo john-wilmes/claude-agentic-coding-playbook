@@ -124,11 +124,11 @@ test("1. Transcript below thresholds: no output", () => {
   }
 });
 
-// Test 2: Transcript at 40% → subagent warning fires once (not repeated)
-test("2. Transcript at 40%: subagent warning fires once", () => {
+// Test 2: Transcript at 35% → subagent warning fires once (not repeated)
+test("2. Transcript at 35%: subagent warning fires once", () => {
   const sessionId = newSessionId();
-  // 40% of 200k = 80,000 tokens
-  const transcript = createFakeTranscript([makeAssistantMessage(80000)]);
+  // 35% of 200k = 70,000 tokens
+  const transcript = createFakeTranscript([makeAssistantMessage(70000)]);
   try {
     const result1 = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(result1.status, 0);
@@ -152,11 +152,11 @@ test("2. Transcript at 40%: subagent warning fires once", () => {
   }
 });
 
-// Test 3: Transcript at 60% → compact warning fires once
-test("3. Transcript at 60%: compact warning fires once", () => {
+// Test 3: Transcript at 50% → checkpoint warning fires once
+test("3. Transcript at 50%: checkpoint warning fires once", () => {
   const sessionId = newSessionId();
-  // 60% of 200k = 120,000 tokens
-  const transcript = createFakeTranscript([makeAssistantMessage(120000)]);
+  // 50% of 200k = 100,000 tokens
+  const transcript = createFakeTranscript([makeAssistantMessage(100000)]);
   try {
     const result1 = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(result1.status, 0);
@@ -166,8 +166,8 @@ test("3. Transcript at 60%: compact warning fires once", () => {
       "Should be a context warning"
     );
     assert.ok(
-      result1.json.hookSpecificOutput.additionalContext.includes("/compact"),
-      "Should mention /compact"
+      result1.json.hookSpecificOutput.additionalContext.includes("/checkpoint"),
+      "Should mention /checkpoint"
     );
 
     // Second call — should not warn again
@@ -181,11 +181,11 @@ test("3. Transcript at 60%: compact warning fires once", () => {
   }
 });
 
-// Test 4: Transcript at 70% → block decision
-test("4. Transcript at 70%: block decision", () => {
+// Test 4: Transcript at 60% → block decision
+test("4. Transcript at 60%: block decision", () => {
   const sessionId = newSessionId();
-  // 70% of 200k = 140,000 tokens
-  const transcript = createFakeTranscript([makeAssistantMessage(140000)]);
+  // 60% of 200k = 120,000 tokens
+  const transcript = createFakeTranscript([makeAssistantMessage(120000)]);
   try {
     const result = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(result.status, 0);
@@ -200,14 +200,14 @@ test("4. Transcript at 70%: block decision", () => {
 // Test 5: Cache tokens counted correctly (input + cache_read + cache_creation)
 test("5. Cache tokens counted correctly (input + cache_read + cache_creation)", () => {
   const sessionId = newSessionId();
-  // 1 + 80000 + 40000 = 120,001 tokens = 60%+
-  const transcript = createFakeTranscript([makeAssistantMessage(1, 80000, 40000)]);
+  // 1 + 60000 + 40000 = 100,001 tokens = 50%+
+  const transcript = createFakeTranscript([makeAssistantMessage(1, 60000, 40000)]);
   try {
     const result = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(result.status, 0);
-    assert.ok(result.json.hookSpecificOutput, "Should warn at 60%");
+    assert.ok(result.json.hookSpecificOutput, "Should warn at 50%");
     assert.ok(
-      result.json.hookSpecificOutput.additionalContext.includes("120001 actual tokens"),
+      result.json.hookSpecificOutput.additionalContext.includes("100001 actual tokens"),
       `Should show actual token count, got: ${result.json.hookSpecificOutput.additionalContext}`
     );
   } finally {
@@ -222,12 +222,12 @@ test("6. Multiple assistant messages: uses most recent", () => {
   const transcript = createFakeTranscript([
     makeAssistantMessage(60000),   // 30% — below threshold
     { type: "user", message: { content: "do something" } },
-    makeAssistantMessage(140000),  // 70% — should block
+    makeAssistantMessage(120000),  // 60% — should block
   ]);
   try {
     const result = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(result.status, 0);
-    assert.strictEqual(result.json.decision, "block", "Should use most recent (70%) and block");
+    assert.strictEqual(result.json.decision, "block", "Should use most recent (60%) and block");
   } finally {
     cleanupSession(sessionId);
     try { fs.rmSync(transcript); } catch {}
@@ -238,8 +238,8 @@ test("6. Multiple assistant messages: uses most recent", () => {
 test("7. No transcript: fallback accumulates from tool I/O", () => {
   const sessionId = newSessionId();
   try {
-    // 40% of 200k = 80k tokens = 320k chars of tool I/O
-    const bigPayload = "x".repeat(160000);
+    // 35% of 200k = 70k tokens = 280k chars of tool I/O
+    const bigPayload = "x".repeat(140000);
     const result = runGuard(sessionId, {
       toolInput: { data: bigPayload },
       toolResponse: { data: bigPayload },
@@ -325,7 +325,7 @@ test("11. Large transcript (>50KB): tail read still finds usage", () => {
   for (let i = 0; i < 600; i++) {
     lines.push({ type: "user", message: { content: "padding " + "x".repeat(80) } });
   }
-  lines.push(makeAssistantMessage(140000)); // 70% — should block
+  lines.push(makeAssistantMessage(120000)); // 60% — should block
   const transcript = createFakeTranscript(lines);
   try {
     const stats = fs.statSync(transcript);
@@ -334,7 +334,7 @@ test("11. Large transcript (>50KB): tail read still finds usage", () => {
     const result = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(result.status, 0);
     assert.strictEqual(result.json.decision, "block", "Should find usage in tail and block");
-    assert.ok(result.json.reason.includes("140000 actual tokens"), "Should show actual tokens");
+    assert.ok(result.json.reason.includes("120000 actual tokens"), "Should show actual tokens");
   } finally {
     cleanupSession(sessionId);
     try { fs.rmSync(transcript); } catch {}
@@ -344,8 +344,8 @@ test("11. Large transcript (>50KB): tail read still finds usage", () => {
 // Test 12: Subagent calls are skipped entirely
 test("12. Subagent (agent_id present): skipped, no warn or block", () => {
   const sessionId = newSessionId();
-  // 70% — would block for parent agent
-  const transcript = createFakeTranscript([makeAssistantMessage(140000)]);
+  // 60% — would block for parent agent
+  const transcript = createFakeTranscript([makeAssistantMessage(120000)]);
   try {
     const result = runGuard(sessionId, {
       transcriptPath: transcript,
@@ -360,17 +360,17 @@ test("12. Subagent (agent_id present): skipped, no warn or block", () => {
   }
 });
 
-// Test 13: Just below 40% threshold → no warning
-test("13. Just below 40% threshold (79999 tokens): no warning", () => {
+// Test 13: Just below 35% threshold → no warning
+test("13. Just below 35% threshold (69999 tokens): no warning", () => {
   const sessionId = newSessionId();
-  // 79999 / 200000 = 39.9995% — just under 40%
-  const transcript = createFakeTranscript([makeAssistantMessage(79999)]);
+  // 69999 / 200000 = 34.9995% — just under 35%
+  const transcript = createFakeTranscript([makeAssistantMessage(69999)]);
   try {
     const result = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(result.status, 0, "Should exit 0");
     assert.ok(result.json, "Should output valid JSON");
     assert.strictEqual(result.json.decision, undefined, "Should not block");
-    assert.strictEqual(result.json.hookSpecificOutput, undefined, "Should not warn below 40%");
+    assert.strictEqual(result.json.hookSpecificOutput, undefined, "Should not warn below 35%");
   } finally {
     cleanupSession(sessionId);
     try { fs.rmSync(transcript); } catch {}
@@ -388,11 +388,30 @@ test("14. Malformed JSON input: exits 0 with {}", () => {
 // ─── PreToolUse mode tests ────────────────────────────────────────────────────
 
 // Test 15: PreToolUse below threshold → allow
-test("15. PreToolUse below threshold (60%): allow", () => {
+test("15. PreToolUse below threshold (50%): allow", () => {
   const sessionId = newSessionId();
   const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
   try {
     // Write state with lastUsageRatio below block threshold
+    fs.mkdirSync(STATE_DIR, { recursive: true });
+    fs.writeFileSync(stateFile, JSON.stringify({ lastUsageRatio: 0.50 }));
+
+    const result = runGuardPre(sessionId, {
+      toolInput: { file_path: "/home/user/project/src/main.js" },
+    });
+    assert.strictEqual(result.status, 0, "Should exit 0");
+    assert.ok(result.json, "Should output valid JSON");
+    assert.strictEqual(result.json.decision, undefined, "Should not block below 60%");
+  } finally {
+    cleanupSession(sessionId);
+  }
+});
+
+// Test 16: PreToolUse at 60% → block
+test("16. PreToolUse at 60% threshold: block", () => {
+  const sessionId = newSessionId();
+  const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
+  try {
     fs.mkdirSync(STATE_DIR, { recursive: true });
     fs.writeFileSync(stateFile, JSON.stringify({ lastUsageRatio: 0.60 }));
 
@@ -400,27 +419,8 @@ test("15. PreToolUse below threshold (60%): allow", () => {
       toolInput: { file_path: "/home/user/project/src/main.js" },
     });
     assert.strictEqual(result.status, 0, "Should exit 0");
-    assert.ok(result.json, "Should output valid JSON");
-    assert.strictEqual(result.json.decision, undefined, "Should not block below 70%");
-  } finally {
-    cleanupSession(sessionId);
-  }
-});
-
-// Test 16: PreToolUse at 70% → block
-test("16. PreToolUse at 70% threshold: block", () => {
-  const sessionId = newSessionId();
-  const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
-  try {
-    fs.mkdirSync(STATE_DIR, { recursive: true });
-    fs.writeFileSync(stateFile, JSON.stringify({ lastUsageRatio: 0.70 }));
-
-    const result = runGuardPre(sessionId, {
-      toolInput: { file_path: "/home/user/project/src/main.js" },
-    });
-    assert.strictEqual(result.status, 0, "Should exit 0");
-    assert.strictEqual(result.json.decision, "block", "Should block at 70%");
-    assert.ok(result.json.reason.includes("Edit/Write blocked"), "Should mention Edit/Write blocked");
+    assert.strictEqual(result.json.decision, "block", "Should block at 60%");
+    assert.ok(result.json.reason.includes("BLOCKED:"), "Should have directive block message");
   } finally {
     cleanupSession(sessionId);
   }
@@ -429,13 +429,13 @@ test("16. PreToolUse at 70% threshold: block", () => {
 // Test 17: PreToolUse→PostToolUse handshake
 test("17. PreToolUse→PostToolUse handshake: PostToolUse writes ratio, PreToolUse reads it", () => {
   const sessionId = newSessionId();
-  // 75% of 200k = 150,000 tokens
-  const transcript = createFakeTranscript([makeAssistantMessage(150000)]);
+  // 65% of 200k = 130,000 tokens
+  const transcript = createFakeTranscript([makeAssistantMessage(130000)]);
   try {
     // PostToolUse fires first, writes lastUsageRatio to state
     const postResult = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(postResult.status, 0);
-    assert.strictEqual(postResult.json.decision, "block", "PostToolUse should advisory-block at 75%");
+    assert.strictEqual(postResult.json.decision, "block", "PostToolUse should advisory-block at 65%");
 
     // PreToolUse fires next, reads state and hard-blocks
     const preResult = runGuardPre(sessionId, {
@@ -508,8 +508,8 @@ test("20. PreToolUse allows ~/.claude/ writes when blocked", () => {
 test("21. PostToolUse stores lastUsageRatio in state file", () => {
   const sessionId = newSessionId();
   const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
-  // 65% of 200k = 130,000 tokens
-  const transcript = createFakeTranscript([makeAssistantMessage(130000)]);
+  // 55% of 200k = 110,000 tokens
+  const transcript = createFakeTranscript([makeAssistantMessage(110000)]);
   try {
     const result = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(result.status, 0);
@@ -517,11 +517,109 @@ test("21. PostToolUse stores lastUsageRatio in state file", () => {
     // Read the state file and check lastUsageRatio
     const state = JSON.parse(fs.readFileSync(stateFile, "utf8"));
     assert.ok(state.lastUsageRatio !== undefined, "State should have lastUsageRatio");
-    // 130000 / 200000 = 0.65
-    assert.strictEqual(state.lastUsageRatio, 0.65, `lastUsageRatio should be 0.65, got ${state.lastUsageRatio}`);
+    // 110000 / 200000 = 0.55
+    assert.strictEqual(state.lastUsageRatio, 0.55, `lastUsageRatio should be 0.55, got ${state.lastUsageRatio}`);
   } finally {
     cleanupSession(sessionId);
     try { fs.rmSync(transcript); } catch {}
+  }
+});
+
+// Test 22: PreToolUse blocks Read tool at threshold
+test("22. PreToolUse blocks Read tool at 60% threshold", () => {
+  const sessionId = newSessionId();
+  const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
+  try {
+    fs.mkdirSync(STATE_DIR, { recursive: true });
+    fs.writeFileSync(stateFile, JSON.stringify({ lastUsageRatio: 0.65 }));
+
+    const result = runGuardPre(sessionId, {
+      toolInput: { file_path: "/home/user/project/src/main.js" },
+    });
+    assert.strictEqual(result.status, 0, "Should exit 0");
+    assert.strictEqual(result.json.decision, "block", "Should block Read at threshold");
+    assert.ok(result.json.reason.includes("BLOCKED:"), "Should have directive block message");
+  } finally {
+    cleanupSession(sessionId);
+  }
+});
+
+// Test 23: PreToolUse blocks Grep tool at threshold (no file_path)
+test("23. PreToolUse blocks Grep tool at 60% threshold", () => {
+  const sessionId = newSessionId();
+  const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
+  try {
+    fs.mkdirSync(STATE_DIR, { recursive: true });
+    fs.writeFileSync(stateFile, JSON.stringify({ lastUsageRatio: 0.65 }));
+
+    const result = runGuardPre(sessionId, {
+      toolInput: { pattern: "TODO", path: "/home/user/project" },
+    });
+    assert.strictEqual(result.status, 0, "Should exit 0");
+    assert.strictEqual(result.json.decision, "block", "Should block Grep at threshold");
+  } finally {
+    cleanupSession(sessionId);
+  }
+});
+
+// Test 24: PreToolUse blocks Bash tool at threshold
+test("24. PreToolUse blocks Bash tool at 60% threshold", () => {
+  const sessionId = newSessionId();
+  const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
+  try {
+    fs.mkdirSync(STATE_DIR, { recursive: true });
+    fs.writeFileSync(stateFile, JSON.stringify({ lastUsageRatio: 0.65 }));
+
+    const result = runGuardPre(sessionId, {
+      toolInput: { command: "npm test" },
+    });
+    assert.strictEqual(result.status, 0, "Should exit 0");
+    assert.strictEqual(result.json.decision, "block", "Should block Bash at threshold");
+  } finally {
+    cleanupSession(sessionId);
+  }
+});
+
+// Test 25: PreToolUse allows Skill tool at threshold (for /checkpoint)
+test("25. PreToolUse allows Skill tool at 60% threshold", () => {
+  const sessionId = newSessionId();
+  const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
+  try {
+    fs.mkdirSync(STATE_DIR, { recursive: true });
+    fs.writeFileSync(stateFile, JSON.stringify({ lastUsageRatio: 0.80 }));
+
+    const result = runGuardPre(sessionId, {
+      toolInput: { skill: "checkpoint" },
+    });
+    // Skill tool needs tool_name in hookInput — simulate it
+    const input = {
+      session_id: sessionId,
+      tool_name: "Skill",
+      tool_input: { skill: "checkpoint" },
+    };
+    const result2 = runHook(CONTEXT_GUARD, input);
+    assert.strictEqual(result2.status, 0, "Should exit 0");
+    assert.strictEqual(result2.json.decision, undefined, "Should allow Skill tool even when blocked");
+  } finally {
+    cleanupSession(sessionId);
+  }
+});
+
+// Test 26: PreToolUse blocks Task tool at threshold
+test("26. PreToolUse blocks Task tool at 60% threshold", () => {
+  const sessionId = newSessionId();
+  const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
+  try {
+    fs.mkdirSync(STATE_DIR, { recursive: true });
+    fs.writeFileSync(stateFile, JSON.stringify({ lastUsageRatio: 0.65 }));
+
+    const result = runGuardPre(sessionId, {
+      toolInput: { prompt: "search for files" },
+    });
+    assert.strictEqual(result.status, 0, "Should exit 0");
+    assert.strictEqual(result.json.decision, "block", "Should block Task at threshold");
+  } finally {
+    cleanupSession(sessionId);
   }
 });
 
