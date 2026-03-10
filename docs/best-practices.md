@@ -243,6 +243,28 @@ agent misinterpreting intent, not violating a rule:
   it drops are unpredictable. Adding more rules does not fix this -- it increases
   the surface area for selective non-compliance.
 
+### Workflow instructions vs coding instructions
+
+Not all instructions fail equally. Dogfood testing across two real codebases
+(14 tasks each) revealed a consistent pattern: agents follow **coding**
+instructions reliably (style, patterns, error handling) but **workflow**
+instructions (when to use plan mode, when to spawn subagents, when to
+checkpoint) are followed roughly 50% of the time.
+
+| Instruction type | Example | Compliance |
+|---|---|---|
+| Coding convention | "Use ES modules, not CommonJS" | High (~90%) |
+| Quality gate | "Run tests before committing" | High (~85%) |
+| Workflow behavior | "Use plan mode for multi-file changes" | Low (~50%) |
+| Process automation | "Advance through the task queue" | Very low (~25%) |
+
+The implication: do not rely on CLAUDE.md to enforce workflow behaviors. Use
+hooks for deterministic enforcement (see
+[Hooks for deterministic actions](#hooks-for-deterministic-actions)) and
+automation tooling (task queue runners, session managers) for process
+requirements. Instructions work for *what* the agent produces; hooks and
+automation work for *how* the agent works.
+
 ### The instruction hierarchy problem
 
 LLM behavior is driven by a stack of instructions with different priorities:
@@ -588,6 +610,40 @@ Customize compaction behavior in CLAUDE.md:
 When compacting, always preserve the full list of modified files
 and any test commands.
 ```
+
+### Context spikes from multi-file edits
+
+Instruction-based context thresholds ("compact at 60%") assume gradual context
+growth. In practice, a single turn that edits 10+ files can spike context
+20-30% because each Edit and Read tool call returns file contents that
+accumulate within the turn. The threshold instruction cannot fire between tool
+calls in the same turn -- by the time the agent's next reasoning step begins,
+the context is already past the threshold.
+
+The fix is structural, not instructional: a PostToolUse hook that tracks
+cumulative context and warns or blocks when thresholds are exceeded. Hooks
+execute after every tool call, including mid-turn calls, providing the
+granularity that instructions cannot.
+
+### Post-compaction recovery
+
+After auto-compaction (~95% context), the agent loses awareness of task queues,
+session state, and workflow context. Memory files survive on disk but the agent
+does not re-read them unprompted. The result: the agent "goes freelance,"
+working on whatever seems relevant rather than continuing its assigned task.
+
+Mitigations:
+
+- **Checkpoint before compaction.** Exit and restart the session at ~70%
+  context rather than waiting for auto-compaction at ~95%. A fresh session with
+  memory files is cheaper and more coherent than a compacted session without
+  them.
+- **Automated recovery.** Inject a memory re-read prompt after compaction is
+  detected (via a PreCompact hook or session manager). This restores task queue
+  awareness without human intervention.
+- **Accept the limitation.** Post-compaction coherence is a known gap in all
+  current agentic coding tools. Plan session boundaries proactively rather than
+  relying on graceful degradation.
 
 ### /rewind and double-Escape for rollback
 
@@ -1491,6 +1547,20 @@ CI pipelines), a shared communication channel enables coordination:
 - **Simple exploration**: A single subagent is sufficient; full Agent Teams adds
   unnecessary complexity
 
+### Task queue automation
+
+Agents do not self-advance through task queues. The instruction "work through
+tasks in order" is insufficient -- agents complete one task, then stop and wait
+for user input rather than proceeding to the next item. This was consistent
+across all dogfood testing: zero agents autonomously advanced through a
+multi-task queue based solely on CLAUDE.md instructions.
+
+The fix is external automation: a task queue runner that feeds the next task as
+a new prompt when the previous task completes. The agent handles each task
+well; the sequencing must come from outside the agent. This is another instance
+of the broader pattern: instructions control *what* the agent produces, but
+*process* requires tooling.
+
 ### Limitations of cross-session communication
 
 The shared communication channel described above operates in real time between
@@ -1834,7 +1904,7 @@ Ubuntu instance.
 
 ---
 
-Last updated: 2026-02-23
+Last updated: 2026-03-09
 
 ---
 
