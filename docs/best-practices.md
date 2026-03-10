@@ -1969,7 +1969,7 @@ full output to the sequence. A single `/read` on a 500-line file adds ~3,000 tok
 | 15-30% retrieval loss for mid-context | Liu et al. [39] | Put critical facts first/last |
 | Length penalty 13.9-85% despite perfect retrieval | arXiv:2510.05381 [48] | Minimize total input |
 | 84% of tokens are tool observations | JetBrains [38] | Mask old tool outputs |
-| Auto-compaction fires at ~80% | Anthropic [1] | 80% is already degraded |
+| Auto-compaction fires at ~80% | Anthropic [1] (community-observed; official docs say "approaches the limit" without specifying a percentage) | 80% is already degraded |
 
 The 60% compact threshold used in this playbook is validated by multiple independent
 findings. The 80% auto-compaction threshold fires inside the already-degraded zone;
@@ -1983,22 +1983,32 @@ before the session ends.
 Tool outputs are the dominant cost driver and the highest-leverage compression
 target. The techniques below are ranked by token savings and performance impact.
 
-| Technique | Token savings | Performance impact | Source |
-|-----------|--------------|-------------------|--------|
-| Observation masking (replace old tool outputs with summary placeholders) | 52.7% cost reduction | +1.4% solve rate (improved) | JetBrains [38] |
-| Read-once deduplication (block re-reads of unchanged files) | 38-40% file-read savings | Neutral | Community PreToolUse hook |
-| Verbatim compaction (preserve exact text, drop redundancy) | 50-70% compression | 98% retention | Morph [40] |
-| LLM summarization (Claude Code auto-compact at 80%) | 80-90% compression | 37% multi-session retention | Morph [40] |
+| Technique | Token savings | Performance impact | Source | Status |
+|-----------|--------------|-------------------|--------|--------|
+| Observation masking (replace old tool outputs with summary placeholders) | ~50% cost reduction (52.7% for Qwen3-Coder 480B) | +1.4% solve rate (improved) | JetBrains [38] | Blocked — requires agent-level history modification before API submission; not implementable via Claude Code hooks |
+| Read-once deduplication (block re-reads of unchanged files) | 38-40% file-read savings | Neutral | Community PreToolUse hook | Supported |
+| Verbatim compaction (preserve exact text, drop redundancy) | 50-70% compression | 98% retention (vendor-reported, not independently verified) | Morph [40] | Blocked — Claude Code compaction is internal, not hookable |
+| LLM summarization (Claude Code auto-compact at ~80%) | 80-90% compression | 37% multi-session retention (vendor-reported) | Morph [40] | Built-in |
 
 The counterintuitive finding: LLM summarization — the method Claude Code uses at
-80% auto-compaction — is the worst-performing approach for coding agents. It
+auto-compaction — is the worst-performing approach for coding agents. It
 destroys file paths, error codes, and variable names. The agent after auto-compaction
 cannot reliably reconstruct the exact state it was in. Observation masking, by
 contrast, *improves* solve rate while cutting costs, because it removes noise without
 destroying precision.
 
-Verbatim compaction (Morph 2025) achieves 98% retention at 50-70% compression by
-dropping redundant content while preserving exact text for anything referenced.
+Observation masking requires modifying `tool_result` content in conversation history
+before API submission. This is not implementable via Claude Code hooks, which cannot
+alter history already sent to the model. It is applicable to custom agent frameworks
+(SWE-agent, OpenHands) that control message construction directly.
+
+Verbatim compaction (Morph 2025) achieves claimed 98% retention at 50-70% compression
+by dropping redundant content while preserving exact text for anything referenced.
+These figures are vendor-reported (Morph marketing page) and have not been
+independently verified. Morph is a commercial service; Claude Code `/compact` uses
+LLM summarization, not deletion-based compaction. A PreCompact hook exists but cannot
+modify compaction output. A PostCompact hook does not yet exist (GitHub #17237, open
+as of March 2026).
 
 #### The MemGPT mental model
 

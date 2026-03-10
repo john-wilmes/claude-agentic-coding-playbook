@@ -346,6 +346,12 @@ echo "--- Installing Claude session hooks ---"
 if [ "$DRY_RUN" != true ]; then
   mkdir -p "$CLAUDE_DIR/hooks"
 fi
+
+# Shared logging module (installed first; hooks require it)
+if [ -f "$SCRIPT_DIR/templates/hooks/log.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/log.js" "$CLAUDE_DIR/hooks/log.js" "shared logging module: log.js"
+fi
+
 for hook_file in "$SCRIPT_DIR/templates/hooks"/session-*.js; do
   [ -f "$hook_file" ] || continue
   hook_name=$(basename "$hook_file")
@@ -625,6 +631,63 @@ if [ -f "$SCRIPT_DIR/templates/hooks/stuck-detector.js" ]; then
       echo "CONFIGURED: stuck-detector hook in settings.json"
     fi
   fi
+fi
+
+# --- Install CLI scripts (q, qa, claude-loop) ---
+
+echo ""
+echo "--- Installing CLI scripts ---"
+
+LOCAL_BIN="$HOME/.local/bin"
+if [ "$DRY_RUN" != true ]; then
+  mkdir -p "$LOCAL_BIN"
+fi
+
+# q -- quick single-turn query script
+if [ -f "$SCRIPT_DIR/scripts/q" ]; then
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] SYMLINK: scripts/q -> $LOCAL_BIN/q"
+  else
+    ln -sf "$SCRIPT_DIR/scripts/q" "$LOCAL_BIN/q"
+    chmod +x "$SCRIPT_DIR/scripts/q"
+    echo "INSTALLED: scripts/q -> $LOCAL_BIN/q"
+  fi
+else
+  echo "SKIPPED: scripts/q (not found)"
+fi
+
+# qa -- agentic query loop script
+if [ -f "$SCRIPT_DIR/scripts/qa" ]; then
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] SYMLINK: scripts/qa -> $LOCAL_BIN/qa"
+  else
+    ln -sf "$SCRIPT_DIR/scripts/qa" "$LOCAL_BIN/qa"
+    chmod +x "$SCRIPT_DIR/scripts/qa"
+    echo "INSTALLED: scripts/qa -> $LOCAL_BIN/qa"
+  fi
+else
+  echo "SKIPPED: scripts/qa (not found)"
+fi
+
+# claude-loop -- session supervisor with sentinel and task queue
+if [ -f "$SCRIPT_DIR/scripts/claude-loop.sh" ]; then
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] SYMLINK: scripts/claude-loop.sh -> $LOCAL_BIN/claude-loop"
+  else
+    ln -sf "$SCRIPT_DIR/scripts/claude-loop.sh" "$LOCAL_BIN/claude-loop"
+    chmod +x "$SCRIPT_DIR/scripts/claude-loop.sh"
+    echo "INSTALLED: scripts/claude-loop.sh -> $LOCAL_BIN/claude-loop"
+  fi
+else
+  echo "SKIPPED: scripts/claude-loop.sh (not found)"
+fi
+
+# Warn if ~/.local/bin is not on PATH
+if [[ ":$PATH:" != *":$LOCAL_BIN:"* ]]; then
+  echo ""
+  echo "WARNING: $LOCAL_BIN is not in your PATH."
+  echo "  Add the following to your shell profile (~/.bashrc, ~/.zshrc, etc.):"
+  echo "    export PATH=\"\$HOME/.local/bin:\$PATH\""
 fi
 
 # Knowledge base templates

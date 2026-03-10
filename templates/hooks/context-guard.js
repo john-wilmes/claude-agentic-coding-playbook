@@ -17,6 +17,9 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
+let log;
+try { log = require("./log"); } catch { log = { writeLog() {}, promptHead(t) { return t; } }; }
+
 // Approximate tokens per character (conservative estimate, used in fallback only)
 const CHARS_PER_TOKEN = 4;
 // Default context window size in tokens
@@ -148,6 +151,7 @@ process.stdin.on("end", () => {
     // Subagents have their own disposable context — skip the guard entirely.
     // agent_id is present only when the hook fires inside a subagent.
     if (hookInput.agent_id) {
+      log.writeLog({ hook: "context-guard", event: "skip", details: "Subagent call skipped", session_id: hookInput.session_id, tool_use_id: hookInput.tool_use_id, agent_id: hookInput.agent_id });
       process.stdout.write(JSON.stringify({}));
       process.exit(0);
     }
