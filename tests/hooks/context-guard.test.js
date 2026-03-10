@@ -347,8 +347,25 @@ test("12. Subagent (agent_id present): skipped, no warn or block", () => {
   }
 });
 
-// Test 13: Malformed JSON input → exits 0 with {}
-test("13. Malformed JSON input: exits 0 with {}", () => {
+// Test 13: Just below 40% threshold → no warning
+test("13. Just below 40% threshold (79999 tokens): no warning", () => {
+  const sessionId = newSessionId();
+  // 79999 / 200000 = 39.9995% — just under 40%
+  const transcript = createFakeTranscript([makeAssistantMessage(79999)]);
+  try {
+    const result = runGuard(sessionId, { transcriptPath: transcript });
+    assert.strictEqual(result.status, 0, "Should exit 0");
+    assert.ok(result.json, "Should output valid JSON");
+    assert.strictEqual(result.json.decision, undefined, "Should not block");
+    assert.strictEqual(result.json.hookSpecificOutput, undefined, "Should not warn below 40%");
+  } finally {
+    cleanupSession(sessionId);
+    try { fs.rmSync(transcript); } catch {}
+  }
+});
+
+// Test 14: Malformed JSON input → exits 0 with {}
+test("14. Malformed JSON input: exits 0 with {}", () => {
   const result = runHook(CONTEXT_GUARD, "not valid json at all");
   assert.strictEqual(result.status, 0, "Should exit 0");
   assert.ok(result.json, "Should output valid JSON");
