@@ -78,6 +78,13 @@ process.stdin.on("data", (chunk) => (input += chunk));
 process.stdin.on("end", () => {
   try {
     const hookInput = JSON.parse(input);
+
+    // Subagents have disposable context — skip stuck detection.
+    if (hookInput.agent_id) {
+      process.stdout.write(JSON.stringify({}));
+      process.exit(0);
+    }
+
     const sessionId = hookInput.session_id || "unknown";
     const toolName = hookInput.tool_name || "";
     const toolInput = hookInput.tool_input || {};

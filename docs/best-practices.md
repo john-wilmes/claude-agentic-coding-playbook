@@ -2069,8 +2069,8 @@ differently can fail or succeed depending on phrasing, not semantics.
 - AgentSpec (arXiv:2503.18666, ICSE 2026) provides a hook-based enforcement
   framework that prevents >90% of unsafe agent executions with millisecond overhead
   [51]. The context-guard hook in this playbook implements the same pattern,
-reading actual token counts from the session transcript rather than estimating
-from tool output sizes alone.
+  reading actual token counts from the session transcript rather than estimating
+  from tool output sizes alone.
 
 ---
 
