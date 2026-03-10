@@ -67,8 +67,11 @@ if [ -z "$INSTALL_ROOT" ]; then
   fi
 fi
 
-# Expand ~ and resolve to absolute path
-INSTALL_ROOT="$(eval echo "$INSTALL_ROOT")"
+# Safe tilde expansion (no eval)
+case "$INSTALL_ROOT" in
+  "~/"*) INSTALL_ROOT="$HOME/${INSTALL_ROOT#\~/}" ;;
+  "~")   INSTALL_ROOT="$HOME" ;;
+esac
 INSTALL_ROOT="$(cd "$INSTALL_ROOT" 2>/dev/null && pwd || echo "$INSTALL_ROOT")"
 CLAUDE_DIR="$INSTALL_ROOT/.claude"
 
@@ -289,7 +292,7 @@ if [ -d "$SCRIPT_DIR/profiles/research/templates" ]; then
   fi
   # Create investigations directory structure
   if [ "$DRY_RUN" = true ]; then
-    echo "[DRY RUN] MKDIR: $CLAUDE_DIR/../research/ and $INSTALL_ROOT/.claude/investigations/_patterns/"
+    echo "[DRY RUN] MKDIR: $CLAUDE_DIR/investigations/_patterns/"
   else
     mkdir -p "$CLAUDE_DIR/investigations/_patterns"
     echo "CREATED: $CLAUDE_DIR/investigations/_patterns/"

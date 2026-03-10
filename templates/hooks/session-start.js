@@ -205,10 +205,11 @@ process.stdin.on("end", () => {
     // Inject recent git commits for context
     let recentCommits = "";
     try {
-      recentCommits = execSync("git log --oneline -5 2>/dev/null", {
+      recentCommits = execSync("git log --oneline -5", {
         cwd,
         timeout: 3000,
         encoding: "utf8",
+        stdio: ["pipe", "pipe", "ignore"],
       }).trim();
     } catch {}
 

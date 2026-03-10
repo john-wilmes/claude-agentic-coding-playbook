@@ -65,7 +65,7 @@ Example for Node/TypeScript:
 - Test: `npm test`
 ```
 
-### 5b. Create AGENTS.md
+### 6. Create AGENTS.md
 
 Generate an `AGENTS.md` file at the project root. This is a cross-tool convention (60k+ repos) that tells any AI coding assistant how to build, test, and lint the project.
 
@@ -93,11 +93,11 @@ Populate sections from the quality gate commands chosen in step 5:
 - Do not commit credentials or secrets.
 ```
 
-### 6. Create package.json or equivalent
+### 7. Create package.json or equivalent
 
-Use `npm init -y` for Node projects. Set name, description, and version. For Python, create `pyproject.toml`.
+Use `npm init -y` for Node projects. Set name, description, and version. For Python, create `pyproject.toml`. For static sites, create a minimal `package.json` with dev scripts (e.g., a `start` or `serve` script) — this is optional if no tooling is needed. For "other" project types, skip this step or add the appropriate manifest for that ecosystem.
 
-### 7. Install pre-commit hook
+### 8. Install pre-commit hook
 
 First, check if `core.hooksPath` is configured:
 ```bash
@@ -120,7 +120,7 @@ chmod +x ~/Documents/<project-name>/.git/hooks/pre-commit
 
 This hook blocks files >5MB, common credential patterns, and .env files from being committed.
 
-### 8. Create GitHub repo and push
+### 9. Create GitHub repo and push
 
 ```bash
 cd ~/Documents/<project-name>
@@ -131,7 +131,7 @@ gh repo create <project-name> --private --source . --push
 
 Always use `--private`. Only use `--public` if the user has explicitly and unprompted requested a public repo. Never infer public visibility from context.
 
-### 9. Run CodeRabbit initial review
+### 10. Run CodeRabbit initial review
 
 Use the CodeRabbit MCP tools to run a full review of the initial codebase. For each finding:
 - Apply the suggestion immediately if it improves the code.
@@ -147,11 +147,11 @@ git push
 
 If there are no findings or no applicable fixes, skip this commit.
 
-### 10. Set up project memory
+### 11. Set up project memory
 
 Claude Code automatically creates the project memory directory at `~/.claude/projects/<project-key>/memory/` on first session in that directory. No manual setup needed.
 
-### 11. Report
+### 12. Report
 
 Tell the user:
 - The project path
