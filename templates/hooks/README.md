@@ -11,4 +11,5 @@ Claude Code hook scripts that run automatically during sessions. These are insta
 | `model-router.js` | `PreToolUse` (Task) | Auto-selects Haiku/Sonnet/Opus for Task tool calls based on prompt content signals. Saves cost by routing simple tasks to cheaper models. |
 | `prompt-injection-guard.js` | `PreToolUse` (Bash) | Blocks high-confidence prompt injection patterns in Bash commands. Designed for zero false positives. |
 | `post-tool-verify.js` | `PostToolUse` (Edit/Write) | Auto-runs project tests after file edits with debouncing to avoid redundant runs. |
+| `context-guard.js` | `PreToolUse` (Edit/Write) + `PostToolUse` (all tools) | Dual-mode context guard. PostToolUse reads transcript token usage, warns at 40%/60%, advisory block at 70%. PreToolUse hard-blocks file mutations when usage >= 70%. Allows `~/.claude/` writes for checkpoint. |
 | `pre-commit` | git pre-commit | Blocks commits containing secrets (API keys, tokens) or files over 5 MB. |

@@ -474,7 +474,7 @@ if [ -f "$SCRIPT_DIR/templates/hooks/post-tool-verify.js" ]; then
   fi
 fi
 
-# Context guard hook (PostToolUse -- reads transcript token usage, blocks at 70%)
+# Context guard hook (dual-mode: PostToolUse all tools + PreToolUse Edit/Write)
 if [ -f "$SCRIPT_DIR/templates/hooks/context-guard.js" ]; then
   install_file "$SCRIPT_DIR/templates/hooks/context-guard.js" "$CLAUDE_DIR/hooks/context-guard.js" "context guard: context-guard.js"
 
@@ -484,30 +484,64 @@ if [ -f "$SCRIPT_DIR/templates/hooks/context-guard.js" ]; then
   CTXGUARD_CMD="node $CLAUDE_DIR/hooks/context-guard.js"
 
   if [ "$DRY_RUN" = true ]; then
-    echo "[DRY RUN] Would add PostToolUse hook to $SETTINGS_FILE"
+    echo "[DRY RUN] Would add context-guard hooks (PostToolUse + PreToolUse) to $SETTINGS_FILE"
   else
     if [ ! -f "$SETTINGS_FILE" ]; then
       echo "{}" > "$SETTINGS_FILE"
     fi
 
-    if grep -q "context-guard" "$SETTINGS_FILE" 2>/dev/null; then
-      echo "ALREADY CONFIGURED: context-guard hook in settings.json"
-    else
-      node -e "
-        const fs = require('fs');
-        const path = require('path');
-        const settingsPath = path.resolve(process.argv[1]);
-        const hookCmd = process.argv[2];
-        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-        if (!settings.hooks) settings.hooks = {};
-        if (!settings.hooks.PostToolUse) settings.hooks.PostToolUse = [];
+    # PostToolUse entry: no matcher (fires on ALL tools).
+    # Upgrades old matcher-constrained entries to no-matcher.
+    node -e "
+      const fs = require('fs');
+      const path = require('path');
+      const settingsPath = path.resolve(process.argv[1]);
+      const hookCmd = process.argv[2];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.hooks) settings.hooks = {};
+      if (!settings.hooks.PostToolUse) settings.hooks.PostToolUse = [];
+      // Check if a no-matcher context-guard entry already exists
+      const hasNoMatcher = settings.hooks.PostToolUse.some(e =>
+        !e.matcher && e.hooks && e.hooks.some(h => h.command && h.command.includes('context-guard'))
+      );
+      if (!hasNoMatcher) {
+        // Remove any old matcher-constrained context-guard entries
+        settings.hooks.PostToolUse = settings.hooks.PostToolUse.filter(e =>
+          !(e.hooks && e.hooks.some(h => h.command && h.command.includes('context-guard')))
+        );
         settings.hooks.PostToolUse.push({
-          hooks: [{ type: 'command', command: hookCmd }]
+          hooks: [{ type: 'command', command: hookCmd, timeout: 3 }]
         });
         fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
-      " "$SETTINGS_FILE" "$CTXGUARD_CMD"
-      echo "CONFIGURED: context-guard hook in settings.json"
-    fi
+        console.log('CONFIGURED: context-guard PostToolUse hook (no matcher, all tools)');
+      } else {
+        console.log('ALREADY CONFIGURED: context-guard PostToolUse hook in settings.json');
+      }
+    " "$SETTINGS_FILE" "$CTXGUARD_CMD"
+
+    # PreToolUse entry: matcher Edit|Write (hard-blocks file mutations at 70%).
+    node -e "
+      const fs = require('fs');
+      const path = require('path');
+      const settingsPath = path.resolve(process.argv[1]);
+      const hookCmd = process.argv[2];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.hooks) settings.hooks = {};
+      if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+      const hasEntry = settings.hooks.PreToolUse.some(e =>
+        e.hooks && e.hooks.some(h => h.command && h.command.includes('context-guard'))
+      );
+      if (!hasEntry) {
+        settings.hooks.PreToolUse.push({
+          matcher: 'Edit|Write',
+          hooks: [{ type: 'command', command: hookCmd, timeout: 3 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+        console.log('CONFIGURED: context-guard PreToolUse hook (Edit|Write)');
+      } else {
+        console.log('ALREADY CONFIGURED: context-guard PreToolUse hook in settings.json');
+      }
+    " "$SETTINGS_FILE" "$CTXGUARD_CMD"
   fi
 fi
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Integration tests for context-guard.js (PostToolUse hook).
+// Integration tests for context-guard.js (PreToolUse + PostToolUse dual-mode hook).
 // Zero dependencies — uses only Node built-ins + local test-helpers.
 //
 // Run: node tests/hooks/context-guard.test.js
@@ -77,13 +77,26 @@ function makeAssistantMessage(inputTokens, cacheRead = 0, cacheCreation = 0) {
 }
 
 /**
- * Run the context-guard hook with optional transcript path and tool payloads.
+ * Run the context-guard hook in PostToolUse mode (has tool_response).
  */
 function runGuard(sessionId, opts = {}) {
   const input = {
     session_id: sessionId,
     tool_input: opts.toolInput || {},
     tool_response: opts.toolResponse || {},
+    transcript_path: opts.transcriptPath || undefined,
+  };
+  if (opts.agentId) input.agent_id = opts.agentId;
+  return runHook(CONTEXT_GUARD, input);
+}
+
+/**
+ * Run the context-guard hook in PreToolUse mode (no tool_response field).
+ */
+function runGuardPre(sessionId, opts = {}) {
+  const input = {
+    session_id: sessionId,
+    tool_input: opts.toolInput || {},
     transcript_path: opts.transcriptPath || undefined,
   };
   if (opts.agentId) input.agent_id = opts.agentId;
@@ -370,6 +383,146 @@ test("14. Malformed JSON input: exits 0 with {}", () => {
   assert.strictEqual(result.status, 0, "Should exit 0");
   assert.ok(result.json, "Should output valid JSON");
   assert.deepStrictEqual(result.json, {}, "Should output empty object on error");
+});
+
+// ─── PreToolUse mode tests ────────────────────────────────────────────────────
+
+// Test 15: PreToolUse below threshold → allow
+test("15. PreToolUse below threshold (60%): allow", () => {
+  const sessionId = newSessionId();
+  const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
+  try {
+    // Write state with lastUsageRatio below block threshold
+    fs.mkdirSync(STATE_DIR, { recursive: true });
+    fs.writeFileSync(stateFile, JSON.stringify({ lastUsageRatio: 0.60 }));
+
+    const result = runGuardPre(sessionId, {
+      toolInput: { file_path: "/home/user/project/src/main.js" },
+    });
+    assert.strictEqual(result.status, 0, "Should exit 0");
+    assert.ok(result.json, "Should output valid JSON");
+    assert.strictEqual(result.json.decision, undefined, "Should not block below 70%");
+  } finally {
+    cleanupSession(sessionId);
+  }
+});
+
+// Test 16: PreToolUse at 70% → block
+test("16. PreToolUse at 70% threshold: block", () => {
+  const sessionId = newSessionId();
+  const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
+  try {
+    fs.mkdirSync(STATE_DIR, { recursive: true });
+    fs.writeFileSync(stateFile, JSON.stringify({ lastUsageRatio: 0.70 }));
+
+    const result = runGuardPre(sessionId, {
+      toolInput: { file_path: "/home/user/project/src/main.js" },
+    });
+    assert.strictEqual(result.status, 0, "Should exit 0");
+    assert.strictEqual(result.json.decision, "block", "Should block at 70%");
+    assert.ok(result.json.reason.includes("Edit/Write blocked"), "Should mention Edit/Write blocked");
+  } finally {
+    cleanupSession(sessionId);
+  }
+});
+
+// Test 17: PreToolUse→PostToolUse handshake
+test("17. PreToolUse→PostToolUse handshake: PostToolUse writes ratio, PreToolUse reads it", () => {
+  const sessionId = newSessionId();
+  // 75% of 200k = 150,000 tokens
+  const transcript = createFakeTranscript([makeAssistantMessage(150000)]);
+  try {
+    // PostToolUse fires first, writes lastUsageRatio to state
+    const postResult = runGuard(sessionId, { transcriptPath: transcript });
+    assert.strictEqual(postResult.status, 0);
+    assert.strictEqual(postResult.json.decision, "block", "PostToolUse should advisory-block at 75%");
+
+    // PreToolUse fires next, reads state and hard-blocks
+    const preResult = runGuardPre(sessionId, {
+      toolInput: { file_path: "/home/user/project/src/app.js" },
+    });
+    assert.strictEqual(preResult.status, 0);
+    assert.strictEqual(preResult.json.decision, "block", "PreToolUse should hard-block from stored ratio");
+  } finally {
+    cleanupSession(sessionId);
+    try { fs.rmSync(transcript); } catch {}
+  }
+});
+
+// Test 18: PreToolUse skips subagents
+test("18. PreToolUse skips subagents even when ratio is high", () => {
+  const sessionId = newSessionId();
+  const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
+  try {
+    fs.mkdirSync(STATE_DIR, { recursive: true });
+    fs.writeFileSync(stateFile, JSON.stringify({ lastUsageRatio: 0.85 }));
+
+    const result = runGuardPre(sessionId, {
+      toolInput: { file_path: "/home/user/project/src/main.js" },
+      agentId: "subagent-xyz",
+    });
+    assert.strictEqual(result.status, 0, "Should exit 0");
+    assert.deepStrictEqual(result.json, {}, "Should skip entirely for subagents");
+  } finally {
+    cleanupSession(sessionId);
+  }
+});
+
+// Test 19: PreToolUse with no state file → allow (safe default)
+test("19. PreToolUse with no state file: allow (safe default)", () => {
+  const sessionId = newSessionId();
+  // Ensure no state file exists for this session
+  cleanupSession(sessionId);
+  try {
+    const result = runGuardPre(sessionId, {
+      toolInput: { file_path: "/home/user/project/src/main.js" },
+    });
+    assert.strictEqual(result.status, 0, "Should exit 0");
+    assert.ok(result.json, "Should output valid JSON");
+    assert.strictEqual(result.json.decision, undefined, "Should allow when no state exists");
+  } finally {
+    cleanupSession(sessionId);
+  }
+});
+
+// Test 20: PreToolUse allows ~/.claude/ writes when blocked
+test("20. PreToolUse allows ~/.claude/ writes when blocked", () => {
+  const sessionId = newSessionId();
+  const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
+  const homeDir = os.homedir();
+  try {
+    fs.mkdirSync(STATE_DIR, { recursive: true });
+    fs.writeFileSync(stateFile, JSON.stringify({ lastUsageRatio: 0.80 }));
+
+    const result = runGuardPre(sessionId, {
+      toolInput: { file_path: path.join(homeDir, ".claude", "projects", "test", "memory", "MEMORY.md") },
+    });
+    assert.strictEqual(result.status, 0, "Should exit 0");
+    assert.strictEqual(result.json.decision, undefined, "Should allow ~/.claude/ writes even when blocked");
+  } finally {
+    cleanupSession(sessionId);
+  }
+});
+
+// Test 21: PostToolUse stores lastUsageRatio in state
+test("21. PostToolUse stores lastUsageRatio in state file", () => {
+  const sessionId = newSessionId();
+  const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
+  // 65% of 200k = 130,000 tokens
+  const transcript = createFakeTranscript([makeAssistantMessage(130000)]);
+  try {
+    const result = runGuard(sessionId, { transcriptPath: transcript });
+    assert.strictEqual(result.status, 0);
+
+    // Read the state file and check lastUsageRatio
+    const state = JSON.parse(fs.readFileSync(stateFile, "utf8"));
+    assert.ok(state.lastUsageRatio !== undefined, "State should have lastUsageRatio");
+    // 130000 / 200000 = 0.65
+    assert.strictEqual(state.lastUsageRatio, 0.65, `lastUsageRatio should be 0.65, got ${state.lastUsageRatio}`);
+  } finally {
+    cleanupSession(sessionId);
+    try { fs.rmSync(transcript); } catch {}
+  }
 });
 
 // ─── Summary ─────────────────────────────────────────────────────────────────
