@@ -474,7 +474,7 @@ if [ -f "$SCRIPT_DIR/templates/hooks/post-tool-verify.js" ]; then
   fi
 fi
 
-# Context guard hook (PostToolUse -- tracks cumulative context size, blocks at 70%)
+# Context guard hook (PostToolUse -- reads transcript token usage, blocks at 70%)
 if [ -f "$SCRIPT_DIR/templates/hooks/context-guard.js" ]; then
   install_file "$SCRIPT_DIR/templates/hooks/context-guard.js" "$CLAUDE_DIR/hooks/context-guard.js" "context guard: context-guard.js"
 
