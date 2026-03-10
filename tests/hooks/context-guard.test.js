@@ -428,8 +428,8 @@ test("16. PreToolUse at 60% threshold: block", () => {
       toolInput: { file_path: "/home/user/project/src/main.js" },
     });
     assert.strictEqual(result.status, 0, "Should exit 0");
-    assert.strictEqual(result.json.decision, "block", "Should block at 60%");
-    assert.ok(result.json.reason.includes("BLOCKED:"), "Should have directive block message");
+    assert.strictEqual(result.json.hookSpecificOutput.permissionDecision, "deny", "Should block at 60%");
+    assert.ok(result.json.hookSpecificOutput.permissionDecisionReason.includes("BLOCKED:"), "Should have directive block message");
   } finally {
     cleanupSession(sessionId);
   }
@@ -452,7 +452,7 @@ test("17. PreToolUse→PostToolUse handshake: PostToolUse writes ratio, PreToolU
       toolInput: { file_path: "/home/user/project/src/app.js" },
     });
     assert.strictEqual(preResult.status, 0);
-    assert.strictEqual(preResult.json.decision, "block", "PreToolUse should hard-block from stored ratio");
+    assert.strictEqual(preResult.json.hookSpecificOutput.permissionDecision, "deny", "PreToolUse should hard-block from stored ratio");
   } finally {
     cleanupSession(sessionId);
     try { fs.rmSync(transcript); } catch {}
@@ -547,8 +547,8 @@ test("22. PreToolUse blocks Read tool at 60% threshold", () => {
       toolInput: { file_path: "/home/user/project/src/main.js" },
     });
     assert.strictEqual(result.status, 0, "Should exit 0");
-    assert.strictEqual(result.json.decision, "block", "Should block Read at threshold");
-    assert.ok(result.json.reason.includes("BLOCKED:"), "Should have directive block message");
+    assert.strictEqual(result.json.hookSpecificOutput.permissionDecision, "deny", "Should block Read at threshold");
+    assert.ok(result.json.hookSpecificOutput.permissionDecisionReason.includes("BLOCKED:"), "Should have directive block message");
   } finally {
     cleanupSession(sessionId);
   }
@@ -566,7 +566,7 @@ test("23. PreToolUse blocks Grep tool at 60% threshold", () => {
       toolInput: { pattern: "TODO", path: "/home/user/project" },
     });
     assert.strictEqual(result.status, 0, "Should exit 0");
-    assert.strictEqual(result.json.decision, "block", "Should block Grep at threshold");
+    assert.strictEqual(result.json.hookSpecificOutput.permissionDecision, "deny", "Should block Grep at threshold");
   } finally {
     cleanupSession(sessionId);
   }

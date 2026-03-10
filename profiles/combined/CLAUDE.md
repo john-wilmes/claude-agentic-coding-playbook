@@ -76,6 +76,7 @@ Investigations live at `~/.claude/investigations/<id>/`. Use `/investigate` to m
 - Plan all changes to a file before editing. Fewer larger edits, not many small ones.
 - Keep responses concise. No preamble ("Let me..."), no recaps unless asked.
 - After two failed attempts at the same approach, switch strategies or ask the user.
+- When the Serena MCP server is available, prefer `find_symbol`/`find_referencing_symbols` over grep+read for navigating large codebases.
 
 ### Model Routing
 

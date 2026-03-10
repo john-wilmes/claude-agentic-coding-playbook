@@ -120,10 +120,10 @@ test("3. 5 identical calls: blocked", () => {
 
     assert.strictEqual(result.status, 0, "Should exit 0");
     assert.ok(result.json, "Should output valid JSON");
-    assert.strictEqual(result.json.decision, "block", "Should block at 5");
+    assert.strictEqual(result.json.hookSpecificOutput.permissionDecision, "deny", "Should block at 5");
     assert.ok(
-      result.json.reason.includes("5 identical"),
-      `reason should mention '5 identical', got: ${result.json.reason}`
+      result.json.hookSpecificOutput.permissionDecisionReason.includes("5 identical"),
+      `permissionDecisionReason should mention '5 identical', got: ${result.json.hookSpecificOutput.permissionDecisionReason}`
     );
   } finally {
     cleanupSession(sessionId);

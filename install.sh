@@ -81,23 +81,76 @@ if [ ! -d "$PROFILE_DIR" ]; then
   exit 1
 fi
 
-# --- Pre-install validation ---
+# --- Pre-install validation & auto-install ---
 
-check_command() {
-  if ! command -v "$1" &>/dev/null; then
-    echo "ERROR: '$1' is required but not found on PATH."
-    echo "  Install with: $2"
+install_sys_package() {
+  local pkg="$1"
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    if command -v brew &>/dev/null; then
+      brew install "$pkg"
+    else
+      echo "  ERROR: Homebrew not found. Install $pkg manually:"
+      echo "    /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+      echo "    brew install $pkg"
+      return 1
+    fi
+  elif [[ "$(uname -s)" == "Linux" ]]; then
+    local apt_pkg="$pkg"
+    [[ "$pkg" == "node" ]] && apt_pkg="nodejs"
+    if command -v apt-get &>/dev/null; then
+      sudo apt-get update -qq && sudo apt-get install -y "$apt_pkg"
+    elif command -v dnf &>/dev/null; then
+      sudo dnf install -y "$apt_pkg"
+    elif command -v pacman &>/dev/null; then
+      sudo pacman -S --noconfirm "$apt_pkg"
+    elif command -v apk &>/dev/null; then
+      sudo apk add "$apt_pkg"
+    else
+      echo "  ERROR: No supported package manager found (need apt-get, dnf, pacman, or apk)."
+      return 1
+    fi
+  else
+    echo "  ERROR: Unsupported platform $(uname -s)."
+    return 1
+  fi
+}
+
+install_uv() {
+  if ! command -v curl &>/dev/null; then
+    echo "  ERROR: curl is required to install uv."
+    return 1
+  fi
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+}
+
+ensure_command() {
+  local cmd="$1"
+  if command -v "$cmd" &>/dev/null; then
+    return 0
+  fi
+  echo "'$cmd' not found on PATH. Attempting to install..."
+  if [[ "$cmd" == "uv" ]]; then
+    install_uv
+  else
+    install_sys_package "$cmd"
+  fi
+  if command -v "$cmd" &>/dev/null; then
+    echo "  -> $cmd installed successfully."
+    return 0
+  else
+    echo "  -> Failed to install $cmd."
     return 1
   fi
 }
 
 missing=0
-check_command git "sudo apt install git  (Linux) / brew install git (macOS)" || missing=1
-check_command node "sudo apt install nodejs  (Linux) / brew install node (macOS)" || missing=1
+ensure_command git || missing=1
+ensure_command node || missing=1
 
 if [ "$missing" -eq 1 ]; then
   echo ""
-  echo "Required: git, node (v18+). Install the missing tools and re-run."
+  echo "Required: git, node (v18+). Could not auto-install. Install manually and re-run."
   exit 1
 fi
 
@@ -690,6 +743,50 @@ if [[ ":$PATH:" != *":$LOCAL_BIN:"* ]]; then
   echo "    export PATH=\"\$HOME/.local/bin:\$PATH\""
 fi
 
+# --- Serena MCP server (optional — requires uv) ---
+
+echo ""
+echo "--- Configuring Serena MCP server (optional) ---"
+
+if [ "$DRY_RUN" = true ]; then
+  echo "[DRY RUN] Would ensure uv is installed and register Serena MCP server"
+else
+  ensure_command uv || {
+    echo "SKIPPED: Serena MCP server (could not install uv)"
+    UV_FAILED=true
+  }
+
+  if [ "${UV_FAILED:-}" != true ]; then
+    SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    if grep -q '"serena"' "$SETTINGS_FILE" 2>/dev/null; then
+      echo "ALREADY CONFIGURED: Serena MCP server in settings.json"
+    else
+      node -e "
+        const fs = require('fs');
+        const path = require('path');
+        const settingsPath = path.resolve(process.argv[1]);
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (!settings.mcpServers) settings.mcpServers = {};
+        settings.mcpServers.serena = {
+          command: 'uvx',
+          args: [
+            '--from', 'git+https://github.com/oraios/serena',
+            'serena', 'start-mcp-server',
+            '--context', 'claude-code',
+            '--project-from-cwd'
+          ]
+        };
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      " "$SETTINGS_FILE"
+      echo "CONFIGURED: Serena MCP server in settings.json"
+    fi
+  fi
+fi
+
 # Knowledge base templates
 if [ -d "$SCRIPT_DIR/templates/knowledge" ]; then
   echo ""
@@ -738,6 +835,7 @@ for skill_dir in "$PROFILE_DIR/skills"/*/; do
   [ -d "$skill_dir" ] || continue
   echo "  /$(basename "$skill_dir") skill  -> $CLAUDE_DIR/skills/$(basename "$skill_dir")/"
 done
+echo "  Serena MCP       -> settings.json mcpServers (optional, requires uv)"
 echo "  Session hooks    -> $CLAUDE_DIR/hooks/ (auto-run on session start/end)"
 echo "  Templates        -> $CLAUDE_DIR/templates/"
 echo "    project-CLAUDE.md   (copy to new project roots)"
