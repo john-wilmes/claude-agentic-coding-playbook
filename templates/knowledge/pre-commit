@@ -30,6 +30,26 @@ while IFS= read -r file; do
     fi
   done
 
+  # Validate category value
+  category_val=$(echo "$fm" | grep "^category:" | sed 's/^category:[[:space:]]*//')
+  case "$category_val" in
+    gotcha|pattern|reference|debug) ;;
+    *)
+      echo "ERROR: $file invalid value for category: $category_val (must be gotcha, pattern, reference, or debug)"
+      errors=$((errors + 1))
+      ;;
+  esac
+
+  # Validate confidence value
+  confidence_val=$(echo "$fm" | grep "^confidence:" | sed 's/^confidence:[[:space:]]*//')
+  case "$confidence_val" in
+    high|medium|low) ;;
+    *)
+      echo "ERROR: $file invalid value for confidence: $confidence_val (must be high, medium, or low)"
+      errors=$((errors + 1))
+      ;;
+  esac
+
   # Check for AWS keys
   if grep -qE 'AKIA[0-9A-Z]{16}' "$file"; then
     echo "BLOCKED: $file contains AWS access key pattern"

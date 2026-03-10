@@ -167,7 +167,9 @@ process.stdin.on("end", () => {
         const filePath = (hookInput.tool_input && hookInput.tool_input.file_path) || "";
         const homeDir = os.homedir();
         const claudeDir = path.join(homeDir, ".claude");
-        if (filePath.startsWith(claudeDir + "/") || filePath.startsWith(claudeDir + path.sep)) {
+        const normalizedFile = path.normalize(filePath);
+        const normalizedClaude = path.normalize(claudeDir);
+        if (normalizedFile.startsWith(normalizedClaude + path.sep)) {
           process.stdout.write(JSON.stringify({}));
           process.exit(0);
         }

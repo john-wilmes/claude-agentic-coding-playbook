@@ -34,7 +34,7 @@ chmod +x install.sh
 
 ### Prerequisites
 
-- **Bash on Linux or macOS** (Windows is supported only under [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) — native CMD/PowerShell is not supported)
+- **Bash on Linux or macOS** (Windows requires [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) — native CMD/PowerShell is not supported. The install script, hooks, and test suite all assume a POSIX environment.)
 - **Node.js 18+** (for hooks and test scripts)
 - **git** (for version control and install script)
 

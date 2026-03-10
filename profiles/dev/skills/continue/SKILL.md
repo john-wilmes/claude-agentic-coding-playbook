@@ -21,7 +21,7 @@ Check for a project-level memory file first, then fall back to the most recent g
 
 ### 2. Extract Current Work
 
-If no memory file was found in step 2, or the file has no `## Current Work` section, tell the user:
+If no memory file was found in step 1, or the file has no `## Current Work` section, tell the user:
 
 ```text
 No prior session found. This looks like a fresh start.
