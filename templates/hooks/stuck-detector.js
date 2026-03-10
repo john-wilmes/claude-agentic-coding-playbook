@@ -17,6 +17,18 @@ const WINDOW_SIZE = 5;
 const WARN_THRESHOLD = 3;
 const BLOCK_THRESHOLD = 5;
 
+// Commands that are legitimately repeated (test/lint/typecheck cycles).
+// Matched against the start of the command string after trimming.
+const WHITELISTED_PREFIXES = [
+  "npm test", "npm run test", "npm run lint", "npm run check",
+  "npx jest", "npx vitest", "npx eslint", "npx tsc",
+  "node tests/", "node test/",
+  "pytest", "python -m pytest",
+  "cargo test", "cargo clippy",
+  "go test",
+  "make test", "make check", "make lint",
+];
+
 function getStateDir() {
   const dir = path.join(os.tmpdir(), "claude-stuck-detector");
   try { fs.mkdirSync(dir, { recursive: true }); } catch {}
@@ -69,6 +81,15 @@ process.stdin.on("end", () => {
     const sessionId = hookInput.session_id || "unknown";
     const toolName = hookInput.tool_name || "";
     const toolInput = hookInput.tool_input || {};
+
+    // Skip stuck detection for whitelisted test/lint commands
+    if (toolName === "Bash" && toolInput.command) {
+      const cmd = toolInput.command.trim();
+      if (WHITELISTED_PREFIXES.some((prefix) => cmd.startsWith(prefix))) {
+        process.stdout.write(JSON.stringify({}));
+        process.exit(0);
+      }
+    }
 
     const hash = hashAction(toolName, toolInput);
 

@@ -1918,8 +1918,8 @@ evaluation methodology — have explicit empirical grounding.
 #### Context rot
 
 Chroma Research (2025) tested 18 frontier models across controlled fill levels and
-found non-linear performance degradation in all of them [37]. The practical ceiling —
-the fill level at which accuracy drops materially — is 60-70% of advertised maximum.
+found non-linear performance degradation in all of them [37]. Based on the reported
+degradation curves, the practical ceiling appears to be roughly 60-70% of advertised maximum.
 Counterintuitively, coherently structured content (e.g., a well-organized codebase)
 degrades faster than shuffled haystacks, because the model's attention patterns over
 coherent text are more sensitive to position than over random orderings.
@@ -1933,8 +1933,8 @@ to recency-only bias, effectively ignoring early context [39].
 
 #### NUMA-aware context engineering
 
-Patel (Substack 2025) introduced a framework treating context windows as Non-Uniform
-Memory Access (NUMA) in classical computing [39]. The mechanism:
+Conikee (Substack 2025) introduced a framework treating context windows as Non-Uniform
+Memory Access (NUMA) in classical computing [52]. The mechanism:
 
 - **Causal masking**: every token attends to all prior tokens; early tokens accumulate
   attention weight across the entire sequence
@@ -2002,7 +2002,7 @@ dropping redundant content while preserving exact text for anything referenced.
 
 #### The MemGPT mental model
 
-Zheng et al. (arXiv:2310.08560, 2023) framed LLM context management as operating
+Packer et al. (arXiv:2310.08560, 2023) framed LLM context management as operating
 system memory paging [41]: main context is RAM, external storage is disk, and
 explicit paging operations move content between them. This framework, which evolved
 into the Letta platform, maps cleanly to Claude Code session management:
@@ -2139,7 +2139,7 @@ JSON — the actual tool call log — is evidence.
 
 #### Isolating infrastructure effects
 
-Cognition AI's "Devin-Base" approach (2024) uses a 2x2 factorial design [45]:
+Cognition AI's "Devin-Base" approach (2024) uses a component-swap evaluation methodology [45]. The structure can be understood as a 2x2 factorial design:
 
 |  | No infrastructure | Full infrastructure |
 |--|------------------|---------------------|
@@ -2269,7 +2269,7 @@ Last updated: 2026-03-10
 
 40. **Morph -- Compaction vs Summarization.** https://www.morphllm.com/compaction-vs-summarization -- Verbatim compaction achieves 98% retention at 50-70% compression; LLM summarization achieves 37% multi-session retention at 80-90% compression; zero hallucination risk from deletion-based approach.
 
-41. **Zheng et al. -- MemGPT: Towards LLMs as Operating Systems (arXiv:2310.08560).** https://arxiv.org/abs/2310.08560 -- LLM context management framed as OS memory paging; main context as RAM, external storage as disk; explicit page-in/page-out operations; evolved into the Letta platform.
+41. **Packer et al. -- MemGPT: Towards LLMs as Operating Systems (arXiv:2310.08560).** https://arxiv.org/abs/2310.08560 -- LLM context management framed as OS memory paging; main context as RAM, external storage as disk; explicit page-in/page-out operations; evolved into the Letta platform.
 
 42. **AgentIF -- Benchmarking Agent Instruction Following (Tsinghua, arXiv:2505.16944).** https://arxiv.org/abs/2505.16944 -- 707 instructions across 50 real applications; GPT-4o drops from 87% (IFEval) to 58.5% on agentic instructions; best models follow fewer than 30% of instructions; performance approaches zero beyond 6,000 words.
 
@@ -2281,7 +2281,7 @@ Last updated: 2026-03-10
 
 46. **Yao et al. -- τ-bench: Tool-Agent-User Interaction Benchmark (arXiv:2406.12045).** https://arxiv.org/abs/2406.12045 -- pass^k metric measuring reliability (all k trials succeed) vs pass@k measuring capability (at least one succeeds); adopted by Anthropic for Claude evaluation.
 
-47. **OpenHands -- Stuck Agent Detection (arXiv:2511.03690).** https://arxiv.org/abs/2511.03690 -- Event-sourced action logging; cycle detection for repeated identical actions; auto-abort for stuck agents; pause/resume API for human intervention without process termination.
+47. **OpenHands -- Open Platform for AI Software Developers (arXiv:2511.03690).** https://arxiv.org/abs/2511.03690 -- SDK overview covering event-sourced action logging, agent runtime architecture, and platform extensibility. Stuck-detection via cycle monitoring is one component of the broader platform.
 
 48. **Context Length Penalty (arXiv:2510.05381).** https://arxiv.org/abs/2510.05381 -- Isolated length effect from retrieval quality; 13.9-85% performance degradation from input length alone; adding only relevant files still imposes a processing penalty.
 
@@ -2290,3 +2290,5 @@ Last updated: 2026-03-10
 50. **HumanLayer -- Instruction Ceiling.** https://www.humanlayer.dev/blog/writing-a-good-claude-md -- Uniform compliance degradation begins around 150-200 instructions; Claude Code's system prompt consumes ~50 of that budget. (See also [5].)
 
 51. **AgentSpec -- Hook-Based Agent Enforcement (arXiv:2503.18666, ICSE 2026).** https://arxiv.org/abs/2503.18666 -- Prevents >90% of unsafe agent executions with millisecond overhead; hook-based enforcement framework; specification-driven safety guarantees.
+
+52. **Conikee -- NUMA-Aware Context Engineering (Substack 2025).** https://substack.com/@conikee -- Framework treating LLM context windows as Non-Uniform Memory Access; causal masking and RoPE position encoding create position-dependent attention; anchor critical facts at front and end, compress the middle.
