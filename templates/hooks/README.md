@@ -11,5 +11,7 @@ Claude Code hook scripts that run automatically during sessions. These are insta
 | `model-router.js` | `PreToolUse` (Task) | Auto-selects Haiku/Sonnet/Opus for Task tool calls based on prompt content signals. Saves cost by routing simple tasks to cheaper models. |
 | `prompt-injection-guard.js` | `PreToolUse` (Bash) | Blocks high-confidence prompt injection patterns in Bash commands. Designed for zero false positives. |
 | `post-tool-verify.js` | `PostToolUse` (Edit/Write) | Auto-runs project tests after file edits with debouncing to avoid redundant runs. |
-| `context-guard.js` | `PreToolUse` (Edit/Write) + `PostToolUse` (all tools) | Dual-mode context guard. PostToolUse reads transcript token usage, warns at 40%/60%, advisory block at 70%. PreToolUse hard-blocks file mutations when usage >= 70%. Allows `~/.claude/` writes for checkpoint. |
+| `context-guard.js` | `PreToolUse` (all tools) + `PostToolUse` (all tools) | Dual-mode context guard. PostToolUse reads transcript token usage, warns at 35%/50%, advisory block at 60%. PreToolUse hard-blocks all tools when usage >= 60%. Allows Skill tool and `~/.claude/` writes for checkpoint. |
+| `stuck-detector.js` | `PreToolUse` (all tools) | Detects when the agent repeats the same action 3+ times. Warns at 3, blocks at 5. Whitelists test/lint commands. |
+| `pre-compact.js` | `PreCompact` | Saves an emergency snapshot (branch, modified files) to MEMORY.md before compaction so `/continue` can resume. |
 | `pre-commit` | git pre-commit | Blocks commits containing secrets (API keys, tokens) or files over 5 MB. |
