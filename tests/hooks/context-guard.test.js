@@ -181,16 +181,24 @@ test("3. Transcript at 50%: checkpoint warning fires once", () => {
   }
 });
 
-// Test 4: Transcript at 60% → block decision
-test("4. Transcript at 60%: block decision", () => {
+// Test 4: Transcript at 60% → critical advisory (PostToolUse can't hard-block)
+test("4. Transcript at 60%: critical advisory via hookSpecificOutput", () => {
   const sessionId = newSessionId();
   // 60% of 200k = 120,000 tokens
   const transcript = createFakeTranscript([makeAssistantMessage(120000)]);
   try {
     const result = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(result.status, 0);
-    assert.strictEqual(result.json.decision, "block", "Should block");
-    assert.ok(result.json.reason.includes("/checkpoint"), "Should mention /checkpoint");
+    assert.strictEqual(result.json.decision, undefined, "PostToolUse should not use decision:block");
+    assert.ok(result.json.hookSpecificOutput, "Should have hookSpecificOutput");
+    assert.ok(
+      result.json.hookSpecificOutput.additionalContext.includes("CRITICAL"),
+      "Should include CRITICAL warning"
+    );
+    assert.ok(
+      result.json.hookSpecificOutput.additionalContext.includes("/checkpoint"),
+      "Should mention /checkpoint"
+    );
   } finally {
     cleanupSession(sessionId);
     try { fs.rmSync(transcript); } catch {}
@@ -227,7 +235,8 @@ test("6. Multiple assistant messages: uses most recent", () => {
   try {
     const result = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(result.status, 0);
-    assert.strictEqual(result.json.decision, "block", "Should use most recent (60%) and block");
+    assert.ok(result.json.hookSpecificOutput, "Should use most recent (60%) and warn critically");
+    assert.ok(result.json.hookSpecificOutput.additionalContext.includes("CRITICAL"), "Should include CRITICAL");
   } finally {
     cleanupSession(sessionId);
     try { fs.rmSync(transcript); } catch {}
@@ -333,8 +342,8 @@ test("11. Large transcript (>50KB): tail read still finds usage", () => {
 
     const result = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(result.status, 0);
-    assert.strictEqual(result.json.decision, "block", "Should find usage in tail and block");
-    assert.ok(result.json.reason.includes("120000 actual tokens"), "Should show actual tokens");
+    assert.ok(result.json.hookSpecificOutput, "Should find usage in tail and warn critically");
+    assert.ok(result.json.hookSpecificOutput.additionalContext.includes("120000 actual tokens"), "Should show actual tokens");
   } finally {
     cleanupSession(sessionId);
     try { fs.rmSync(transcript); } catch {}
@@ -435,7 +444,8 @@ test("17. PreToolUse→PostToolUse handshake: PostToolUse writes ratio, PreToolU
     // PostToolUse fires first, writes lastUsageRatio to state
     const postResult = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(postResult.status, 0);
-    assert.strictEqual(postResult.json.decision, "block", "PostToolUse should advisory-block at 65%");
+    assert.ok(postResult.json.hookSpecificOutput, "PostToolUse should critically warn at 65%");
+    assert.ok(postResult.json.hookSpecificOutput.additionalContext.includes("CRITICAL"), "Should include CRITICAL");
 
     // PreToolUse fires next, reads state and hard-blocks
     const preResult = runGuardPre(sessionId, {
@@ -562,19 +572,22 @@ test("23. PreToolUse blocks Grep tool at 60% threshold", () => {
   }
 });
 
-// Test 24: PreToolUse blocks Bash tool at threshold
-test("24. PreToolUse blocks Bash tool at 60% threshold", () => {
+// Test 24: PreToolUse allows Bash tool at threshold (checkpoint needs git)
+test("24. PreToolUse allows Bash tool at 60% threshold (checkpoint needs git)", () => {
   const sessionId = newSessionId();
   const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
   try {
     fs.mkdirSync(STATE_DIR, { recursive: true });
     fs.writeFileSync(stateFile, JSON.stringify({ lastUsageRatio: 0.65 }));
 
-    const result = runGuardPre(sessionId, {
-      toolInput: { command: "npm test" },
-    });
+    const input = {
+      session_id: sessionId,
+      tool_name: "Bash",
+      tool_input: { command: "git status" },
+    };
+    const result = runHook(CONTEXT_GUARD, input);
     assert.strictEqual(result.status, 0, "Should exit 0");
-    assert.strictEqual(result.json.decision, "block", "Should block Bash at threshold");
+    assert.strictEqual(result.json.decision, undefined, "Should allow Bash even when blocked");
   } finally {
     cleanupSession(sessionId);
   }
@@ -605,19 +618,22 @@ test("25. PreToolUse allows Skill tool at 60% threshold", () => {
   }
 });
 
-// Test 26: PreToolUse blocks Task tool at threshold
-test("26. PreToolUse blocks Task tool at 60% threshold", () => {
+// Test 26: PreToolUse allows Task tool at threshold (checkpoint may delegate)
+test("26. PreToolUse allows Task tool at 60% threshold (checkpoint may delegate)", () => {
   const sessionId = newSessionId();
   const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
   try {
     fs.mkdirSync(STATE_DIR, { recursive: true });
     fs.writeFileSync(stateFile, JSON.stringify({ lastUsageRatio: 0.65 }));
 
-    const result = runGuardPre(sessionId, {
-      toolInput: { prompt: "search for files" },
-    });
+    const input = {
+      session_id: sessionId,
+      tool_name: "Task",
+      tool_input: { prompt: "search for files" },
+    };
+    const result = runHook(CONTEXT_GUARD, input);
     assert.strictEqual(result.status, 0, "Should exit 0");
-    assert.strictEqual(result.json.decision, "block", "Should block Task at threshold");
+    assert.strictEqual(result.json.decision, undefined, "Should allow Task even when blocked");
   } finally {
     cleanupSession(sessionId);
   }
@@ -635,7 +651,8 @@ test("27. PostToolUse block writes /tmp/claude-checkpoint-exit flag", () => {
 
     const result = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(result.status, 0);
-    assert.strictEqual(result.json.decision, "block", "Should block at 65%");
+    assert.ok(result.json.hookSpecificOutput, "Should critically warn at 65%");
+    assert.ok(result.json.hookSpecificOutput.additionalContext.includes("CRITICAL"), "Should include CRITICAL");
 
     // Flag file should have been written
     assert.ok(fs.existsSync(flagFile), "Should write claude-checkpoint-exit flag file");
