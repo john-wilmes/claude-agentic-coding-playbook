@@ -112,6 +112,48 @@ The combined CLAUDE.md includes:
 - **Efficiency rules** -- parallel tool calls, no re-reads, two-attempt limit
 - **Memory discipline** -- Current Work tracking for session continuity
 
+## Testing
+
+Run the full test suite (161 tests across 10 suites):
+
+```bash
+# Hook tests (Node.js)
+for t in tests/hooks/*.test.js; do node "$t" || exit 1; done
+
+# Script tests (Bash)
+for t in tests/scripts/*.test.sh; do bash "$t" || exit 1; done
+
+# Or all at once
+for t in tests/hooks/*.test.js; do node "$t" || exit 1; done && for t in tests/scripts/*.test.sh; do bash "$t" || exit 1; done
+```
+
+## CLI Scripts
+
+Standalone tools installed to `~/.local/bin/`:
+
+| Script | Description |
+|--------|-------------|
+| `q` | Lightweight CLI for direct Anthropic API Q&A. Uses Haiku by default for fast, cheap answers. |
+| `qa` | Multi-turn conversational wrapper around `q` with session history. |
+| `claude-loop` | Auto-restart wrapper for Claude Code sessions. Supports `--task-queue` for batch execution. |
+
+## Log Analysis
+
+Hooks log decisions to `~/.claude/logs/YYYY-MM-DD.jsonl`. Analyze with:
+
+```bash
+# Full report
+node scripts/analyze-logs.js
+
+# Filter by date range
+node scripts/analyze-logs.js --since 2026-03-01
+
+# Filter by session or hook
+node scripts/analyze-logs.js --session abc123 --hook context-guard
+```
+
+Output includes context-guard progression per session, stuck-detector triggers, model-router distribution, and prompt-injection blocks.
+
 ## Existing Users
 
 If you already have a `~/.claude/CLAUDE.md` and custom skills:
