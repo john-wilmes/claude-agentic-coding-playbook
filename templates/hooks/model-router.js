@@ -21,6 +21,9 @@ const ARCH_SIGNALS = [
   "investigate", "diagnose",
 ];
 
+let log;
+try { log = require("./log"); } catch { log = { writeLog() {}, promptHead(t) { return t; } }; }
+
 function classifyTask(input) {
   const agentType = (input.subagent_type || "").trim();
   if (HAIKU_AGENT_TYPES.has(agentType)) {
@@ -74,6 +77,15 @@ process.stdin.on("end", () => {
 
     // Classify and inject model
     const { model, reason } = classifyTask(toolInput);
+
+    log.writeLog({
+      hook: "model-router",
+      event: "route",
+      session_id: hookInput.session_id,
+      tool_use_id: hookInput.tool_use_id,
+      details: `Auto-selected ${model} (${reason})`,
+      context: { model, reason, prompt_head: log.promptHead((toolInput.prompt || ""), 80) },
+    });
 
     const output = {
       decision: "allow",

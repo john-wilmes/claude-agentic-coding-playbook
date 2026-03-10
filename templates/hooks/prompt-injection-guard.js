@@ -49,6 +49,9 @@ const DESTRUCTIVE_PATTERNS = [
   },
 ];
 
+let log;
+try { log = require("./log"); } catch { log = { writeLog() {} }; }
+
 function checkCommand(cmd) {
   if (!cmd) return null;
   for (const { pattern, reason } of INJECTION_PATTERNS) {
@@ -84,6 +87,14 @@ process.stdin.on("end", () => {
     const reason = checkCommand(command);
 
     if (reason) {
+      log.writeLog({
+        hook: "prompt-injection-guard",
+        event: "block",
+        session_id: hookInput.session_id,
+        tool_use_id: hookInput.tool_use_id,
+        details: reason,
+        context: { command: log.promptHead(command, 100) },
+      });
       process.stdout.write(JSON.stringify({ decision: "block", reason }));
       process.exit(0);
     }

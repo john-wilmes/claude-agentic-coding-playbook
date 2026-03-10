@@ -187,6 +187,14 @@ process.stdin.on("end", () => {
           }
         }
         const pct = Math.round(state.lastUsageRatio * 100);
+        log.writeLog({
+          hook: "context-guard",
+          event: "block",
+          session_id: hookInput.session_id,
+          tool_use_id: hookInput.tool_use_id,
+          details: `PreToolUse block: ${pct}% context used`,
+          context: { mode: "pre", ratio: state.lastUsageRatio, pct },
+        });
         process.stdout.write(JSON.stringify({
           decision: "block",
           reason:
@@ -226,6 +234,14 @@ process.stdin.on("end", () => {
           JSON.stringify({ ratio: ctx.ratio, timestamp: Date.now() })
         );
       } catch {}
+      log.writeLog({
+        hook: "context-guard",
+        event: "block",
+        session_id: hookInput.session_id,
+        tool_use_id: hookInput.tool_use_id,
+        details: `PostToolUse block: ${pct}% context used`,
+        context: { mode: "post", ratio: ctx.ratio, pct, tokens: ctx.tokens },
+      });
       output = {
         decision: "block",
         reason:
@@ -234,6 +250,14 @@ process.stdin.on("end", () => {
     } else if (ctx.ratio >= WARN_THRESHOLD && !state.warned) {
       state.warned = true;
       state.subagentWarned = true; // 50% implies 35% already passed
+      log.writeLog({
+        hook: "context-guard",
+        event: "warn",
+        session_id: hookInput.session_id,
+        tool_use_id: hookInput.tool_use_id,
+        details: `PostToolUse warn: ${pct}% context used`,
+        context: { mode: "post", ratio: ctx.ratio, pct, tokens: ctx.tokens },
+      });
       output = {
         hookSpecificOutput: {
           hookEventName: "PostToolUse",
@@ -244,6 +268,14 @@ process.stdin.on("end", () => {
       };
     } else if (ctx.ratio >= SUBAGENT_THRESHOLD && !state.subagentWarned) {
       state.subagentWarned = true;
+      log.writeLog({
+        hook: "context-guard",
+        event: "warn",
+        session_id: hookInput.session_id,
+        tool_use_id: hookInput.tool_use_id,
+        details: `PostToolUse note: ${pct}% context used — delegate to subagents`,
+        context: { mode: "post", ratio: ctx.ratio, pct, tokens: ctx.tokens },
+      });
       output = {
         hookSpecificOutput: {
           hookEventName: "PostToolUse",
