@@ -78,6 +78,7 @@ when you forget, but explicit is better than implicit.
 - Start fresh sessions at natural breakpoints rather than pushing context to its limits.
 - Run `/compact` when context reaches ~70%. Use custom focus instructions (e.g., `/compact Focus on the API changes`).
 - Use subagents for exploration-heavy work to protect parent context size.
+- Delegate multi-file edits (3+ files) to subagents. Each Edit/Read returns file contents that consume parent context. A subagent editing 14 files keeps those results in its own context; the parent only sees the summary.
 - Never read multiple image files in the same turn -- use a subagent for bulk image examination.
 - Use `/rewind` or double-Escape to undo actions and roll back context.
 - Proactively suggest `/compact` when you notice context growing large (many tool results, long exploration).
