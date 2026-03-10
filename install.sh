@@ -474,6 +474,117 @@ if [ -f "$SCRIPT_DIR/templates/hooks/post-tool-verify.js" ]; then
   fi
 fi
 
+# Context guard hook (PostToolUse -- tracks cumulative context size, blocks at 70%)
+if [ -f "$SCRIPT_DIR/templates/hooks/context-guard.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/context-guard.js" "$CLAUDE_DIR/hooks/context-guard.js" "context guard: context-guard.js"
+
+  echo ""
+  echo "--- Configuring context-guard in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  CTXGUARD_CMD="node $CLAUDE_DIR/hooks/context-guard.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add PostToolUse hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    if grep -q "context-guard" "$SETTINGS_FILE" 2>/dev/null; then
+      echo "ALREADY CONFIGURED: context-guard hook in settings.json"
+    else
+      node -e "
+        const fs = require('fs');
+        const path = require('path');
+        const settingsPath = path.resolve(process.argv[1]);
+        const hookCmd = process.argv[2];
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (!settings.hooks) settings.hooks = {};
+        if (!settings.hooks.PostToolUse) settings.hooks.PostToolUse = [];
+        settings.hooks.PostToolUse.push({
+          hooks: [{ type: 'command', command: hookCmd }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      " "$SETTINGS_FILE" "$CTXGUARD_CMD"
+      echo "CONFIGURED: context-guard hook in settings.json"
+    fi
+  fi
+fi
+
+# Pre-compact snapshot hook (PreCompact -- saves emergency MEMORY.md snapshot before compaction)
+if [ -f "$SCRIPT_DIR/templates/hooks/pre-compact.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/pre-compact.js" "$CLAUDE_DIR/hooks/pre-compact.js" "pre-compact hook: pre-compact.js"
+
+  echo ""
+  echo "--- Configuring pre-compact in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  PRECOMPACT_CMD="node $CLAUDE_DIR/hooks/pre-compact.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add PreCompact hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    if grep -q "pre-compact" "$SETTINGS_FILE" 2>/dev/null; then
+      echo "ALREADY CONFIGURED: pre-compact hook in settings.json"
+    else
+      node -e "
+        const fs = require('fs');
+        const path = require('path');
+        const settingsPath = path.resolve(process.argv[1]);
+        const hookCmd = process.argv[2];
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (!settings.hooks) settings.hooks = {};
+        if (!settings.hooks.PreCompact) settings.hooks.PreCompact = [];
+        settings.hooks.PreCompact.push({
+          hooks: [{ type: 'command', command: hookCmd }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      " "$SETTINGS_FILE" "$PRECOMPACT_CMD"
+      echo "CONFIGURED: pre-compact hook in settings.json"
+    fi
+  fi
+fi
+
+# Stuck detector hook (PreToolUse -- blocks/warns when agent repeats the same action in a row)
+if [ -f "$SCRIPT_DIR/templates/hooks/stuck-detector.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/stuck-detector.js" "$CLAUDE_DIR/hooks/stuck-detector.js" "stuck detector: stuck-detector.js"
+
+  echo ""
+  echo "--- Configuring stuck-detector in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  STUCK_CMD="node $CLAUDE_DIR/hooks/stuck-detector.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add PreToolUse hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    if grep -q "stuck-detector" "$SETTINGS_FILE" 2>/dev/null; then
+      echo "ALREADY CONFIGURED: stuck-detector hook in settings.json"
+    else
+      node -e "
+        const fs = require('fs');
+        const path = require('path');
+        const settingsPath = path.resolve(process.argv[1]);
+        const hookCmd = process.argv[2];
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (!settings.hooks) settings.hooks = {};
+        if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+        settings.hooks.PreToolUse.push({
+          hooks: [{ type: 'command', command: hookCmd }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      " "$SETTINGS_FILE" "$STUCK_CMD"
+      echo "CONFIGURED: stuck-detector hook in settings.json"
+    fi
+  fi
+fi
+
 # Knowledge base templates
 if [ -d "$SCRIPT_DIR/templates/knowledge" ]; then
   echo ""
