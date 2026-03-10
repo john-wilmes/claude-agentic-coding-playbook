@@ -54,7 +54,14 @@ for FILE in "$@"; do
         fi
     fi
 
-    ORIGINAL_HASH=$(sha256sum "$FILE" | cut -d' ' -f1)
+    if command -v sha256sum >/dev/null 2>&1; then
+        ORIGINAL_HASH=$(sha256sum "$FILE" | cut -d' ' -f1)
+    elif command -v shasum >/dev/null 2>&1; then
+        ORIGINAL_HASH=$(shasum -a 256 "$FILE" | cut -d' ' -f1)
+    else
+        echo "Warning: No sha256 command found. Skipping change detection." >&2
+        ORIGINAL_HASH=""
+    fi
 
     "$PYTHON" - "$CONFIG" "$FILE" <<'PYEOF' || { echo "Warning: Presidio failed on $FILE, skipping." >&2; continue; }
 import sys
@@ -109,7 +116,13 @@ with open(file_path, 'w', encoding='utf-8') as f:
     f.write(anonymized.text)
 PYEOF
 
-    NEW_HASH=$(sha256sum "$FILE" | cut -d' ' -f1)
+    if command -v sha256sum >/dev/null 2>&1; then
+        NEW_HASH=$(sha256sum "$FILE" | cut -d' ' -f1)
+    elif command -v shasum >/dev/null 2>&1; then
+        NEW_HASH=$(shasum -a 256 "$FILE" | cut -d' ' -f1)
+    else
+        NEW_HASH=""
+    fi
     if [ "$ORIGINAL_HASH" != "$NEW_HASH" ]; then
         echo "Sanitized PHI in: $FILE"
         CHANGED=1

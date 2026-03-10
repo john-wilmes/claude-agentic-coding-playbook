@@ -108,7 +108,7 @@ If there are no changes, skip. If not in a git repo, skip.
 If `~/.claude/knowledge` is a git repo, commit any uncommitted entries and push to remote:
 
 ```bash
-cd ~/.claude/knowledge
+pushd ~/.claude/knowledge >/dev/null || exit 0
 # Commit any uncommitted entries
 if [ -n "$(git status --porcelain)" ]; then
   git add entries/
@@ -118,6 +118,7 @@ fi
 if git remote get-url origin &>/dev/null; then
   git push origin HEAD 2>/dev/null || echo "Knowledge repo push failed -- will sync on next session start"
 fi
+popd >/dev/null
 ```
 
 If `~/.claude/knowledge` is not a git repo, skip this step.

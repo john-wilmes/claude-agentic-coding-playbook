@@ -116,7 +116,10 @@ setup_task() {
   mkdir -p "$work_dir"
   git clone --depth 100 "https://github.com/${repo_slug}.git" "$work_dir/repo" 2>/dev/null
   cd "$work_dir/repo"
-  git checkout "$commit" 2>/dev/null
+  if ! git checkout "$commit" 2>/dev/null; then
+    git fetch --unshallow 2>/dev/null || true
+    git checkout "$commit" 2>/dev/null
+  fi
   cd - > /dev/null
 }
 
@@ -301,8 +304,8 @@ EOF
 
 for i in $(seq 0 $((TASK_COUNT - 1))); do
   IFS='|' read -r TASK_ID _ _ TASK_DESC <<< "${TASKS[$i]}"
-  BRES=$([ -f "$RESULTS_DIR/baseline/$TASK_ID/changes.patch" ] && [ -s "$RESULTS_DIR/baseline/$TASK_ID/changes.patch" ] && echo "resolved" || echo "unresolved")
-  PRES=$([ -f "$RESULTS_DIR/playbook/$TASK_ID/changes.patch" ] && [ -s "$RESULTS_DIR/playbook/$TASK_ID/changes.patch" ] && echo "resolved" || echo "unresolved")
+  BRES=$(check_resolution "$TASK_ID" "$RESULTS_DIR/baseline/$TASK_ID" "$TASK_DESC")
+  PRES=$(check_resolution "$TASK_ID" "$RESULTS_DIR/playbook/$TASK_ID" "$TASK_DESC")
   echo "| $TASK_ID | $BRES | $PRES |" >> "$RESULTS_DIR/summary.md"
 done
 

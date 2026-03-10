@@ -1734,7 +1734,7 @@ Design guidance:
 
 ---
 
-## 13. Shared Knowledge Base
+## 14. Shared Knowledge Base
 
 ### The knowledge re-discovery problem
 
@@ -1847,7 +1847,7 @@ Defenses:
 
 ---
 
-## 14. Getting Started
+## 15. Getting Started
 
 ### Quick install
 

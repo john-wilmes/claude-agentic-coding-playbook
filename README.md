@@ -27,13 +27,14 @@ Full details with citations: [docs/best-practices.md](docs/best-practices.md)
 
 ```bash
 git clone https://github.com/john-wilmes/claude-agentic-coding-playbook.git
-cd agentic-coding-playbook
+cd claude-agentic-coding-playbook
 chmod +x install.sh
 ./install.sh
 ```
 
 ### Prerequisites
 
+- **Bash on Linux or macOS** (Windows is supported only under [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) — native CMD/PowerShell is not supported)
 - **Node.js 18+** (for hooks and test scripts)
 - **git** (for version control and install script)
 

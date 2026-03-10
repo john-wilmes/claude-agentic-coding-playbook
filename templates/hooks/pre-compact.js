@@ -37,7 +37,7 @@ function runGit(cmd, cwd) {
 // Convert a cwd path to the ~/.claude/projects/ key format:
 //   /home/user/Documents/myproject  ->  -home-user-Documents-myproject
 function cwdToProjectKey(cwd) {
-  return cwd.replace(/\//g, "-");
+  return cwd.replace(/:/g, "-").replace(/[\\/]/g, "-").replace(/^-/, "");
 }
 
 function findMemoryPath(cwd) {

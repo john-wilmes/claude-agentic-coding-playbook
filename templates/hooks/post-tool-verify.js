@@ -144,6 +144,7 @@ process.stdin.on("end", () => {
     } catch (err) {
       const rawOutput = [err.stdout, err.stderr]
         .filter(Boolean)
+        .map((b) => (Buffer.isBuffer(b) ? b.toString("utf8") : String(b)))
         .join("\n")
         .trimEnd();
       const lines = rawOutput.split("\n").slice(0, MAX_OUTPUT_LINES).join("\n");
