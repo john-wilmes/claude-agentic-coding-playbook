@@ -621,10 +621,10 @@ accumulate within the turn. The threshold instruction cannot fire between tool
 calls in the same turn -- by the time the agent's next reasoning step begins,
 the context is already past the threshold.
 
-The fix is structural, not instructional: a PostToolUse hook that tracks
-cumulative context and warns or blocks when thresholds are exceeded. Hooks
-execute after every tool call, including mid-turn calls, providing the
-granularity that instructions cannot.
+The fix is structural, not instructional: a PostToolUse hook that reads the
+session transcript to get actual token counts from the API, then warns or
+blocks when thresholds are exceeded. Hooks execute after every tool call,
+including mid-turn calls, providing the granularity that instructions cannot.
 
 ### Post-compaction recovery
 
@@ -2068,7 +2068,9 @@ differently can fail or succeed depending on phrasing, not semantics.
   industry consensus as of 2025-2026.
 - AgentSpec (arXiv:2503.18666, ICSE 2026) provides a hook-based enforcement
   framework that prevents >90% of unsafe agent executions with millisecond overhead
-  [51]. The context-guard hook in this playbook implements the same pattern.
+  [51]. The context-guard hook in this playbook implements the same pattern,
+reading actual token counts from the session transcript rather than estimating
+from tool output sizes alone.
 
 ---
 

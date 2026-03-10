@@ -187,7 +187,11 @@ test("7. Whitelisted test commands: never warned or blocked", () => {
 });
 
 // Bonus: malformed JSON input — should exit 0 and output {}
+// Note: runHook stringifies the string, producing valid JSON (a quoted string).
+// The hook parses it as a string (not an object), falls back to session "unknown".
+// Clean up stale state from prior runs to prevent false positives.
 test("6. Malformed JSON input: exits 0 with {}", () => {
+  cleanupSession("unknown");
   const result = runHook(STUCK_DETECTOR, "not valid json at all");
 
   assert.strictEqual(result.status, 0, "Should exit 0");
