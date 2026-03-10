@@ -83,12 +83,18 @@ This mirrors pair programming. The writer optimizes for forward progress; the re
 
 ## Code Review
 
-If `coderabbit` CLI is available:
-- On project creation, run `coderabbit review --plain` on the full codebase. Fix all findings before continuing.
-- Before every commit, run `coderabbit review --prompt-only --type uncommitted`. Apply all suggestions unless they introduce a regression or conflict with project architecture. Document the reason when declining a suggestion.
-- When reviewing a PR, run `coderabbit review --plain --base main`. Address all findings before merging.
+CodeRabbit reviews happen automatically on GitHub PRs via the CodeRabbit GitHub App.
 
-If no CLI tool is available, use whatever automated review is configured (MCP, GitHub app, manual).
+**Agent workflow:**
+- Create a PR using `gh pr create`. CodeRabbit will post review comments automatically within a few minutes.
+- After creating a PR, check for CodeRabbit review comments: `gh pr view <number> --comments` or `gh api repos/{owner}/{repo}/pulls/{number}/comments`.
+- Address all CodeRabbit findings before merging. Apply suggestions unless they introduce a regression or conflict with project architecture. Document the reason when declining a suggestion.
+- If CodeRabbit hasn't reviewed yet, wait 2-3 minutes and check again. Do not merge without a review.
+
+**User setup (one-time):**
+- Install the CodeRabbit GitHub App: https://github.com/apps/coderabbitai
+- Grant access to the repos you want reviewed.
+- Add a `.coderabbit.yaml` to each repo to customize review behavior (optional but recommended).
 
 ### Devil's advocate review
 
