@@ -203,6 +203,19 @@ The fix is to use lastIndexOf(":") instead of split(":")[0].
   };
 }
 
+/**
+ * Return today's date string in YYYY-MM-DD format using **local** time.
+ * Matches the todayString() logic in log.js so tests look for the correct log filename.
+ * @returns {string}
+ */
+function todayLocal() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 module.exports = {
   createTempHome,
   createKnowledgeEntry,
@@ -210,4 +223,5 @@ module.exports = {
   runHook,
   createProjectDir,
   createTempInvestigation,
+  todayLocal,
 };
