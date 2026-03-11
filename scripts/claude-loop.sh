@@ -14,14 +14,13 @@ set -euo pipefail
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
-SENTINEL_FILE="/tmp/claude-checkpoint-exit"
+# Project-scoped hash: prevents cross-project collisions for lock + sentinel.
+_CWD_HASH="$(pwd | md5sum | cut -c1-8)"
+SENTINEL_FILE="/tmp/claude-checkpoint-exit-${_CWD_HASH}"
+LOCK_FILE="/tmp/claude-loop-${_CWD_HASH}.lock"
 LOG_DIR="${HOME}/.claude/logs"
 LOG_FILE="${LOG_DIR}/claude-loop-$(date +%Y-%m-%d).jsonl"
 MAX_TASK_ATTEMPTS=3
-
-# Lock file is project-scoped: hash of cwd prevents cross-project collisions.
-_CWD_HASH="$(pwd | md5sum | cut -c1-8)"
-LOCK_FILE="/tmp/claude-loop-${_CWD_HASH}.lock"
 
 # ─── Defaults ─────────────────────────────────────────────────────────────────
 
@@ -47,9 +46,10 @@ Options:
   --dry-run            Show what would be done without running claude
   --help               Show this message
 
-Sentinel file: /tmp/claude-checkpoint-exit
-  When the checkpoint skill writes this file, claude-loop restarts.
-  Natural exit (no sentinel) stops the loop.
+Sentinel file: /tmp/claude-checkpoint-exit-<cwd-hash>
+  Project-scoped sentinel. When the checkpoint skill writes this file,
+  claude-loop restarts. Natural exit (no sentinel) stops the loop.
+  Exported as CLAUDE_LOOP_SENTINEL so hooks and skills can find it.
 
 Task queue format (tasks.md):
   - [ ] Task not yet done
@@ -458,7 +458,7 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
   # ── Run claude ─────────────────────────────────────────────────────────────
   SESSION_START_MS="$(python3 -c "import time; print(int(time.time() * 1000))")"
   EXIT_CODE=0
-  CLAUDE_LOOP=1 "${CLAUDE_CMD[@]}" || EXIT_CODE=$?
+  CLAUDE_LOOP=1 CLAUDE_LOOP_SENTINEL="${SENTINEL_FILE}" "${CLAUDE_CMD[@]}" || EXIT_CODE=$?
   SESSION_END_MS="$(python3 -c "import time; print(int(time.time() * 1000))")"
   DURATION_MS="$(( SESSION_END_MS - SESSION_START_MS ))"
 
