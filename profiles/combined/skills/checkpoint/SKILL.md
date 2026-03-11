@@ -150,12 +150,43 @@ This is optional but high-value for documentation-heavy changes. Run it? [y/N]
 
 If the user declines or the conditions are not met, skip.
 
-### 5. Suggest new session
+### 5. Exit decision
 
-Tell the user:
+Print exactly:
+```
+CHECKPOINT COMPLETE
+```
+
+**Decide whether to exit the session** by checking the context-guard flag file:
+
+```bash
+node -e "
+const fs = require('fs'), path = require('path'), os = require('os');
+const flag = path.join(os.tmpdir(), 'claude-checkpoint-exit');
+try {
+  const data = JSON.parse(fs.readFileSync(flag, 'utf8'));
+  const ageMs = Date.now() - data.timestamp;
+  if (ageMs < 600000 && data.ratio >= 0.5) {
+    process.stdout.write('EXIT');
+  } else {
+    process.stdout.write('STAY');
+  }
+} catch { process.stdout.write('STAY'); }
+"
+```
+
+- If the output is **EXIT**: Write the sentinel and stop. Run:
+
+```bash
+echo '{"reason":"checkpoint","timestamp":'$(date +%s)'}' > /tmp/claude-checkpoint-exit
+```
+
+Then print exactly: "Exiting — claude-loop will respawn." Then STOP. Do not make any more tool calls or produce any more output.
+
+- If the output is **STAY**: This checkpoint was triggered at a natural breakpoint (context is fine). Tell the user:
 
 ```text
-Checkpoint complete. Consider starting a new session (`/exit`) rather than `/clear` -- it re-runs hooks and gets a fully clean context window.
+Checkpoint complete. Run `/exit` to start a fresh session, or continue working.
 ```
 
 Do NOT invoke `/exit` -- it is a built-in CLI command that the user must run themselves.
