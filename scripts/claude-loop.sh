@@ -460,9 +460,17 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
   echo "claude-loop: starting session $((SESSION_COUNT + 1))${CURRENT_TASK:+ — task: ${CURRENT_TASK}}"
 
   # ── Run claude ─────────────────────────────────────────────────────────────
+  # CLAUDE_LOOP=1 is only set for task-queue (headless -p) mode. It signals
+  # skills to work autonomously and force-exit when there's no work, and
+  # tells context-guard to write sentinel at 75% for auto-restart.
+  # Interactive mode omits it: user is present, no auto-restart needed.
   SESSION_START_MS="$(python3 -c "import time; print(int(time.time() * 1000))")"
   EXIT_CODE=0
-  CLAUDE_LOOP=1 CLAUDE_LOOP_SENTINEL="${SENTINEL_FILE}" "${CLAUDE_CMD[@]}" || EXIT_CODE=$?
+  if [[ -n "${TASK_QUEUE_FILE}" ]]; then
+    CLAUDE_LOOP=1 CLAUDE_LOOP_SENTINEL="${SENTINEL_FILE}" "${CLAUDE_CMD[@]}" || EXIT_CODE=$?
+  else
+    CLAUDE_LOOP_SENTINEL="${SENTINEL_FILE}" "${CLAUDE_CMD[@]}" || EXIT_CODE=$?
+  fi
   SESSION_END_MS="$(python3 -c "import time; print(int(time.time() * 1000))")"
   DURATION_MS="$(( SESSION_END_MS - SESSION_START_MS ))"
 
