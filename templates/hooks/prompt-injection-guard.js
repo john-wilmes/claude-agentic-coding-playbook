@@ -93,6 +93,7 @@ process.stdin.on("end", () => {
         session_id: hookInput.session_id,
         tool_use_id: hookInput.tool_use_id,
         details: reason,
+        project: hookInput.cwd,
         context: { command: log.promptHead(command, 100) },
       });
       process.stdout.write(JSON.stringify({

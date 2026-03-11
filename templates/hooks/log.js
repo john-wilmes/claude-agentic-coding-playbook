@@ -81,8 +81,29 @@ function writeLog(entry) {
   // Ensure log directory exists
   fs.mkdirSync(LOG_DIR, { recursive: true });
 
-  // Auto-populate timestamp
-  const record = Object.assign({ ts: new Date().toISOString() }, entry);
+  // Auto-populate context fields from environment (explicit entry values win)
+  const env = process.env;
+  const defaults = { ts: new Date().toISOString() };
+
+  // source: "test" when run from test harness, "live" otherwise
+  defaults.source = env.CLAUDE_HOOK_SOURCE || "live";
+
+  // project: basename of cwd (from entry.project or env)
+  const rawProject = entry.project || env.CLAUDE_CWD || "";
+  if (rawProject) {
+    defaults.project = path.basename(rawProject);
+  }
+
+  // task_id / task_step: set by claude-loop or task queue (optional)
+  if (env.CLAUDE_TASK_ID) defaults.task_id = env.CLAUDE_TASK_ID;
+  if (env.CLAUDE_TASK_STEP) defaults.task_step = env.CLAUDE_TASK_STEP;
+
+  // Merge: defaults first, then entry (explicit wins)
+  const record = Object.assign(defaults, entry);
+  // Normalize project to basename in case caller passed a full path
+  if (record.project) {
+    record.project = path.basename(record.project);
+  }
 
   const line = JSON.stringify(record) + "\n";
   fs.appendFileSync(todayLogPath(), line, "utf8");
