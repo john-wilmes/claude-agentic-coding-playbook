@@ -80,9 +80,9 @@ echo "${CLAUDE_LOOP:-0}"
 ```
 
 **If `1` (running under claude-loop):** This is an autonomous session — there is no interactive user. Do NOT ask questions or wait for confirmation. Instead:
-- If Next Steps exist in Current Work, immediately begin working on the first one.
 - If `$ARGUMENTS` contains a task after `--` (e.g. `/continue -- Next task: ...`), work on that task instead of memory's next steps.
-- If there are no next steps and no task argument, run `/checkpoint` to write the sentinel and exit cleanly so the loop stops gracefully.
+- If Next Steps exist in Current Work, immediately begin working on the first one.
+- If there are no next steps and no task argument, print "claude-loop: no work to do — exiting." and STOP. Do NOT run `/checkpoint`. Do NOT write any sentinel file. Stopping without a sentinel tells claude-loop to end the loop gracefully.
 
 **If `0` (interactive session):** Propose what to work on next based on the Current Work section and context scan. Ask the user to confirm or redirect.
 
@@ -170,6 +170,6 @@ Check whether this session is running under `claude-loop`:
 echo "${CLAUDE_LOOP:-0}"
 ```
 
-**If `1` (running under claude-loop):** Do NOT ask questions. If there is an open investigation, resume it. If `$ARGUMENTS` contains a task, work on that. If nothing to do, run `/checkpoint` and exit.
+**If `1` (running under claude-loop):** Do NOT ask questions. If `$ARGUMENTS` contains a task, work on that. If there is an open investigation, resume it. If nothing to do, print "claude-loop: no work to do — exiting." and STOP. Do NOT run `/checkpoint` or write any sentinel.
 
 **If `0` (interactive session):** Propose what to do next based on available context (open investigations + project memory). Ask the user to confirm or redirect.
