@@ -374,7 +374,7 @@ dry_run_show() {
     fi
   else
     echo "  Task queue    : (none)"
-    echo "  claude command: claude -p \"/continue\""
+    echo "  claude command: claude \"/continue\""
   fi
 }
 
@@ -431,7 +431,9 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
 
   # ── Determine task and build claude command ─────────────────────────────────
   CURRENT_TASK=""
-  CLAUDE_CMD=("claude" "-p" "/continue")
+  # Default: interactive mode (no -p). Session stays open for user interaction.
+  # User exits with Ctrl+C; sentinel from /checkpoint triggers loop restart.
+  CLAUDE_CMD=("claude" "/continue")
 
   if [[ -n "${TASK_QUEUE_FILE}" ]]; then
     if ! CURRENT_TASK="$(get_next_task "${TASK_QUEUE_FILE}")"; then
@@ -439,6 +441,7 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
       echo "claude-loop: task queue exhausted, stopping."
       break
     fi
+    # Task queue mode: fully autonomous, -p exits after response
     CLAUDE_CMD=("claude" "-p" "/continue -- Next task: ${CURRENT_TASK}")
   fi
 
