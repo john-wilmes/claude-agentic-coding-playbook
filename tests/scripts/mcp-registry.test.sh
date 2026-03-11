@@ -261,6 +261,55 @@ test_resources_example_valid() {
 }
 run_test "resources.example.json is valid" test_resources_example_valid
 
+# ─── Test 11: Doc endpoints register as MCP servers ──────────────────────────
+
+test_doc_endpoints() {
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  trap "rm -rf '$tmpdir'" RETURN
+
+  echo '{}' > "$tmpdir/settings.json"
+  cat > "$tmpdir/resources.json" <<'EOF'
+{
+  "repos": [],
+  "docs": [
+    {"name": "internal-docs", "url": "https://docs.example.com/mcp", "description": "Test docs"}
+  ]
+}
+EOF
+
+  node -e "
+    const fs = require('fs');
+    const res = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
+    const docs = res.docs || [];
+    if (docs.length === 0) { process.exit(0); }
+    const settingsPath = process.argv[2];
+    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    if (!settings.mcpServers) settings.mcpServers = {};
+    let added = 0, skipped = 0;
+    for (const doc of docs) {
+      if (!doc.name || !doc.url) continue;
+      if (settings.mcpServers[doc.name]) { skipped++; continue; }
+      settings.mcpServers[doc.name] = { type: 'http', url: doc.url, disabled: false };
+      added++;
+    }
+    if (added > 0) {
+      fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+    }
+    console.log(added + ':' + skipped);
+  " "$tmpdir/resources.json" "$tmpdir/settings.json"
+
+  node -e "
+    const s = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
+    const srv = s.mcpServers['internal-docs'];
+    if (!srv) { console.error('internal-docs not registered'); process.exit(1); }
+    if (srv.type !== 'http') { console.error('expected type http, got ' + srv.type); process.exit(1); }
+    if (srv.url !== 'https://docs.example.com/mcp') { console.error('wrong url: ' + srv.url); process.exit(1); }
+    if (srv.disabled !== false) { console.error('should be enabled'); process.exit(1); }
+  " "$tmpdir/settings.json"
+}
+run_test "Doc endpoints register as MCP servers" test_doc_endpoints
+
 # ─── Summary ──────────────────────────────────────────────────────────────────
 
 echo ""

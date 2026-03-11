@@ -926,6 +926,32 @@ else
 
     install_repo_cron "$REPOS_DIR"
   fi
+
+  # Register doc endpoints as MCP servers
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would register doc endpoints from $RESOURCES_FILE"
+  else
+    node -e "
+      const fs = require('fs');
+      const res = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
+      const docs = res.docs || [];
+      if (docs.length === 0) { process.exit(0); }
+      const settingsPath = process.argv[2];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.mcpServers) settings.mcpServers = {};
+      let added = 0, skipped = 0;
+      for (const doc of docs) {
+        if (!doc.name || !doc.url) continue;
+        if (settings.mcpServers[doc.name]) { skipped++; continue; }
+        settings.mcpServers[doc.name] = { type: 'http', url: doc.url, disabled: false };
+        added++;
+      }
+      if (added > 0) {
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      }
+      console.log('CONFIGURED: ' + added + ' doc endpoints added, ' + skipped + ' already configured');
+    " "$RESOURCES_FILE" "$SETTINGS_FILE"
+  fi
 fi
 
 # Knowledge base templates

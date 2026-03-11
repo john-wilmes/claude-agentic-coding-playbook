@@ -3,5 +3,12 @@
     "owner/frontend",
     "owner/backend",
     "owner/shared-libs"
+  ],
+  "docs": [
+    {
+      "name": "internal-docs",
+      "url": "https://docs.yourcompany.com/mcp",
+      "description": "Internal engineering documentation"
+    }
   ]
 }

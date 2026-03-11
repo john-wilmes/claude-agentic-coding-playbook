@@ -1589,6 +1589,33 @@ Running `install.sh` clones any repos not already present into `~/.claude/repos/
 (shallow clones via `gh repo clone`). A daily cron job keeps them fresh with
 `git pull --ff-only`.
 
+**Documentation as context:**
+
+Teams hosting documentation on [Mintlify](https://mintlify.com) (or any platform
+that exposes an MCP endpoint) can give agents direct search access. Add doc
+endpoints to `resources.json`:
+
+```json
+{
+  "docs": [
+    {
+      "name": "internal-docs",
+      "url": "https://docs.yourcompany.com/mcp",
+      "description": "Internal engineering documentation"
+    }
+  ]
+}
+```
+
+Running `install.sh` registers each endpoint as an HTTP MCP server in
+`settings.json`. Agents can then search documentation to understand system
+architecture, locate functionality across repos, and find runbooks -- before
+diving into code.
+
+Any documentation platform that serves a remote MCP endpoint at a `/mcp` path
+works with this pattern. Mintlify generates these automatically for hosted docs
+sites.
+
 ---
 
 ## 13. Multi-Agent Coordination
