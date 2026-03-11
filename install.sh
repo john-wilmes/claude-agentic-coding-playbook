@@ -889,7 +889,7 @@ REPOS_DIR="$CLAUDE_DIR/repos"
 
 install_repo_cron() {
   local repos_dir="$1"
-  local cron_cmd="0 6 * * * find $repos_dir -maxdepth 1 -mindepth 1 -exec git -C {} pull --ff-only \;"
+  local cron_cmd="0 6 * * * find \"$repos_dir\" -maxdepth 1 -mindepth 1 -type d -exec git -C '{}' pull --ff-only \;"
   if ! command -v crontab &>/dev/null; then
     echo "  NOTE: crontab not available — skip daily pull cron"
     return
@@ -908,6 +908,9 @@ else
   if [ "$DRY_RUN" = true ]; then
     echo "[DRY RUN] Would clone repos listed in $RESOURCES_FILE"
   else
+    if ! command -v gh &>/dev/null; then
+      echo "SKIPPED: Managed repos require GitHub CLI (gh). Install from https://cli.github.com/ and run 'gh auth login'"
+    else
     node -e "
       const repos = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')).repos || [];
       repos.forEach(r => console.log(r));
@@ -925,6 +928,7 @@ else
     done
 
     install_repo_cron "$REPOS_DIR"
+    fi
   fi
 
   # Register doc endpoints as MCP servers

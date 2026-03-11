@@ -7,7 +7,7 @@
       "disabled": false
     },
     "env_required": ["GITHUB_PERSONAL_ACCESS_TOKEN"],
-    "notes": "Uses gh auth token. Always enabled."
+    "notes": "Requires GITHUB_PERSONAL_ACCESS_TOKEN env var. Always enabled."
   },
   "datadog": {
     "description": "Logs, metrics, traces, monitors",
