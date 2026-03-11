@@ -266,15 +266,30 @@ test("9. stuck→unstuck stages a knowledge candidate", () => {
     assert.strictEqual(result.status, 0, "Should exit 0");
     assert.ok(result.json, "Should output valid JSON");
 
-    // Verify a staged file was created
-    const stagedFile = path.join(stagedDir, `${sessionId}.jsonl`);
-    assert.ok(fs.existsSync(stagedFile), `Staged file should exist at ${stagedFile}`);
-    const lines = fs.readFileSync(stagedFile, "utf8").trim().split("\n").filter(Boolean);
-    assert.ok(lines.length >= 1, "Should have at least one staged candidate");
-    const candidate = JSON.parse(lines[0]);
-    assert.strictEqual(candidate.trigger, "stuck-resolved", "trigger should be stuck-resolved");
-    assert.strictEqual(candidate.session_id, sessionId);
-    assert.ok(candidate.summary.includes("Edit"), `summary should mention stuck tool, got: ${candidate.summary}`);
+    // Verify a staged candidate was created for this session.
+    // When knowledge-db is available the hook writes to SQLite rather than JSONL.
+    const dbPath = path.join(env.home, ".claude", "knowledge", "knowledge.db");
+    const kdb = require(path.join(REPO_ROOT, "templates", "hooks", "knowledge-db"));
+    if (fs.existsSync(dbPath)) {
+      // DB-backed path
+      const verifyDb = kdb.openDb(dbPath);
+      const candidates = kdb.readStagedCandidates(verifyDb, sessionId);
+      assert.ok(candidates.length >= 1, "Should have at least one staged candidate in DB");
+      const candidate = candidates[0];
+      assert.strictEqual(candidate.trigger, "stuck-resolved", "trigger should be stuck-resolved");
+      assert.strictEqual(candidate.session_id, sessionId);
+      assert.ok(candidate.summary.includes("Edit"), `summary should mention stuck tool, got: ${candidate.summary}`);
+    } else {
+      // JSONL fallback path
+      const stagedFile = path.join(stagedDir, `${sessionId}.jsonl`);
+      assert.ok(fs.existsSync(stagedFile), `Staged file should exist at ${stagedFile}`);
+      const lines = fs.readFileSync(stagedFile, "utf8").trim().split("\n").filter(Boolean);
+      assert.ok(lines.length >= 1, "Should have at least one staged candidate");
+      const candidate = JSON.parse(lines[0]);
+      assert.strictEqual(candidate.trigger, "stuck-resolved", "trigger should be stuck-resolved");
+      assert.strictEqual(candidate.session_id, sessionId);
+      assert.ok(candidate.summary.includes("Edit"), `summary should mention stuck tool, got: ${candidate.summary}`);
+    }
   } finally {
     cleanupSession(sessionId);
     env.cleanup();
@@ -307,9 +322,19 @@ test("10. never-stuck does not stage a candidate", () => {
     assert.strictEqual(result.status, 0, "Should exit 0");
     assert.ok(result.json, "Should output valid JSON");
 
-    // Verify no staged file was created
-    const stagedFile = path.join(stagedDir, `${sessionId}.jsonl`);
-    assert.ok(!fs.existsSync(stagedFile), "Staged file should NOT exist when wasStuck=false");
+    // Verify no staged candidate was created for this session.
+    const dbPath = path.join(env.home, ".claude", "knowledge", "knowledge.db");
+    const kdb = require(path.join(REPO_ROOT, "templates", "hooks", "knowledge-db"));
+    if (fs.existsSync(dbPath)) {
+      // DB-backed path
+      const verifyDb = kdb.openDb(dbPath);
+      const candidates = kdb.readStagedCandidates(verifyDb, sessionId);
+      assert.strictEqual(candidates.length, 0, "Should have no staged candidates when wasStuck=false");
+    } else {
+      // JSONL fallback path
+      const stagedFile = path.join(stagedDir, `${sessionId}.jsonl`);
+      assert.ok(!fs.existsSync(stagedFile), "Staged file should NOT exist when wasStuck=false");
+    }
   } finally {
     cleanupSession(sessionId);
     env.cleanup();

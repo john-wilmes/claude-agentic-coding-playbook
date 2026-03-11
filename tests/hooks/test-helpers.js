@@ -227,6 +227,15 @@ function createStagedDir(home) {
   return dir;
 }
 
+/**
+ * Create an in-memory knowledge DB for test isolation.
+ * @returns {object} The opened database (from knowledge-db.js openDb)
+ */
+function createKnowledgeDb() {
+  const knowledgeDb = require("../../templates/hooks/knowledge-db");
+  return knowledgeDb.openDb(":memory:");
+}
+
 module.exports = {
   createTempHome,
   createKnowledgeEntry,
@@ -236,4 +245,5 @@ module.exports = {
   createTempInvestigation,
   createStagedDir,
   todayLocal,
+  createKnowledgeDb,
 };

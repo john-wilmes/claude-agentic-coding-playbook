@@ -192,15 +192,12 @@ for tool in "${!TOOL_GROUPS[@]}"; do
 
       if ! "${DRY_RUN}"; then
         # Archive the second entry (keep the first as canonical)
-        src="${ENTRIES_DIR}/${id2}"
-        dst="${ARCHIVE_DIR}/${id2}"
-        if [[ -d "${src}" ]]; then
-          mkdir -p "${ARCHIVE_DIR}"
-          mv "${src}" "${dst}"
-          log "    Archived: ${id2} -> ${ARCHIVE_DIR}/${id2}/"
+        # TODO: future update should read entries from the DB directly
+        if node "${HOME}/.claude/hooks/knowledge-db.js" archive "${id2}" 2>/dev/null; then
+          log "    Archived: ${id2} in knowledge database"
           ARCHIVED_COUNT=$((ARCHIVED_COUNT + 1))
         else
-          warn "    Entry directory not found: ${src} — skipping"
+          warn "    Failed to archive ${id2} — skipping"
         fi
       fi
     fi

@@ -10,9 +10,6 @@ const { execSync } = require("child_process");
 let log;
 try { log = require("./log"); } catch { log = { writeLog() {} }; }
 
-let bm25;
-try { bm25 = require("./bm25"); } catch { bm25 = null; }
-
 // Detect project context from working directory
 function detectProjectContext(cwd) {
   const context = { tools: new Set(), tags: new Set() };
@@ -94,69 +91,53 @@ function scoreEntry(frontmatter, projectContext) {
   return score;
 }
 
-// Read and score knowledge entries, return top N
-function getRelevantKnowledge(cwd, maxEntries = 5) {
-  const knowledgeDir = path.join(os.homedir(), ".claude", "knowledge", "entries");
-  try {
-    if (!fs.existsSync(knowledgeDir)) return [];
-  } catch { return []; }
+function safeParseJson(str, fallback) {
+  try { return JSON.parse(str); } catch { return fallback; }
+}
 
-  const projectContext = detectProjectContext(cwd);
-  if (projectContext.tools.length === 0 && projectContext.tags.length === 0) {
-    // No context detected — skip injection rather than inject randomly
+// Read and score knowledge entries via SQLite DB, return top N
+function getRelevantKnowledge(cwd, maxEntries = 5) {
+  try {
+    let knowledgeDb;
+    try { knowledgeDb = require("./knowledge-db"); } catch { return []; }
+
+    const projectContext = detectProjectContext(cwd);
+    if (projectContext.tools.length === 0 && projectContext.tags.length === 0) {
+      return [];
+    }
+
+    // Compute DB path at call time so withFakeHome patches take effect
+    const dbPath = path.join(os.homedir(), ".claude", "knowledge", "knowledge.db");
+    const db = knowledgeDb.openDb(dbPath);
+
+    // Build query terms from project context
+    const queryTerms = [...projectContext.tools, ...projectContext.tags, projectContext.projectName]
+      .filter(Boolean);
+
+    const entries = knowledgeDb.queryRelevant(db, {
+      projectTool: projectContext.tools,
+      sourceProject: projectContext.projectName,
+      queryTerms,
+      cwd,
+    }, maxEntries);
+
+    // Map DB results to the format expected by the output formatter
+    return entries.map(e => ({
+      fm: {
+        id: e.id,
+        tool: e.tool,
+        category: e.category,
+        tags: safeParseJson(e.tags, []),
+        confidence: e.confidence,
+        source_project: e.source_project,
+      },
+      score: e._score || 0,
+      summary: (e.context_text || "").split("\n")[0] || e.id,
+      fix: (e.fix_text || "").split("\n")[0] || "",
+    }));
+  } catch {
     return [];
   }
-
-  const entries = [];
-  try {
-    const dirs = fs.readdirSync(knowledgeDir);
-    for (const dir of dirs) {
-      const entryPath = path.join(knowledgeDir, dir, "entry.md");
-      try {
-        const content = fs.readFileSync(entryPath, "utf8");
-        const fm = parseFrontmatter(content);
-        if (!fm) continue;
-        const score = scoreEntry(fm, projectContext);
-        // Extract one-line summary from Context section
-        const ctxMatch = content.match(/## Context\n\n?([\s\S]*?)(?=\n## |\n$|$)/);
-        const fixMatch = content.match(/## Fix\n\n?([\s\S]*?)(?=\n## |\n$|$)/);
-        const summary = ctxMatch ? ctxMatch[1].trim().split("\n")[0] : fm.id || dir;
-        const fix = fixMatch ? fixMatch[1].trim().split("\n")[0] : "";
-        entries.push({ fm, score, summary, fix, fullText: content, dir });
-      } catch {}
-    }
-  } catch {}
-
-  // Build BM25 index if module is available
-  let bm25Index = null;
-  if (bm25 && entries.length > 0) {
-    const docs = entries.map(e => ({
-      id: e.fm.id || e.dir,
-      text: e.fullText || "",
-    }));
-    bm25Index = bm25.buildIndex(docs);
-  }
-
-  // Build query string from project context
-  const queryString = [...projectContext.tools, ...projectContext.tags, projectContext.projectName]
-    .filter(Boolean)
-    .join(" ");
-
-  // Apply BM25 boost
-  if (bm25Index && queryString) {
-    const bm25Results = bm25.query(bm25Index, queryString, entries.length);
-    const bm25Map = new Map(bm25Results.map(r => [r.id, r.score]));
-    for (const entry of entries) {
-      const bm25Score = bm25Map.get(entry.fm.id || entry.dir) || 0;
-      entry.score += bm25Score * 0.5;
-    }
-  }
-
-  // Filter to score > 0, sort by score descending, take top N
-  return entries
-    .filter(e => e.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, maxEntries);
 }
 
 // Read hook input from stdin
@@ -170,15 +151,17 @@ process.stdin.on("end", () => {
     const sessionId = hookInput.session_id || "";
     const cwd = hookInput.cwd || process.cwd();
 
-    // Pull latest knowledge entries if knowledge repo exists
+    // Import knowledge entries from JSONL if available
     try {
-      const knowledgeDir = path.join(os.homedir(), ".claude", "knowledge");
-      if (fs.existsSync(path.join(knowledgeDir, ".git"))) {
-        execSync("git pull --rebase --quiet", {
-          cwd: knowledgeDir,
-          timeout: 5000,
-          stdio: "pipe",
-        });
+      let knowledgeDb;
+      try { knowledgeDb = require("./knowledge-db"); } catch {}
+      if (knowledgeDb) {
+        const knowledgeDir = path.join(os.homedir(), ".claude", "knowledge");
+        const jsonlPath = path.join(knowledgeDir, "entries.jsonl");
+        if (fs.existsSync(jsonlPath)) {
+          const db = knowledgeDb.openDb();
+          knowledgeDb.importFromJsonl(db, jsonlPath);
+        }
       }
     } catch {}
 
