@@ -36,10 +36,12 @@ Do not duplicate information already in memory. Read the current memory file fir
 Run the following command to check for knowledge candidates staged by hooks this session:
 
 ```bash
-cat ~/.claude/knowledge/staged/*.jsonl 2>/dev/null
+node ~/.claude/hooks/knowledge-db.js staged "$SESSION_ID" 2>/dev/null
 ```
 
-If no files exist or the output is empty, skip this step silently.
+Where $SESSION_ID is the current session ID. The output is JSON array of staged candidates.
+
+If the command fails or returns an empty array, skip this step silently.
 
 If there is output, parse each line as a JSON object and present the candidates in a formatted table:
 
@@ -104,22 +106,24 @@ If there are no changes, skip. If not in a git repo, skip.
 
 ### 3b. Sync knowledge repo (if applicable)
 
-If `~/.claude/knowledge` is a git repo, commit any uncommitted entries and push to remote:
+If `~/.claude/knowledge` exists, export entries to JSONL and push to remote:
 
 ```bash
-cd ~/.claude/knowledge
-# Commit any uncommitted entries
-if [ -n "$(git status --porcelain)" ]; then
-  git add entries/
-  git commit -m "checkpoint: sync entries"
+# Export entries to JSONL for sharing
+if [ -f "$HOME/.claude/hooks/knowledge-db.js" ]; then
+  node ~/.claude/hooks/knowledge-db.js export ~/.claude/knowledge/entries.jsonl 2>/dev/null
 fi
-# Push if remote is configured
-if git remote get-url origin &>/dev/null; then
-  git push origin HEAD 2>/dev/null || echo "Knowledge repo push failed -- will sync on next session start"
+cd ~/.claude/knowledge
+if [ -d ".git" ]; then
+  if [ -n "$(git status --porcelain)" ]; then
+    git add entries.jsonl
+    git commit -m "checkpoint: sync entries"
+  fi
+  if git remote get-url origin &>/dev/null; then
+    git push origin HEAD 2>/dev/null || echo "Knowledge repo push failed -- will sync on next session start"
+  fi
 fi
 ```
-
-If `~/.claude/knowledge` is not a git repo, skip this step.
 
 ### 4. Verify push
 

@@ -276,15 +276,30 @@ test("14. fail→pass transition stages a knowledge candidate", (env) => {
     assert.strictEqual(result.status, 0);
     assert.ok(result.json, "Should output valid JSON");
 
-    // Verify a staged file was created for this session
-    const stagedFile = path.join(stagedDir, "test-session-14.jsonl");
-    assert.ok(fs.existsSync(stagedFile), `Staged file should exist at ${stagedFile}`);
-    const lines = fs.readFileSync(stagedFile, "utf8").trim().split("\n").filter(Boolean);
-    assert.ok(lines.length >= 1, "Should have at least one staged candidate");
-    const candidate = JSON.parse(lines[0]);
-    assert.strictEqual(candidate.trigger, "test-fix", "trigger should be test-fix");
-    assert.strictEqual(candidate.session_id, "test-session-14");
-    assert.ok(candidate.summary.includes("AssertionError"), `summary should include first line of fail output, got: ${candidate.summary}`);
+    // Verify a staged candidate was created for this session.
+    // When knowledge-db is available the hook writes to SQLite rather than JSONL.
+    const dbPath = path.join(env.home, ".claude", "knowledge", "knowledge.db");
+    const kdb = require(path.join(REPO_ROOT, "templates", "hooks", "knowledge-db"));
+    if (fs.existsSync(dbPath)) {
+      // DB-backed path
+      const verifyDb = kdb.openDb(dbPath);
+      const candidates = kdb.readStagedCandidates(verifyDb, "test-session-14");
+      assert.ok(candidates.length >= 1, "Should have at least one staged candidate in DB");
+      const candidate = candidates[0];
+      assert.strictEqual(candidate.trigger, "test-fix", "trigger should be test-fix");
+      assert.strictEqual(candidate.session_id, "test-session-14");
+      assert.ok(candidate.summary.includes("AssertionError"), `summary should include first line of fail output, got: ${candidate.summary}`);
+    } else {
+      // JSONL fallback path
+      const stagedFile = path.join(stagedDir, "test-session-14.jsonl");
+      assert.ok(fs.existsSync(stagedFile), `Staged file should exist at ${stagedFile}`);
+      const lines = fs.readFileSync(stagedFile, "utf8").trim().split("\n").filter(Boolean);
+      assert.ok(lines.length >= 1, "Should have at least one staged candidate");
+      const candidate = JSON.parse(lines[0]);
+      assert.strictEqual(candidate.trigger, "test-fix", "trigger should be test-fix");
+      assert.strictEqual(candidate.session_id, "test-session-14");
+      assert.ok(candidate.summary.includes("AssertionError"), `summary should include first line of fail output, got: ${candidate.summary}`);
+    }
   } finally {
     try { fs.rmSync(projDir, { recursive: true, force: true }); } catch {}
   }
@@ -311,9 +326,19 @@ test("15. pass→pass does not stage a candidate", (env) => {
     assert.strictEqual(result.status, 0);
     assert.ok(result.json, "Should output valid JSON");
 
-    // Verify no staged file was created for this session
-    const stagedFile = path.join(stagedDir, "test-session-15.jsonl");
-    assert.ok(!fs.existsSync(stagedFile), "Staged file should NOT exist for pass→pass transition");
+    // Verify no staged candidate was created for this session.
+    const dbPath = path.join(env.home, ".claude", "knowledge", "knowledge.db");
+    const kdb = require(path.join(REPO_ROOT, "templates", "hooks", "knowledge-db"));
+    if (fs.existsSync(dbPath)) {
+      // DB-backed path
+      const verifyDb = kdb.openDb(dbPath);
+      const candidates = kdb.readStagedCandidates(verifyDb, "test-session-15");
+      assert.strictEqual(candidates.length, 0, "Should have no staged candidates for pass→pass transition");
+    } else {
+      // JSONL fallback path
+      const stagedFile = path.join(stagedDir, "test-session-15.jsonl");
+      assert.ok(!fs.existsSync(stagedFile), "Staged file should NOT exist for pass→pass transition");
+    }
   } finally {
     try { fs.rmSync(projDir, { recursive: true, force: true }); } catch {}
   }

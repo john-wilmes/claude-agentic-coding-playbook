@@ -405,14 +405,14 @@ if [ -f "$SCRIPT_DIR/templates/hooks/log.js" ]; then
   install_file "$SCRIPT_DIR/templates/hooks/log.js" "$CLAUDE_DIR/hooks/log.js" "shared logging module: log.js"
 fi
 
+# Knowledge database module (installed before hooks that depend on it)
+if [ -f "$SCRIPT_DIR/templates/hooks/knowledge-db.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/knowledge-db.js" "$CLAUDE_DIR/hooks/knowledge-db.js" "knowledge database module: knowledge-db.js"
+fi
+
 # Knowledge capture module (installed before hooks that depend on it)
 if [ -f "$SCRIPT_DIR/templates/hooks/knowledge-capture.js" ]; then
   install_file "$SCRIPT_DIR/templates/hooks/knowledge-capture.js" "$CLAUDE_DIR/hooks/knowledge-capture.js" "knowledge capture module: knowledge-capture.js"
-fi
-
-# BM25 search module (used by session-start for hybrid scoring)
-if [ -f "$SCRIPT_DIR/templates/hooks/bm25.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/bm25.js" "$CLAUDE_DIR/hooks/bm25.js" "BM25 search module: bm25.js"
 fi
 
 for hook_file in "$SCRIPT_DIR/templates/hooks"/session-*.js; do

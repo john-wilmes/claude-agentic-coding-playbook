@@ -1,27 +1,30 @@
 # Shared Knowledge Base
 
-A git-based knowledge base for AI coding agents. Entries are agent-authored,
+A SQLite-backed knowledge base for AI coding agents. Entries are agent-authored,
 human-reviewed, and auto-injected into agent context at session start.
 
 ## Setup
 
 ### For individual use (local only)
 
-```bash
-mkdir -p ~/.claude/knowledge/entries
-cd ~/.claude/knowledge
-git init
-```
+Knowledge entries are stored automatically in `~/.claude/knowledge/knowledge.db`.
+No setup required — the database is created on first use by the session-start hook.
 
-### For team use (shared repo)
+### For team use (shared JSONL)
+
+Teams share knowledge via a git-tracked JSONL file:
 
 ```bash
 # During playbook installation:
 ./install.sh --knowledge-repo https://github.com/your-org/knowledge
 
 # Or manually:
-git clone https://github.com/your-org/knowledge ~/.claude/knowledge
+mkdir -p ~/.claude/knowledge
+cd ~/.claude/knowledge
+git init
 ```
+
+The session-start hook imports `entries.jsonl` from this directory into the local SQLite DB.
 
 ## Creating entries
 
@@ -31,35 +34,29 @@ Run `/learn` in any Claude Code session to capture a lesson:
 /learn git hooks installed to .git/hooks/ are silently ignored when core.hooksPath is set
 ```
 
-The skill auto-classifies the entry and creates a structured file in `entries/`.
+The skill classifies the entry and inserts it into the local knowledge database.
 
-## Entry format
+## Entry fields
 
-Each entry is a markdown file with YAML frontmatter:
+Each entry has these fields:
 
-```yaml
----
-id: "20260222-143052-git-hookspath-override"
-created: "2026-02-22T14:30:52Z"
-author: "agent-name"
-source_project: "my-project"
-tool: "git"
-category: "gotcha"
-tags: ["hooks", "config", "silent-failure"]
-confidence: "high"
-visibility: "local"
-verified_at: "2026-02-22T14:30:52Z"
----
-
-## Context
-<what situation triggers this lesson>
-
-## Fix
-<concrete steps to resolve>
-
-## Evidence
-<how this was discovered>
-```
+| Field | Description |
+|-------|-------------|
+| id | Unique identifier (timestamp-slug format) |
+| created | ISO8601 creation timestamp |
+| author | Agent that created the entry |
+| source_project | Project where the lesson was discovered |
+| tool | Primary tool/library/platform |
+| category | Entry type (gotcha, pattern, workaround, etc.) |
+| tags | JSON array of free-form tags |
+| confidence | high, medium, or low |
+| context_text | What situation triggers this lesson |
+| fix_text | Concrete steps to resolve |
+| evidence_text | How this was discovered |
+| repo_url | GitHub repo where discovered (owner/repo) |
+| commit_sha | HEAD SHA at capture time |
+| branch | Branch at capture time |
+| status | active or archived |
 
 ## Categories
 
@@ -71,32 +68,60 @@ verified_at: "2026-02-22T14:30:52Z"
 | `config` | Configuration requirement or setting that's easy to miss |
 | `security` | Security-related finding |
 | `performance` | Optimization insight or bottleneck diagnosis |
+| `convention` | Project-specific conventions or coding standards |
+| `reference` | Factual reference: API endpoints, config keys, schema details |
+| `decision` | Architectural/design decisions with rationale |
 
-## Contributing (team repos)
+## Sharing via JSONL
 
-1. Create entries with `/learn` — they commit to a branch automatically
-2. A PR is created via `gh pr create` if the GitHub CLI is available
-3. Team members review the PR for accuracy and relevance
-4. Merge to main — the entry becomes available to all team members on next session start
+Local SQLite is the query engine (never committed to git). Sharing uses JSONL:
 
-### Review checklist
+```bash
+# Export active entries to JSONL
+node ~/.claude/hooks/knowledge-db.js export ~/.claude/knowledge/entries.jsonl
 
-- [ ] Entry describes a real, verified issue (not speculation)
-- [ ] Category and tool are accurate
-- [ ] No credentials, API keys, or internal paths in the content
-- [ ] Not a duplicate of an existing entry
-- [ ] Fix section is actionable
+# Import entries from JSONL
+node ~/.claude/hooks/knowledge-db.js import ~/.claude/knowledge/entries.jsonl
+```
+
+Session start automatically imports `entries.jsonl` if it exists in the knowledge directory.
+
+## CLI commands
+
+```bash
+# Export entries to JSONL
+node ~/.claude/hooks/knowledge-db.js export [output-path]
+
+# Import from JSONL
+node ~/.claude/hooks/knowledge-db.js import <input-path>
+
+# Archive an entry
+node ~/.claude/hooks/knowledge-db.js archive <entry-id>
+
+# Insert an entry from JSON
+node ~/.claude/hooks/knowledge-db.js insert '<json>'
+
+# List staged candidates for a session
+node ~/.claude/hooks/knowledge-db.js staged <session-id>
+```
 
 ## How injection works
 
 At session start, the hook:
-1. Pulls latest entries from the remote (if configured)
+1. Imports new entries from JSONL (if available)
 2. Detects the current project's tools from package.json, config files, etc.
-3. Scores entries by relevance (tool match, tag overlap)
-4. Injects the top 5 matching entries into the agent's context (~1,500 tokens)
+3. Uses FTS5 full-text search + metadata scoring to find relevant entries
+4. Applies staleness penalties for entries from repos that have moved on
+5. Injects the top 5 matching entries into the agent's context
 
-Entries that don't match the current project are not injected — they stay on disk
-for on-demand search.
+Entries that don't match the current project rank lower but are still findable.
+
+## Provenance and staleness
+
+Each entry records where it was captured (repo, commit SHA, branch). At query time,
+entries from the same repo are penalized based on how many commits have passed since
+capture (-1 per 100 commits, capped at -5). This ensures stale knowledge ranks lower
+without hiding it entirely.
 
 ## Security
 
@@ -104,26 +129,12 @@ Entries are informational context, not instructions. They describe what happened
 and what to do, framed as "This lesson describes..." rather than "Always do X."
 This reduces prompt injection risk.
 
-Additional safeguards:
-- Pre-commit hook validates format and scans for sensitive content
-- CI workflow checks for credentials, email addresses, and user paths
-- PR review gate for shared repos catches injection attempts
-- `visibility` field controls sharing scope (local/team/public)
-
 ## File structure
 
 ```
 ~/.claude/knowledge/
-  entries/
-    20260222-143052-git-hookspath-override/
-      entry.md
-    20260222-150000-amplify-iam-auth/
-      entry.md
-    ...
-  .github/
-    workflows/
-      validate-entries.yml    (copy from playbook templates)
-  .git/hooks/
-    pre-commit               (copy from playbook templates)
-  README.md                  (this file)
+  knowledge.db          <- SQLite database (local query engine)
+  entries.jsonl         <- JSONL export for git sharing (optional)
+  staged/               <- Legacy staged candidates directory
+  entries/              <- Legacy filesystem entries (migrated to DB on first use)
 ```

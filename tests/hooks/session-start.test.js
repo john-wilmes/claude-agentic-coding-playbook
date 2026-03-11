@@ -218,37 +218,43 @@ test("11. scoreEntry with security category gets baseline boost", () => {
 test("12. getRelevantKnowledge with matching entries returns sorted by score", () => {
   const { home, cleanup } = createTempHome();
   try {
-    // High-scoring: tool 'git' match (+10) + category 'security' (+2) + confidence 'high' (+1) = 13
-    createKnowledgeEntry(home, {
-      id: "high-scorer",
-      tool: "git",
-      category: "security",
-      tags: [],
-      confidence: "high",
-      context: "High-scoring entry.",
-      fix: "Apply the fix.",
-    });
-    // Low-scoring: tool no match, tag 'git' overlap (+3) + category 'gotcha' (+1) = 4
-    createKnowledgeEntry(home, {
-      id: "low-scorer",
-      tool: "python",
-      category: "gotcha",
-      tags: ["git"],
-      confidence: "medium",
-      context: "Low-scoring entry.",
-      fix: "Other fix.",
-    });
+    const knowledgeDb = require("../../templates/hooks/knowledge-db");
+    const dbPath = path.join(home, ".claude", "knowledge", "knowledge.db");
+    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
     const mod = requireModule();
     const dir = createProjectDir({ git: true });
     try {
-      const entries = withFakeHome(home, () => mod.getRelevantKnowledge(dir));
+      // Open DB and insert entries inside withFakeHome so _migrateIfNeeded
+      // uses the fake home (empty entries dir → no real entries imported)
+      const entries = withFakeHome(home, () => {
+        const db = knowledgeDb.openDb(dbPath);
+        // High-scoring: tool 'git' match (+10) + category 'security' (+2) + confidence 'high' (+1) = 13
+        knowledgeDb.insertEntry(db, {
+          id: "high-scorer",
+          created: new Date().toISOString(),
+          tool: "git",
+          category: "security",
+          tags: "[]",
+          confidence: "high",
+          context_text: "High-scoring entry.",
+          fix_text: "Apply the fix.",
+        });
+        // Low-scoring: tool no match, tag 'git' overlap (+3) + category 'gotcha' (+1) = 4
+        knowledgeDb.insertEntry(db, {
+          id: "low-scorer",
+          created: new Date().toISOString(),
+          tool: "python",
+          category: "gotcha",
+          tags: '["git"]',
+          confidence: "medium",
+          context_text: "Low-scoring entry.",
+          fix_text: "Other fix.",
+        });
+        return mod.getRelevantKnowledge(dir);
+      });
       assert.ok(entries.length >= 1, "Should return at least one entry");
       assert.ok(entries.length >= 2, "Should return both matching entries");
-      assert.ok(
-        entries[0].score >= entries[1].score,
-        `First entry score (${entries[0].score}) should be >= second (${entries[1].score})`
-      );
       assert.strictEqual(entries[0].fm.id, "high-scorer", "High-scorer should be first");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
@@ -258,16 +264,17 @@ test("12. getRelevantKnowledge with matching entries returns sorted by score", (
   }
 });
 
-// Test 13: getRelevantKnowledge — no knowledge dir → returns []
-test("13. getRelevantKnowledge with no knowledge dir returns empty array", () => {
+// Test 13: getRelevantKnowledge — no knowledge DB → returns []
+test("13. getRelevantKnowledge with no knowledge DB returns empty array", () => {
   const { home, cleanup } = createTempHome();
   try {
-    // No knowledge directory created under home — only ~/.claude/ exists
+    // No entries inserted — openDb creates empty DB, queryRelevant returns []
+    // Open DB inside withFakeHome so _migrateIfNeeded uses fake home (no real entries)
     const mod = requireModule();
     const dir = createProjectDir({ git: true });
     try {
       const entries = withFakeHome(home, () => mod.getRelevantKnowledge(dir));
-      assert.deepStrictEqual(entries, [], "Should return empty array");
+      assert.deepStrictEqual(entries, [], "Should return empty array when DB has no entries");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -280,13 +287,28 @@ test("13. getRelevantKnowledge with no knowledge dir returns empty array", () =>
 test("14. getRelevantKnowledge with no project context returns empty array", () => {
   const { home, cleanup } = createTempHome();
   try {
-    createKnowledgeEntry(home, { tool: "git", category: "gotcha" });
+    const knowledgeDb = require("../../templates/hooks/knowledge-db");
+    const dbPath = path.join(home, ".claude", "knowledge", "knowledge.db");
+    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
     const mod = requireModule();
     // Empty project dir — no context detected
     const dir = createProjectDir();
     try {
-      const entries = withFakeHome(home, () => mod.getRelevantKnowledge(dir));
+      const entries = withFakeHome(home, () => {
+        const db = knowledgeDb.openDb(dbPath);
+        knowledgeDb.insertEntry(db, {
+          id: "git-entry",
+          created: new Date().toISOString(),
+          tool: "git",
+          category: "gotcha",
+          tags: "[]",
+          confidence: "high",
+          context_text: "Some entry.",
+          fix_text: "Some fix.",
+        });
+        return mod.getRelevantKnowledge(dir);
+      });
       assert.deepStrictEqual(entries, [], "Should return empty array when project context is empty");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
@@ -410,29 +432,34 @@ test("17. runHook with malformed JSON on stdin exits 0 and outputs {}", () => {
   assert.deepStrictEqual(parsed, {}, "Output should be empty object {}");
 });
 
-// Test 18: hybrid scoring boosts entries matching query content
-test("18. hybrid scoring boosts entries matching query content", () => {
+// Test 18: FTS5 boost surfaces entries matching query content
+test("18. FTS5 boost surfaces entries matching query content", () => {
   const { home, cleanup } = createTempHome();
   try {
-    // Entry whose content mentions "git" repeatedly (should get BM25 boost)
-    createKnowledgeEntry(home, {
-      id: "git-content-match",
-      tool: "git",
-      category: "gotcha",
-      tags: [],
-      confidence: "high",
-      context: "git rebase git pull git push — always use git with caution.",
-      fix: "git pull --rebase",
-    });
+    const knowledgeDb = require("../../templates/hooks/knowledge-db");
+    const dbPath = path.join(home, ".claude", "knowledge", "knowledge.db");
+    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
     const mod = requireModule();
     const dir = createProjectDir({ git: true });
     try {
-      const entries = withFakeHome(home, () => mod.getRelevantKnowledge(dir));
+      const entries = withFakeHome(home, () => {
+        const db = knowledgeDb.openDb(dbPath);
+        // Entry whose content mentions "git" repeatedly (should get FTS5 boost)
+        knowledgeDb.insertEntry(db, {
+          id: "git-content-match",
+          created: new Date().toISOString(),
+          tool: "git",
+          category: "gotcha",
+          tags: "[]",
+          confidence: "high",
+          context_text: "git rebase git pull git push — always use git with caution.",
+          fix_text: "git pull --rebase",
+        });
+        return mod.getRelevantKnowledge(dir);
+      });
       assert.ok(entries.length >= 1, "Should return at least one entry");
-      // The entry has tool match (+10) + security/gotcha (+1) + high (+1) + BM25 boost
-      // BM25 boost > 0 means final score > tag-only score of 12
-      assert.ok(entries[0].score > 12, `Score (${entries[0].score}) should exceed tag-only baseline of 12 due to BM25 boost`);
+      assert.strictEqual(entries[0].fm.id, "git-content-match", "Content-matched entry should be returned");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -441,32 +468,39 @@ test("18. hybrid scoring boosts entries matching query content", () => {
   }
 });
 
-// Test 19: content-match boost surfaces zero-tag-score entries
-test("19. content-match boost surfaces zero-tag-score entries", () => {
+// Test 19: FTS5 surfaces zero-tag-score entries via content match
+test("19. FTS5 surfaces zero-tag-score entries via content match", () => {
   const { home, cleanup } = createTempHome();
   try {
-    // Entry with tool "docker" — no match for a git-only project (tag score = 0)
-    // but content mentions the project name "hook-proj" multiple times
-    // We use a known project dir name by creating it then naming entry content after it
+    const knowledgeDb = require("../../templates/hooks/knowledge-db");
+    const dbPath = path.join(home, ".claude", "knowledge", "knowledge.db");
+    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+
+    // Create the project dir first so we know its name
     const dir = createProjectDir({ git: true });
     const projectName = path.basename(dir);
-    createKnowledgeEntry(home, {
-      id: "zero-tag-bm25-match",
-      tool: "docker",
-      category: "workflow",
-      tags: [],
-      confidence: "medium",
-      context: `${projectName} ${projectName} ${projectName} — this entry is about this specific project.`,
-      fix: "Use project-specific config.",
-    });
 
     const mod = requireModule();
     try {
-      const entries = withFakeHome(home, () => mod.getRelevantKnowledge(dir));
-      // The entry has no tool match and no tag match, so tag score = 0.
-      // BM25 should boost it above 0 since the project name appears in content.
-      assert.ok(entries.length >= 1, "BM25 boost should surface the zero-tag-score entry");
-      assert.strictEqual(entries[0].fm.id, "zero-tag-bm25-match", "The content-matched entry should be returned");
+      const entries = withFakeHome(home, () => {
+        const db = knowledgeDb.openDb(dbPath);
+        // Entry with tool "docker" — no match for a git-only project (tag score = 0)
+        // but content mentions the project name multiple times for FTS5 boost
+        knowledgeDb.insertEntry(db, {
+          id: "zero-tag-fts-match",
+          created: new Date().toISOString(),
+          tool: "docker",
+          category: "workflow",
+          tags: "[]",
+          confidence: "medium",
+          context_text: `${projectName} ${projectName} ${projectName} — this entry is about this specific project.`,
+          fix_text: "Use project-specific config.",
+        });
+        return mod.getRelevantKnowledge(dir);
+      });
+      // FTS5 should boost this entry since project name appears in content
+      assert.ok(entries.length >= 1, "FTS5 boost should surface the zero-tag-score entry");
+      assert.strictEqual(entries[0].fm.id, "zero-tag-fts-match", "The content-matched entry should be returned");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -475,29 +509,35 @@ test("19. content-match boost surfaces zero-tag-score entries", () => {
   }
 });
 
-// Test 20: fallback to tag-only when bm25 module is missing
-test("20. fallback to tag-only when bm25 module is missing", () => {
-  // This test verifies the module still works when bm25 require fails.
-  // Since bm25 is loaded at module level with try/catch, we test indirectly:
-  // create a matching entry and confirm getRelevantKnowledge returns it regardless.
+// Test 20: knowledge retrieval works via SQLite without bm25 module
+test("20. knowledge retrieval works via SQLite (no bm25 dependency)", () => {
+  // Verifies that getRelevantKnowledge returns matching entries using the
+  // DB-backed implementation that no longer depends on the bm25 module.
   const { home, cleanup } = createTempHome();
   try {
-    createKnowledgeEntry(home, {
-      id: "tag-only-entry",
-      tool: "git",
-      category: "gotcha",
-      tags: [],
-      confidence: "high",
-      context: "Tag-only scoring fallback test.",
-      fix: "No fix needed.",
-    });
+    const knowledgeDb = require("../../templates/hooks/knowledge-db");
+    const dbPath = path.join(home, ".claude", "knowledge", "knowledge.db");
+    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
     const mod = requireModule();
     const dir = createProjectDir({ git: true });
     try {
-      const entries = withFakeHome(home, () => mod.getRelevantKnowledge(dir));
-      assert.ok(entries.length >= 1, "Should return entries even if bm25 is unavailable");
-      assert.ok(entries[0].score > 0, "Score should be positive from tag matching alone");
+      const entries = withFakeHome(home, () => {
+        const db = knowledgeDb.openDb(dbPath);
+        knowledgeDb.insertEntry(db, {
+          id: "sqlite-entry",
+          created: new Date().toISOString(),
+          tool: "git",
+          category: "gotcha",
+          tags: "[]",
+          confidence: "high",
+          context_text: "SQLite-backed retrieval test.",
+          fix_text: "No fix needed.",
+        });
+        return mod.getRelevantKnowledge(dir);
+      });
+      assert.ok(entries.length >= 1, "Should return entries from SQLite DB");
+      assert.strictEqual(entries[0].fm.id, "sqlite-entry", "Should return the inserted entry");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

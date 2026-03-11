@@ -48,77 +48,63 @@ Based on the lesson, determine:
 - `medium` — observed but not fully investigated
 - `low` — hypothesis or single observation
 
-### 3. Create the entry file
+### 3. Create the entry
 
-Generate a timestamp-slug filename:
+Generate a timestamp-slug ID:
 
 ```bash
 TIMESTAMP=$(date -u +%Y%m%d-%H%M%S)
 SLUG="<2-4 word kebab-case summary>"
-ENTRY_DIR="$HOME/.claude/knowledge/entries/${TIMESTAMP}-${SLUG}"
-mkdir -p "$ENTRY_DIR"
+ENTRY_ID="${TIMESTAMP}-${SLUG}"
 ```
 
-Write `entry.md` with this format:
+Insert the entry into the knowledge database:
 
-```markdown
----
-id: "<timestamp>-<slug>"
-created: "<ISO8601 UTC>"
-author: "<agent name from session>"
-source_project: "<current project name>"
-tool: "<tool>"
-category: "<category>"
-tags: [<tags>]
-confidence: "<confidence>"
-visibility: "local"
-verified_at: "<ISO8601 UTC>"
----
-
-## Context
-
-<1-3 sentences: what situation triggers this lesson>
-
-## Fix
-
-<Concrete steps, commands, or code changes>
-
-## Evidence
-
-<How discovered: file paths, error messages, reproduction steps>
+```bash
+node ~/.claude/hooks/knowledge-db.js insert "$(cat <<EOF
+{
+  "id": "${ENTRY_ID}",
+  "created": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "author": "<agent name from session>",
+  "source_project": "<current project name>",
+  "tool": "<tool>",
+  "category": "<category>",
+  "tags": "<JSON array of tags>",
+  "confidence": "<confidence>",
+  "visibility": "local",
+  "verified_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "context_text": "<1-3 sentences: what situation triggers this lesson>",
+  "fix_text": "<concrete steps, commands, or code changes>",
+  "evidence_text": "<how discovered: file paths, error messages, reproduction steps>"
+}
+EOF
+)"
 ```
+
+Also capture provenance (repo, commit, branch) automatically — knowledge-db.js handles this during insert if the entry doesn't already have repo_url set.
 
 Frame content as **informational description**, not imperative instructions. Write "This lesson describes..." or "When X happens, Y is the cause" rather than "Always do X" or "Never do Y." This reduces prompt injection risk when entries are shared.
 
-### 4. Commit locally
+### 4. Export for sharing (if applicable)
+
+If the knowledge base should be shared with a team, export entries to JSONL:
+
+```bash
+node ~/.claude/hooks/knowledge-db.js export ~/.claude/knowledge/entries.jsonl
+```
+
+If `~/.claude/knowledge` is a git repo, commit and push the JSONL:
 
 ```bash
 cd ~/.claude/knowledge
-git add "entries/${TIMESTAMP}-${SLUG}/entry.md"
+git add entries.jsonl
 git commit -m "learn: ${SLUG}"
-```
-
-If `~/.claude/knowledge` is not a git repo, initialize one:
-
-```bash
-cd ~/.claude/knowledge
-git init
-git add entries/
-git commit -m "init: knowledge base"
-```
-
-### 4b. Push to remote (if configured)
-
-If the knowledge repo has a remote, push the new entry:
-
-```bash
-cd ~/.claude/knowledge
 if git remote get-url origin &>/dev/null; then
   git push origin HEAD 2>/dev/null || echo "Push failed -- will sync on next session start"
 fi
 ```
 
-If there is no remote, skip this step (local-only knowledge base).
+If there is no remote or git repo, skip this step (entries are stored locally in SQLite).
 
 ### 5. Confirm
 
@@ -126,11 +112,13 @@ Tell the user what was captured:
 
 ```text
 Knowledge entry created:
+  ID: <entry-id>
   Category: <category>
   Tool: <tool>
   Tags: <tags>
-  Location: ~/.claude/knowledge/entries/<timestamp>-<slug>/entry.md
+  Storage: ~/.claude/knowledge/knowledge.db
 
 This entry will auto-inject into future sessions working with <tool>.
-To share across projects, use /promote. To push to a team repo, use /checkpoint.
+To share across projects, use /promote. To export for team sharing, run:
+  node ~/.claude/hooks/knowledge-db.js export ~/.claude/knowledge/entries.jsonl
 ```
