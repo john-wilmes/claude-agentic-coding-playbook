@@ -718,6 +718,60 @@ test("29. PostToolUse block writes JSONL log entry", () => {
   }
 });
 
+// Test 30: Failsafe at 75% under claude-loop writes sentinel with reason "failsafe"
+test("30. Failsafe at 75% under CLAUDE_LOOP=1 writes sentinel directly", () => {
+  const sessionId = newSessionId();
+  const sentinelFile = path.join(os.tmpdir(), `claude-failsafe-test-${sessionId}`);
+  // 76% of 200k = 152,000 tokens — above failsafe threshold
+  const transcript = createFakeTranscript([makeAssistantMessage(152000)]);
+  try {
+    try { fs.rmSync(sentinelFile); } catch {}
+
+    const result = runHook(CONTEXT_GUARD, {
+      session_id: sessionId,
+      tool_input: {},
+      tool_response: {},
+      transcript_path: transcript,
+    }, { CLAUDE_LOOP: "1", CLAUDE_LOOP_SENTINEL: sentinelFile });
+    assert.strictEqual(result.status, 0);
+    assert.ok(result.json.hookSpecificOutput, "Should output failsafe message");
+    assert.ok(result.json.hookSpecificOutput.additionalContext.includes("FAILSAFE"), "Should include FAILSAFE");
+
+    assert.ok(fs.existsSync(sentinelFile), "Should write sentinel file directly");
+    const data = JSON.parse(fs.readFileSync(sentinelFile, "utf8"));
+    assert.strictEqual(data.reason, "failsafe", "Sentinel reason should be 'failsafe'");
+    assert.ok(data.ratio >= 0.75, `Sentinel ratio should be >= 0.75, got ${data.ratio}`);
+  } finally {
+    cleanupSession(sessionId);
+    try { fs.rmSync(transcript); } catch {}
+    try { fs.rmSync(sentinelFile); } catch {}
+  }
+});
+
+// Test 31: At 75% without CLAUDE_LOOP, no failsafe — normal BLOCK behavior
+test("31. At 75% without CLAUDE_LOOP, normal CRITICAL block (no failsafe)", () => {
+  const sessionId = newSessionId();
+  const sentinelFile = path.join(os.tmpdir(), `claude-failsafe-test-${sessionId}`);
+  const transcript = createFakeTranscript([makeAssistantMessage(152000)]);
+  try {
+    try { fs.rmSync(sentinelFile); } catch {}
+
+    const result = runHook(CONTEXT_GUARD, {
+      session_id: sessionId,
+      tool_input: {},
+      tool_response: {},
+      transcript_path: transcript,
+    }, { CLAUDE_LOOP_SENTINEL: sentinelFile });
+    assert.strictEqual(result.status, 0);
+    assert.ok(result.json.hookSpecificOutput, "Should output block message");
+    assert.ok(result.json.hookSpecificOutput.additionalContext.includes("CRITICAL"), "Should include CRITICAL (not FAILSAFE)");
+  } finally {
+    cleanupSession(sessionId);
+    try { fs.rmSync(transcript); } catch {}
+    try { fs.rmSync(sentinelFile); } catch {}
+  }
+});
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
 console.log(`\n${"─".repeat(60)}`);
