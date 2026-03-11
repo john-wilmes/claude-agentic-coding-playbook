@@ -6,17 +6,35 @@ const path = require("path");
 const os = require("os");
 
 const LOG_DIR = path.join(os.homedir(), ".claude", "logs");
+const KNOWLEDGE_DIR = path.join(os.homedir(), ".claude", "knowledge");
+const STAGED_DIR = path.join(KNOWLEDGE_DIR, "staged");
+const ENTRIES_DIR = path.join(KNOWLEDGE_DIR, "entries");
+
+// Load BM25 from installed hooks first, fall back to templates path for development.
+let bm25;
+try {
+  bm25 = require(path.join(os.homedir(), ".claude", "hooks", "bm25"));
+} catch (_) {
+  try {
+    bm25 = require(path.join(__dirname, "..", "templates", "hooks", "bm25"));
+  } catch (_) {
+    bm25 = null;
+  }
+}
+
+const MISS_THRESHOLD = 5.0;
 
 function parseArgs(argv) {
-  const args = { since: null, session: null, hook: null, excludeTests: false, project: null };
+  const args = { since: null, session: null, hook: null, excludeTests: false, project: null, retrievalMisses: false };
   for (let i = 2; i < argv.length; i++) {
     if (argv[i] === "--since" && argv[i + 1]) { args.since = argv[++i]; }
     else if (argv[i] === "--session" && argv[i + 1]) { args.session = argv[++i]; }
     else if (argv[i] === "--hook" && argv[i + 1]) { args.hook = argv[++i]; }
     else if (argv[i] === "--exclude-tests") { args.excludeTests = true; }
     else if (argv[i] === "--project" && argv[i + 1]) { args.project = argv[++i]; }
+    else if (argv[i] === "--retrieval-misses") { args.retrievalMisses = true; }
     else if (argv[i] === "--help") {
-      console.log("Usage: node scripts/analyze-logs.js [--since YYYY-MM-DD] [--session PREFIX] [--hook NAME] [--exclude-tests] [--project NAME]");
+      console.log("Usage: node scripts/analyze-logs.js [--since YYYY-MM-DD] [--session PREFIX] [--hook NAME] [--exclude-tests] [--project NAME] [--retrieval-misses]");
       process.exit(0);
     }
   }
@@ -204,6 +222,127 @@ function printInjectionGuard(entries) {
   console.log();
 }
 
+function loadStagedCandidates() {
+  if (!fs.existsSync(STAGED_DIR)) return [];
+  let files;
+  try {
+    files = fs.readdirSync(STAGED_DIR).filter(f => f.endsWith(".jsonl"));
+  } catch (_) {
+    return [];
+  }
+  const candidates = [];
+  for (const file of files) {
+    const filePath = path.join(STAGED_DIR, file);
+    let lines;
+    try {
+      lines = fs.readFileSync(filePath, "utf8").split("\n");
+    } catch (_) {
+      continue;
+    }
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        candidates.push(JSON.parse(line));
+      } catch (_) {
+        // skip malformed lines
+      }
+    }
+  }
+  return candidates;
+}
+
+function loadKnowledgeEntries() {
+  if (!fs.existsSync(ENTRIES_DIR)) return [];
+  let dirs;
+  try {
+    dirs = fs.readdirSync(ENTRIES_DIR);
+  } catch (_) {
+    return [];
+  }
+  const entries = [];
+  for (const dir of dirs) {
+    const entryPath = path.join(ENTRIES_DIR, dir, "entry.md");
+    try {
+      const text = fs.readFileSync(entryPath, "utf8");
+      entries.push({ id: dir, text });
+    } catch (_) {
+      // skip missing or unreadable entries
+    }
+  }
+  return entries;
+}
+
+function printRetrievalMisses() {
+  console.log("=== Retrieval Miss Analysis ===");
+
+  if (!bm25) {
+    console.log("BM25 module not available — skipping analysis.");
+    console.log("Install hooks via install.sh or ensure templates/hooks/bm25.js exists.");
+    console.log();
+    return;
+  }
+
+  const candidates = loadStagedCandidates();
+  const knowledgeEntries = loadKnowledgeEntries();
+
+  console.log(`Staged candidates found: ${candidates.length}`);
+  console.log(`Existing knowledge entries: ${knowledgeEntries.length}`);
+
+  if (candidates.length === 0) {
+    console.log("No staged candidates to analyze.");
+    console.log();
+    return;
+  }
+
+  if (knowledgeEntries.length === 0) {
+    console.log("No existing knowledge entries to compare against.");
+    console.log();
+    return;
+  }
+
+  const index = bm25.buildIndex(knowledgeEntries);
+
+  let missCount = 0;
+  let newCount = 0;
+  let noContextCount = 0;
+
+  console.log();
+  console.log("Potential retrieval misses (staged candidates similar to existing entries):");
+  console.log();
+
+  for (const candidate of candidates) {
+    const summary = candidate.summary || "";
+    const snippet = candidate.context_snippet || "";
+    const trigger = candidate.trigger || "unknown";
+    const queryText = [summary, snippet].filter(Boolean).join(" ");
+
+    if (!queryText.trim()) {
+      noContextCount++;
+      console.log(`  No context: (${trigger}) — no summary or context_snippet`);
+      continue;
+    }
+
+    const results = bm25.query(index, queryText, 1);
+
+    if (results.length > 0 && results[0].score > MISS_THRESHOLD) {
+      missCount++;
+      const match = results[0];
+      console.log(`  Candidate: "${summary}" (${trigger})`);
+      console.log(`    → Similar to entry: ${match.id} (score: ${match.score.toFixed(1)})`);
+      console.log(`    → Action: Consider if the existing entry needs updating or if this is a duplicate`);
+    } else {
+      newCount++;
+      const scoreInfo = results.length > 0 ? ` (best score: ${results[0].score.toFixed(1)})` : "";
+      console.log(`  No match: "${summary}" (${trigger})`);
+      console.log(`    → No similar existing entry found above threshold${scoreInfo}`);
+    }
+    console.log();
+  }
+
+  console.log(`Summary: ${missCount} potential miss${missCount !== 1 ? "es" : ""}, ${newCount} new candidate${newCount !== 1 ? "s" : ""}, ${noContextCount} staged event${noContextCount !== 1 ? "s" : ""} without context`);
+  console.log();
+}
+
 const args = parseArgs(process.argv);
 const entries = loadEntries(args);
 printSummary(entries);
@@ -211,3 +350,6 @@ printContextGuard(entries);
 printStuckDetector(entries);
 printModelRouter(entries);
 printInjectionGuard(entries);
+if (args.retrievalMisses) {
+  printRetrievalMisses();
+}

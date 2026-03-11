@@ -10,6 +10,9 @@ const { execSync } = require("child_process");
 let log;
 try { log = require("./log"); } catch { log = { writeLog() {} }; }
 
+let bm25;
+try { bm25 = require("./bm25"); } catch { bm25 = null; }
+
 // Detect project context from working directory
 function detectProjectContext(cwd) {
   const context = { tools: new Set(), tags: new Set() };
@@ -37,7 +40,8 @@ function detectProjectContext(cwd) {
       context.tools.add("python");
     }
   } catch {}
-  return { tools: [...context.tools], tags: [...context.tags] };
+  context.projectName = path.basename(cwd);
+  return { tools: [...context.tools], tags: [...context.tags], projectName: context.projectName };
 }
 
 // Parse YAML frontmatter from an entry file
@@ -80,6 +84,12 @@ function scoreEntry(frontmatter, projectContext) {
   if (category === "gotcha") score += 1;
   // High confidence entries preferred
   if ((frontmatter.confidence || "").toLowerCase() === "high") score += 1;
+  // Source project penalty: entries from a different project are less relevant
+  if (frontmatter.source_project && projectContext.projectName) {
+    if (frontmatter.source_project.toLowerCase() !== projectContext.projectName.toLowerCase()) {
+      score -= 3;
+    }
+  }
 
   return score;
 }
@@ -107,21 +117,46 @@ function getRelevantKnowledge(cwd, maxEntries = 5) {
         const fm = parseFrontmatter(content);
         if (!fm) continue;
         const score = scoreEntry(fm, projectContext);
-        if (score > 0) {
-          // Extract one-line summary from Context section
-          const ctxMatch = content.match(/## Context\n\n?([\s\S]*?)(?=\n## |\n$|$)/);
-          const fixMatch = content.match(/## Fix\n\n?([\s\S]*?)(?=\n## |\n$|$)/);
-          const summary = ctxMatch ? ctxMatch[1].trim().split("\n")[0] : fm.id || dir;
-          const fix = fixMatch ? fixMatch[1].trim().split("\n")[0] : "";
-          entries.push({ fm, score, summary, fix });
-        }
+        // Extract one-line summary from Context section
+        const ctxMatch = content.match(/## Context\n\n?([\s\S]*?)(?=\n## |\n$|$)/);
+        const fixMatch = content.match(/## Fix\n\n?([\s\S]*?)(?=\n## |\n$|$)/);
+        const summary = ctxMatch ? ctxMatch[1].trim().split("\n")[0] : fm.id || dir;
+        const fix = fixMatch ? fixMatch[1].trim().split("\n")[0] : "";
+        entries.push({ fm, score, summary, fix, fullText: content, dir });
       } catch {}
     }
   } catch {}
 
-  // Sort by score descending, take top N
-  entries.sort((a, b) => b.score - a.score);
-  return entries.slice(0, maxEntries);
+  // Build BM25 index if module is available
+  let bm25Index = null;
+  if (bm25 && entries.length > 0) {
+    const docs = entries.map(e => ({
+      id: e.fm.id || e.dir,
+      text: e.fullText || "",
+    }));
+    bm25Index = bm25.buildIndex(docs);
+  }
+
+  // Build query string from project context
+  const queryString = [...projectContext.tools, ...projectContext.tags, projectContext.projectName]
+    .filter(Boolean)
+    .join(" ");
+
+  // Apply BM25 boost
+  if (bm25Index && queryString) {
+    const bm25Results = bm25.query(bm25Index, queryString, entries.length);
+    const bm25Map = new Map(bm25Results.map(r => [r.id, r.score]));
+    for (const entry of entries) {
+      const bm25Score = bm25Map.get(entry.fm.id || entry.dir) || 0;
+      entry.score += bm25Score * 0.5;
+    }
+  }
+
+  // Filter to score > 0, sort by score descending, take top N
+  return entries
+    .filter(e => e.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, maxEntries);
 }
 
 // Read hook input from stdin

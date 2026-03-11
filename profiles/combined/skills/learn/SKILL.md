@@ -35,6 +35,9 @@ Based on the lesson, determine:
 - `config` — configuration requirement or setting
 - `security` — security-related finding
 - `performance` — optimization or bottleneck insight
+- `convention` — project-specific conventions, coding standards, naming patterns, or workflow preferences that should be remembered for future sessions in the same project
+- `reference` — factual reference information: API endpoints, config keys, schema details, version constraints, or external service behaviors
+- `decision` — architectural or design decisions with rationale; records why a particular approach was chosen over alternatives, to prevent re-debating settled questions
 
 **Tool**: The primary tool, library, or platform (e.g., `git`, `npm`, `docker`, `amplify`, `vitest`).
 
