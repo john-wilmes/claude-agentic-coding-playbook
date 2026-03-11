@@ -84,6 +84,7 @@ process.stdin.on("end", () => {
       session_id: hookInput.session_id,
       tool_use_id: hookInput.tool_use_id,
       details: `Auto-selected ${model} (${reason})`,
+      project: hookInput.cwd,
       context: { model, reason, prompt_head: log.promptHead((toolInput.prompt || ""), 80) },
     });
 

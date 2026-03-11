@@ -151,7 +151,7 @@ process.stdin.on("end", () => {
     // Subagents have their own disposable context — skip the guard entirely.
     // agent_id is present only when the hook fires inside a subagent.
     if (hookInput.agent_id) {
-      log.writeLog({ hook: "context-guard", event: "skip", details: "Subagent call skipped", session_id: hookInput.session_id, tool_use_id: hookInput.tool_use_id, agent_id: hookInput.agent_id });
+      log.writeLog({ hook: "context-guard", event: "skip", details: "Subagent call skipped", session_id: hookInput.session_id, tool_use_id: hookInput.tool_use_id, agent_id: hookInput.agent_id, project: hookInput.cwd });
       process.stdout.write(JSON.stringify({}));
       process.exit(0);
     }
@@ -193,6 +193,7 @@ process.stdin.on("end", () => {
           session_id: hookInput.session_id,
           tool_use_id: hookInput.tool_use_id,
           details: `PreToolUse block: ${pct}% context used`,
+          project: hookInput.cwd,
           context: { mode: "pre", ratio: state.lastUsageRatio, pct },
         });
         process.stdout.write(JSON.stringify({
@@ -242,6 +243,7 @@ process.stdin.on("end", () => {
         session_id: hookInput.session_id,
         tool_use_id: hookInput.tool_use_id,
         details: `PostToolUse block: ${pct}% context used`,
+        project: hookInput.cwd,
         context: { mode: "post", ratio: ctx.ratio, pct, tokens: ctx.tokens },
       });
       output = {
@@ -260,6 +262,7 @@ process.stdin.on("end", () => {
         session_id: hookInput.session_id,
         tool_use_id: hookInput.tool_use_id,
         details: `PostToolUse warn: ${pct}% context used`,
+        project: hookInput.cwd,
         context: { mode: "post", ratio: ctx.ratio, pct, tokens: ctx.tokens },
       });
       output = {
@@ -278,6 +281,7 @@ process.stdin.on("end", () => {
         session_id: hookInput.session_id,
         tool_use_id: hookInput.tool_use_id,
         details: `PostToolUse note: ${pct}% context used — delegate to subagents`,
+        project: hookInput.cwd,
         context: { mode: "post", ratio: ctx.ratio, pct, tokens: ctx.tokens },
       });
       output = {

@@ -125,6 +125,7 @@ process.stdin.on("end", () => {
         session_id: hookInput.session_id,
         tool_use_id: hookInput.tool_use_id,
         details: `Blocked: ${consecutive} identical actions (${toolName})`,
+        project: hookInput.cwd,
         context: { consecutive, tool: toolName },
       });
       process.stdout.write(JSON.stringify({
@@ -146,6 +147,7 @@ process.stdin.on("end", () => {
         session_id: hookInput.session_id,
         tool_use_id: hookInput.tool_use_id,
         details: `Warning: ${consecutive} identical actions (${toolName})`,
+        project: hookInput.cwd,
         context: { consecutive, tool: toolName },
       });
       process.stdout.write(JSON.stringify({

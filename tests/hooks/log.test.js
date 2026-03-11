@@ -359,6 +359,134 @@ test("14. writeLog auto-prunes old files on first call", () => {
   }
 });
 
+// Test 15: writeLog auto-populates source from CLAUDE_HOOK_SOURCE env
+test("15. writeLog auto-populates source from env", () => {
+  const { logDir, cleanup } = createTempLogDir();
+  try {
+    const origSource = process.env.CLAUDE_HOOK_SOURCE;
+    process.env.CLAUDE_HOOK_SOURCE = "test";
+
+    const { writeLog } = requireLog(logDir);
+    writeLog({ hook: "context-guard", event: "allow" });
+
+    const logFile = path.join(logDir, `${todayString()}.jsonl`);
+    const record = JSON.parse(fs.readFileSync(logFile, "utf8").trim());
+    assert.strictEqual(record.source, "test", "source should be 'test' from env");
+
+    if (origSource === undefined) delete process.env.CLAUDE_HOOK_SOURCE;
+    else process.env.CLAUDE_HOOK_SOURCE = origSource;
+  } finally {
+    cleanup();
+  }
+});
+
+// Test 16: writeLog defaults source to "live" when env is unset
+test("16. writeLog defaults source to 'live' when env unset", () => {
+  const { logDir, cleanup } = createTempLogDir();
+  try {
+    const origSource = process.env.CLAUDE_HOOK_SOURCE;
+    delete process.env.CLAUDE_HOOK_SOURCE;
+
+    const { writeLog } = requireLog(logDir);
+    writeLog({ hook: "context-guard", event: "allow" });
+
+    const logFile = path.join(logDir, `${todayString()}.jsonl`);
+    const record = JSON.parse(fs.readFileSync(logFile, "utf8").trim());
+    assert.strictEqual(record.source, "live", "source should default to 'live'");
+
+    if (origSource !== undefined) process.env.CLAUDE_HOOK_SOURCE = origSource;
+  } finally {
+    cleanup();
+  }
+});
+
+// Test 17: writeLog extracts project basename from entry.project path
+test("17. writeLog extracts project basename from full path", () => {
+  const { logDir, cleanup } = createTempLogDir();
+  try {
+    const { writeLog } = requireLog(logDir);
+    writeLog({ hook: "model-router", event: "route", project: "/home/user/Documents/my-project" });
+
+    const logFile = path.join(logDir, `${todayString()}.jsonl`);
+    const record = JSON.parse(fs.readFileSync(logFile, "utf8").trim());
+    assert.strictEqual(record.project, "my-project", "project should be basename only");
+  } finally {
+    cleanup();
+  }
+});
+
+// Test 18: writeLog picks up task_id and task_step from env
+test("18. writeLog auto-populates task_id and task_step from env", () => {
+  const { logDir, cleanup } = createTempLogDir();
+  try {
+    const origId = process.env.CLAUDE_TASK_ID;
+    const origStep = process.env.CLAUDE_TASK_STEP;
+    process.env.CLAUDE_TASK_ID = "v3-round2";
+    process.env.CLAUDE_TASK_STEP = "3";
+
+    const { writeLog } = requireLog(logDir);
+    writeLog({ hook: "stuck-detector", event: "warn" });
+
+    const logFile = path.join(logDir, `${todayString()}.jsonl`);
+    const record = JSON.parse(fs.readFileSync(logFile, "utf8").trim());
+    assert.strictEqual(record.task_id, "v3-round2", "task_id from env");
+    assert.strictEqual(record.task_step, "3", "task_step from env");
+
+    if (origId === undefined) delete process.env.CLAUDE_TASK_ID;
+    else process.env.CLAUDE_TASK_ID = origId;
+    if (origStep === undefined) delete process.env.CLAUDE_TASK_STEP;
+    else process.env.CLAUDE_TASK_STEP = origStep;
+  } finally {
+    cleanup();
+  }
+});
+
+// Test 19: explicit entry fields override env defaults
+test("19. explicit entry fields override env-based defaults", () => {
+  const { logDir, cleanup } = createTempLogDir();
+  try {
+    const origSource = process.env.CLAUDE_HOOK_SOURCE;
+    process.env.CLAUDE_HOOK_SOURCE = "test";
+
+    const { writeLog } = requireLog(logDir);
+    writeLog({ hook: "context-guard", event: "block", source: "custom", project: "/opt/other" });
+
+    const logFile = path.join(logDir, `${todayString()}.jsonl`);
+    const record = JSON.parse(fs.readFileSync(logFile, "utf8").trim());
+    assert.strictEqual(record.source, "custom", "explicit source wins over env");
+    assert.strictEqual(record.project, "other", "explicit project is basename-normalized");
+
+    if (origSource === undefined) delete process.env.CLAUDE_HOOK_SOURCE;
+    else process.env.CLAUDE_HOOK_SOURCE = origSource;
+  } finally {
+    cleanup();
+  }
+});
+
+// Test 20: task_id/task_step omitted when env vars are unset
+test("20. task_id and task_step omitted when env vars unset", () => {
+  const { logDir, cleanup } = createTempLogDir();
+  try {
+    const origId = process.env.CLAUDE_TASK_ID;
+    const origStep = process.env.CLAUDE_TASK_STEP;
+    delete process.env.CLAUDE_TASK_ID;
+    delete process.env.CLAUDE_TASK_STEP;
+
+    const { writeLog } = requireLog(logDir);
+    writeLog({ hook: "context-guard", event: "allow" });
+
+    const logFile = path.join(logDir, `${todayString()}.jsonl`);
+    const record = JSON.parse(fs.readFileSync(logFile, "utf8").trim());
+    assert.strictEqual(record.task_id, undefined, "task_id should be absent");
+    assert.strictEqual(record.task_step, undefined, "task_step should be absent");
+
+    if (origId !== undefined) process.env.CLAUDE_TASK_ID = origId;
+    if (origStep !== undefined) process.env.CLAUDE_TASK_STEP = origStep;
+  } finally {
+    cleanup();
+  }
+});
+
 // ─── Summary ──────────────────────────────────────────────────────────────────
 
 console.log(`\n${"─".repeat(60)}`);

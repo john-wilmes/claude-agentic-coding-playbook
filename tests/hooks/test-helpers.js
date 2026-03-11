@@ -94,7 +94,7 @@ function createMemoryFile(home, cwd, content) {
 function runHook(hookPath, stdinJson = {}, env = {}) {
   const result = spawnSync("node", [hookPath], {
     input: JSON.stringify(stdinJson),
-    env: { ...process.env, ...env },
+    env: { ...process.env, CLAUDE_HOOK_SOURCE: "test", ...env },
     timeout: 10000,
     encoding: "utf8",
   });

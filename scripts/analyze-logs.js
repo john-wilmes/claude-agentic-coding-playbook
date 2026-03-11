@@ -8,13 +8,15 @@ const os = require("os");
 const LOG_DIR = path.join(os.homedir(), ".claude", "logs");
 
 function parseArgs(argv) {
-  const args = { since: null, session: null, hook: null };
+  const args = { since: null, session: null, hook: null, excludeTests: false, project: null };
   for (let i = 2; i < argv.length; i++) {
     if (argv[i] === "--since" && argv[i + 1]) { args.since = argv[++i]; }
     else if (argv[i] === "--session" && argv[i + 1]) { args.session = argv[++i]; }
     else if (argv[i] === "--hook" && argv[i + 1]) { args.hook = argv[++i]; }
+    else if (argv[i] === "--exclude-tests") { args.excludeTests = true; }
+    else if (argv[i] === "--project" && argv[i + 1]) { args.project = argv[++i]; }
     else if (argv[i] === "--help") {
-      console.log("Usage: node scripts/analyze-logs.js [--since YYYY-MM-DD] [--session PREFIX] [--hook NAME]");
+      console.log("Usage: node scripts/analyze-logs.js [--since YYYY-MM-DD] [--session PREFIX] [--hook NAME] [--exclude-tests] [--project NAME]");
       process.exit(0);
     }
   }
@@ -53,6 +55,8 @@ function loadEntries(args) {
         const entry = JSON.parse(line);
         if (args.session && !String(entry.session_id || "").startsWith(args.session)) continue;
         if (args.hook && entry.hook !== args.hook) continue;
+        if (args.excludeTests && entry.source === "test") continue;
+        if (args.project && !String(entry.project || "").includes(args.project)) continue;
         entries.push(entry);
       } catch (_) {
         // skip malformed lines
