@@ -162,7 +162,8 @@ CHECKPOINT COMPLETE
 ```bash
 node -e "
 const fs = require('fs'), path = require('path'), os = require('os');
-const flag = path.join(os.tmpdir(), 'claude-checkpoint-exit');
+const flag = process.env.CLAUDE_LOOP_SENTINEL
+  || path.join(os.tmpdir(), 'claude-checkpoint-exit');
 try {
   const data = JSON.parse(fs.readFileSync(flag, 'utf8'));
   const ageMs = Date.now() - data.timestamp;
@@ -180,7 +181,7 @@ try {
   Write the sentinel file:
 
   ```bash
-  echo '{"reason":"checkpoint","timestamp":'$(date +%s)'}' > /tmp/claude-checkpoint-exit
+  echo '{"reason":"checkpoint","timestamp":'$(date +%s)'}' > "${CLAUDE_LOOP_SENTINEL:-/tmp/claude-checkpoint-exit}"
   ```
 
   Then check if running under claude-loop:

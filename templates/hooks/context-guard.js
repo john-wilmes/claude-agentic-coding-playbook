@@ -232,8 +232,10 @@ process.stdin.on("end", () => {
       // Write flag file so /checkpoint can deterministically decide to exit.
       // Uses a fixed path — checkpoint reads this instead of guessing usage.
       try {
+        const sentinelPath = process.env.CLAUDE_LOOP_SENTINEL
+          || path.join(os.tmpdir(), "claude-checkpoint-exit");
         fs.writeFileSync(
-          path.join(os.tmpdir(), "claude-checkpoint-exit"),
+          sentinelPath,
           JSON.stringify({ ratio: ctx.ratio, timestamp: Date.now() })
         );
       } catch {}
