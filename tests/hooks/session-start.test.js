@@ -410,6 +410,123 @@ test("17. runHook with malformed JSON on stdin exits 0 and outputs {}", () => {
   assert.deepStrictEqual(parsed, {}, "Output should be empty object {}");
 });
 
+// Test 18: hybrid scoring boosts entries matching query content
+test("18. hybrid scoring boosts entries matching query content", () => {
+  const { home, cleanup } = createTempHome();
+  try {
+    // Entry whose content mentions "git" repeatedly (should get BM25 boost)
+    createKnowledgeEntry(home, {
+      id: "git-content-match",
+      tool: "git",
+      category: "gotcha",
+      tags: [],
+      confidence: "high",
+      context: "git rebase git pull git push — always use git with caution.",
+      fix: "git pull --rebase",
+    });
+
+    const mod = requireModule();
+    const dir = createProjectDir({ git: true });
+    try {
+      const entries = withFakeHome(home, () => mod.getRelevantKnowledge(dir));
+      assert.ok(entries.length >= 1, "Should return at least one entry");
+      // The entry has tool match (+10) + security/gotcha (+1) + high (+1) + BM25 boost
+      // BM25 boost > 0 means final score > tag-only score of 12
+      assert.ok(entries[0].score > 12, `Score (${entries[0].score}) should exceed tag-only baseline of 12 due to BM25 boost`);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  } finally {
+    cleanup();
+  }
+});
+
+// Test 19: content-match boost surfaces zero-tag-score entries
+test("19. content-match boost surfaces zero-tag-score entries", () => {
+  const { home, cleanup } = createTempHome();
+  try {
+    // Entry with tool "docker" — no match for a git-only project (tag score = 0)
+    // but content mentions the project name "hook-proj" multiple times
+    // We use a known project dir name by creating it then naming entry content after it
+    const dir = createProjectDir({ git: true });
+    const projectName = path.basename(dir);
+    createKnowledgeEntry(home, {
+      id: "zero-tag-bm25-match",
+      tool: "docker",
+      category: "workflow",
+      tags: [],
+      confidence: "medium",
+      context: `${projectName} ${projectName} ${projectName} — this entry is about this specific project.`,
+      fix: "Use project-specific config.",
+    });
+
+    const mod = requireModule();
+    try {
+      const entries = withFakeHome(home, () => mod.getRelevantKnowledge(dir));
+      // The entry has no tool match and no tag match, so tag score = 0.
+      // BM25 should boost it above 0 since the project name appears in content.
+      assert.ok(entries.length >= 1, "BM25 boost should surface the zero-tag-score entry");
+      assert.strictEqual(entries[0].fm.id, "zero-tag-bm25-match", "The content-matched entry should be returned");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  } finally {
+    cleanup();
+  }
+});
+
+// Test 20: fallback to tag-only when bm25 module is missing
+test("20. fallback to tag-only when bm25 module is missing", () => {
+  // This test verifies the module still works when bm25 require fails.
+  // Since bm25 is loaded at module level with try/catch, we test indirectly:
+  // create a matching entry and confirm getRelevantKnowledge returns it regardless.
+  const { home, cleanup } = createTempHome();
+  try {
+    createKnowledgeEntry(home, {
+      id: "tag-only-entry",
+      tool: "git",
+      category: "gotcha",
+      tags: [],
+      confidence: "high",
+      context: "Tag-only scoring fallback test.",
+      fix: "No fix needed.",
+    });
+
+    const mod = requireModule();
+    const dir = createProjectDir({ git: true });
+    try {
+      const entries = withFakeHome(home, () => mod.getRelevantKnowledge(dir));
+      assert.ok(entries.length >= 1, "Should return entries even if bm25 is unavailable");
+      assert.ok(entries[0].score > 0, "Score should be positive from tag matching alone");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  } finally {
+    cleanup();
+  }
+});
+
+// Test 21: source_project penalty reduces score for foreign entries
+test("21. source_project penalty reduces score for foreign entries", () => {
+  const { scoreEntry } = requireModule();
+  const fm = { tool: "git", category: "gotcha", tags: [], confidence: "high", source_project: "other-project" };
+  const projectContext = { tools: ["git"], tags: [], projectName: "my-project" };
+  const scoreWithPenalty = scoreEntry(fm, projectContext);
+  // Without penalty: tool match (+10) + gotcha (+1) + high (+1) = 12
+  // With penalty: 12 - 3 = 9
+  assert.strictEqual(scoreWithPenalty, 9, `Score should be 9 (12 - 3 penalty), got ${scoreWithPenalty}`);
+});
+
+// Test 22: source_project matching current project has no penalty
+test("22. source_project matching current project has no penalty", () => {
+  const { scoreEntry } = requireModule();
+  const fm = { tool: "git", category: "gotcha", tags: [], confidence: "high", source_project: "my-project" };
+  const projectContext = { tools: ["git"], tags: [], projectName: "my-project" };
+  const score = scoreEntry(fm, projectContext);
+  // No penalty: tool match (+10) + gotcha (+1) + high (+1) = 12
+  assert.strictEqual(score, 12, `Score should be 12 with no penalty, got ${score}`);
+});
+
 // ─── Summary ──────────────────────────────────────────────────────────────────
 
 console.log(`\n${"─".repeat(60)}`);

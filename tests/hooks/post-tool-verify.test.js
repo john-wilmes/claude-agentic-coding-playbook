@@ -9,7 +9,7 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
-const { runHook, createTempHome } = require("./test-helpers");
+const { runHook, createTempHome, createStagedDir } = require("./test-helpers");
 
 // Resolve hook path relative to repo root
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
@@ -245,6 +245,75 @@ test("13. No CLAUDE.md in project -> hook skips gracefully", (env) => {
     assert.ok(result.json, "Should output valid JSON");
     const ctx = result.json.hookSpecificOutput && result.json.hookSpecificOutput.additionalContext;
     assert.ok(!ctx, "No CLAUDE.md should produce no additionalContext");
+  } finally {
+    try { fs.rmSync(projDir, { recursive: true, force: true }); } catch {}
+  }
+});
+
+// ─── Knowledge capture tests ─────────────────────────────────────────────────
+
+console.log("\nknowledge capture (runHook):");
+
+test("14. fail→pass transition stages a knowledge candidate", (env) => {
+  const projDir = createTempProject("## Quality Gates\n\nTest: `echo PASS`\n");
+  const stagedDir = createStagedDir(env.home);
+
+  // Pre-populate debounce state with lastPassed=false so the hook sees a fail→pass transition.
+  // Use a timestamp older than DEBOUNCE_MS so it is not debounced.
+  const debounceFile = require("path").join(env.home, ".claude", ".verify-last-run");
+  const oldState = {};
+  oldState[projDir] = { ts: Date.now() - 20000, lastPassed: false, lastFailOutput: "AssertionError: expected 1 to equal 2" };
+  require("fs").writeFileSync(debounceFile, JSON.stringify(oldState));
+
+  try {
+    const result = runHook(POST_TOOL_VERIFY, {
+      tool_name: "Edit",
+      tool_input: { file_path: path.join(projDir, "app.ts") },
+      session_id: "test-session-14",
+      cwd: projDir,
+    }, { HOME: env.home, USERPROFILE: env.home });
+
+    assert.strictEqual(result.status, 0);
+    assert.ok(result.json, "Should output valid JSON");
+
+    // Verify a staged file was created for this session
+    const stagedFile = path.join(stagedDir, "test-session-14.jsonl");
+    assert.ok(fs.existsSync(stagedFile), `Staged file should exist at ${stagedFile}`);
+    const lines = fs.readFileSync(stagedFile, "utf8").trim().split("\n").filter(Boolean);
+    assert.ok(lines.length >= 1, "Should have at least one staged candidate");
+    const candidate = JSON.parse(lines[0]);
+    assert.strictEqual(candidate.trigger, "test-fix", "trigger should be test-fix");
+    assert.strictEqual(candidate.session_id, "test-session-14");
+    assert.ok(candidate.summary.includes("AssertionError"), `summary should include first line of fail output, got: ${candidate.summary}`);
+  } finally {
+    try { fs.rmSync(projDir, { recursive: true, force: true }); } catch {}
+  }
+});
+
+test("15. pass→pass does not stage a candidate", (env) => {
+  const projDir = createTempProject("## Quality Gates\n\nTest: `echo PASS`\n");
+  const stagedDir = createStagedDir(env.home);
+
+  // Pre-populate debounce state with lastPassed=true
+  const debounceFile = require("path").join(env.home, ".claude", ".verify-last-run");
+  const oldState = {};
+  oldState[projDir] = { ts: Date.now() - 20000, lastPassed: true, lastFailOutput: "" };
+  require("fs").writeFileSync(debounceFile, JSON.stringify(oldState));
+
+  try {
+    const result = runHook(POST_TOOL_VERIFY, {
+      tool_name: "Edit",
+      tool_input: { file_path: path.join(projDir, "app.ts") },
+      session_id: "test-session-15",
+      cwd: projDir,
+    }, { HOME: env.home, USERPROFILE: env.home });
+
+    assert.strictEqual(result.status, 0);
+    assert.ok(result.json, "Should output valid JSON");
+
+    // Verify no staged file was created for this session
+    const stagedFile = path.join(stagedDir, "test-session-15.jsonl");
+    assert.ok(!fs.existsSync(stagedFile), "Staged file should NOT exist for pass→pass transition");
   } finally {
     try { fs.rmSync(projDir, { recursive: true, force: true }); } catch {}
   }

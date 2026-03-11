@@ -405,6 +405,16 @@ if [ -f "$SCRIPT_DIR/templates/hooks/log.js" ]; then
   install_file "$SCRIPT_DIR/templates/hooks/log.js" "$CLAUDE_DIR/hooks/log.js" "shared logging module: log.js"
 fi
 
+# Knowledge capture module (installed before hooks that depend on it)
+if [ -f "$SCRIPT_DIR/templates/hooks/knowledge-capture.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/knowledge-capture.js" "$CLAUDE_DIR/hooks/knowledge-capture.js" "knowledge capture module: knowledge-capture.js"
+fi
+
+# BM25 search module (used by session-start for hybrid scoring)
+if [ -f "$SCRIPT_DIR/templates/hooks/bm25.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/bm25.js" "$CLAUDE_DIR/hooks/bm25.js" "BM25 search module: bm25.js"
+fi
+
 for hook_file in "$SCRIPT_DIR/templates/hooks"/session-*.js; do
   [ -f "$hook_file" ] || continue
   hook_name=$(basename "$hook_file")
@@ -810,6 +820,19 @@ else
   echo "SKIPPED: scripts/claude-loop.sh (not found)"
 fi
 
+# knowledge-consolidate -- LLM-powered knowledge deduplication
+if [ -f "$SCRIPT_DIR/scripts/knowledge-consolidate.sh" ]; then
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] SYMLINK: scripts/knowledge-consolidate.sh -> $LOCAL_BIN/knowledge-consolidate"
+  else
+    ln -sf "$SCRIPT_DIR/scripts/knowledge-consolidate.sh" "$LOCAL_BIN/knowledge-consolidate"
+    chmod +x "$SCRIPT_DIR/scripts/knowledge-consolidate.sh"
+    echo "INSTALLED: scripts/knowledge-consolidate.sh -> $LOCAL_BIN/knowledge-consolidate"
+  fi
+else
+  echo "SKIPPED: scripts/knowledge-consolidate.sh (not found)"
+fi
+
 # Warn if ~/.local/bin is not on PATH
 if [[ ":$PATH:" != *":$LOCAL_BIN:"* ]]; then
   echo ""
@@ -911,6 +934,7 @@ for skill_dir in "$PROFILE_DIR/skills"/*/; do
   echo "  /$(basename "$skill_dir") skill  -> $CLAUDE_DIR/skills/$(basename "$skill_dir")/"
 done
 echo "  Serena MCP       -> settings.json mcpServers (optional, requires uv)"
+echo "  CLI scripts      -> $LOCAL_BIN/ (q, qa, claude-loop, knowledge-consolidate)"
 echo "  Session hooks    -> $CLAUDE_DIR/hooks/ (auto-run on session start/end)"
 echo "  Templates        -> $CLAUDE_DIR/templates/"
 echo "    project-CLAUDE.md   (copy to new project roots)"

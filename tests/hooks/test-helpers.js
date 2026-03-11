@@ -216,6 +216,17 @@ function todayLocal() {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+/**
+ * Create ~/.claude/knowledge/staged/ inside the given temp HOME.
+ * @param {string} home - The temp HOME directory
+ * @returns {string} path to the staged directory
+ */
+function createStagedDir(home) {
+  const dir = path.join(home, ".claude", "knowledge", "staged");
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
 module.exports = {
   createTempHome,
   createKnowledgeEntry,
@@ -223,5 +234,6 @@ module.exports = {
   runHook,
   createProjectDir,
   createTempInvestigation,
+  createStagedDir,
   todayLocal,
 };

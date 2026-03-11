@@ -6,6 +6,12 @@ const path = require("path");
 const os = require("os");
 const { execSync } = require("child_process");
 
+let capture;
+try { capture = require("./knowledge-capture"); } catch { capture = null; }
+
+let log;
+try { log = require("./log"); } catch { log = { writeLog() {} }; }
+
 const SKIP_EXTENSIONS = new Set([
   ".md", ".json", ".yaml", ".yml", ".txt", ".toml", ".cfg", ".ini", ".env",
 ]);
@@ -45,8 +51,10 @@ function isDebounced(cwd) {
   try {
     const raw = fs.readFileSync(DEBOUNCE_FILE, "utf8");
     const state = JSON.parse(raw);
-    const last = state[cwd];
-    if (typeof last === "number" && Date.now() - last < DEBOUNCE_MS) {
+    const entry = state[cwd];
+    // Support both legacy number entries and new object entries
+    const ts = typeof entry === "number" ? entry : (entry && entry.ts);
+    if (typeof ts === "number" && Date.now() - ts < DEBOUNCE_MS) {
       return true;
     }
   } catch {
@@ -56,10 +64,31 @@ function isDebounced(cwd) {
 }
 
 /**
- * Update the debounce file with the current timestamp for cwd.
+ * Return the last persisted state for a given cwd, or null if none.
  * @param {string} cwd
+ * @returns {{ ts: number, lastPassed: boolean, lastFailOutput: string }|null}
  */
-function updateDebounce(cwd) {
+function getLastState(cwd) {
+  try {
+    const raw = fs.readFileSync(DEBOUNCE_FILE, "utf8");
+    const state = JSON.parse(raw);
+    const entry = state[cwd];
+    if (entry && typeof entry === "object" && "ts" in entry) {
+      return entry;
+    }
+  } catch {
+    // File missing or malformed
+  }
+  return null;
+}
+
+/**
+ * Update the debounce file with the current run state for cwd.
+ * @param {string} cwd
+ * @param {boolean} passed
+ * @param {string} failOutput
+ */
+function updateDebounce(cwd, passed, failOutput) {
   let state = {};
   try {
     const raw = fs.readFileSync(DEBOUNCE_FILE, "utf8");
@@ -67,7 +96,11 @@ function updateDebounce(cwd) {
   } catch {
     // Start fresh
   }
-  state[cwd] = Date.now();
+  state[cwd] = {
+    ts: Date.now(),
+    lastPassed: passed,
+    lastFailOutput: (failOutput || "").slice(0, 500),
+  };
   // Ensure parent directory exists
   const dir = path.dirname(DEBOUNCE_FILE);
   try { fs.mkdirSync(dir, { recursive: true }); } catch {}
@@ -130,9 +163,14 @@ process.stdin.on("end", () => {
       process.exit(0);
     }
 
+    // Capture previous state before overwriting it
+    const previousState = getLastState(cwd);
+
     // Run tests
     const start = Date.now();
     let additionalContext;
+    let testPassed = false;
+    let failOutput = "";
     try {
       execSync(testCommand, {
         cwd,
@@ -141,6 +179,7 @@ process.stdin.on("end", () => {
       });
       const duration = Date.now() - start;
       additionalContext = `\u2713 Tests passed (${duration}ms)`;
+      testPassed = true;
     } catch (err) {
       const rawOutput = [err.stdout, err.stderr]
         .filter(Boolean)
@@ -149,10 +188,33 @@ process.stdin.on("end", () => {
         .trimEnd();
       const lines = rawOutput.split("\n").slice(0, MAX_OUTPUT_LINES).join("\n");
       additionalContext = `\u2717 Tests failed:\n${lines}`;
+      failOutput = rawOutput;
     }
 
-    // Update debounce timestamp after run
-    updateDebounce(cwd);
+    // Update debounce state after run
+    updateDebounce(cwd, testPassed, failOutput);
+
+    // Detect fail→pass transition and stage a knowledge candidate
+    if (testPassed && capture && previousState && previousState.lastPassed === false) {
+      capture.stageCandidate({
+        session_id: hookInput.session_id || "unknown",
+        trigger: "test-fix",
+        tool: toolName,
+        category: "gotcha",
+        confidence: "medium",
+        summary: (previousState.lastFailOutput || "").split("\n")[0].slice(0, 200),
+        context_snippet: (previousState.lastFailOutput || "").slice(0, 500),
+        source_project: path.basename(cwd),
+        cwd: cwd,
+      });
+      log.writeLog({
+        hook: "post-tool-verify",
+        event: "knowledge-staged",
+        session_id: hookInput.session_id,
+        details: "test-fix transition staged as knowledge candidate",
+        project: cwd,
+      });
+    }
 
     process.stdout.write(
       JSON.stringify({ hookSpecificOutput: { additionalContext } })
@@ -167,5 +229,5 @@ process.stdin.on("end", () => {
 
 // Export for testing
 if (typeof module !== "undefined") {
-  module.exports = { extractTestCommand, shouldSkipFile };
+  module.exports = { extractTestCommand, shouldSkipFile, getLastState };
 }

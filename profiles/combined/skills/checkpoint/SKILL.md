@@ -31,7 +31,37 @@ If `$ARGUMENTS` is provided, use it as the next-steps summary.
 
 Do not duplicate information already in memory. Read the current memory file first.
 
-### 1b. Capture knowledge entries (if applicable)
+### 1b. Review staged knowledge candidates (if applicable)
+
+Run the following command to check for knowledge candidates staged by hooks this session:
+
+```bash
+cat ~/.claude/knowledge/staged/*.jsonl 2>/dev/null
+```
+
+If no files exist or the output is empty, skip this step silently.
+
+If there is output, parse each line as a JSON object and present the candidates in a formatted table:
+
+```
+### Staged Knowledge Candidates
+
+The following learning opportunities were detected this session:
+
+| # | Trigger | Tool | Summary |
+|---|---------|------|---------|
+| 1 | test-fix | Edit | first line of failure output... |
+| 2 | stuck-resolved | Bash | Recovered from stuck loop on Bash |
+
+Review each candidate. For worthy entries, run `/learn` with the appropriate category and details.
+To discard all staged candidates, they will be automatically pruned after 7 days.
+```
+
+Populate the table from the JSON fields: use `trigger` for the Trigger column, `tool` for Tool, and the first line of `context` (or `summary` if present) for Summary. Number rows sequentially starting at 1.
+
+Only show this block when at least one candidate exists. Do not mention staged candidates if the directory is empty or absent.
+
+### 1c. Capture knowledge entries (if applicable)
 
 If non-obvious discoveries, bugs, or workarounds were encountered this session — things a future agent working with the same tools would benefit from knowing — suggest capturing them:
 

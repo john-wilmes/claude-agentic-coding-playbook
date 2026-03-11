@@ -16,6 +16,9 @@ const crypto = require("crypto");
 let log;
 try { log = require("./log"); } catch { log = { writeLog() {} }; }
 
+let capture;
+try { capture = require("./knowledge-capture"); } catch { capture = null; }
+
 const WINDOW_SIZE = 5;
 const WARN_THRESHOLD = 3;
 const BLOCK_THRESHOLD = 5;
@@ -46,7 +49,7 @@ function loadState(stateFile) {
   try {
     return JSON.parse(fs.readFileSync(stateFile, "utf8"));
   } catch {
-    return { window: [] };
+    return { window: [], wasStuck: false, stuckTool: "" };
   }
 }
 
@@ -115,6 +118,38 @@ process.stdin.on("end", () => {
     // Count consecutive identical hashes from the tail BEFORE saving,
     // so the count reflects the state after this call is added.
     const consecutive = countConsecutiveTail(state.window, hash);
+
+    // Detect stuck→unstuck transition before updating wasStuck
+    if (consecutive < WARN_THRESHOLD && state.wasStuck === true) {
+      if (capture) {
+        capture.stageCandidate({
+          session_id: sessionId,
+          trigger: "stuck-resolved",
+          tool: state.stuckTool || toolName,
+          category: "pattern",
+          confidence: "medium",
+          summary: `Recovered from stuck loop on ${state.stuckTool || toolName}`,
+          context_snippet: `Was stuck repeating ${state.stuckTool || toolName}, resolved by switching to ${toolName}`,
+          source_project: path.basename(hookInput.cwd || process.cwd()),
+          cwd: hookInput.cwd || process.cwd(),
+        });
+        log.writeLog({
+          hook: "stuck-detector",
+          event: "knowledge-staged",
+          session_id: hookInput.session_id,
+          details: `stuck-resolved transition staged (was stuck on ${state.stuckTool || toolName})`,
+          project: hookInput.cwd,
+        });
+      }
+      state.wasStuck = false;
+      state.stuckTool = "";
+    }
+
+    // Track stuck state
+    if (consecutive >= WARN_THRESHOLD) {
+      state.wasStuck = true;
+      state.stuckTool = toolName;
+    }
 
     saveState(stateFile, state);
 

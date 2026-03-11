@@ -10,7 +10,7 @@ const path = require("path");
 const os = require("os");
 const crypto = require("crypto");
 
-const { runHook, todayLocal } = require("./test-helpers");
+const { runHook, todayLocal, createTempHome, createStagedDir } = require("./test-helpers");
 
 // Resolve hook path relative to repo root
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
@@ -228,6 +228,88 @@ test("8. Block event writes JSONL log entry", () => {
     const blockEntry = entries.find(e => e.event === "block");
     assert.ok(blockEntry, "Should have a block entry");
     assert.ok(blockEntry.details.includes("5"), "Details should mention 5 identical actions");
+  } finally {
+    cleanupSession(sessionId);
+    env.cleanup();
+  }
+});
+
+// ─── Knowledge capture tests ─────────────────────────────────────────────────
+
+console.log("\nknowledge capture (runHook):");
+
+// Test 9: stuck→unstuck stages a knowledge candidate
+test("9. stuck→unstuck stages a knowledge candidate", () => {
+  const sessionId = newSessionId();
+  const env = createTempHome();
+  const stagedDir = createStagedDir(env.home);
+
+  // Pre-populate state file with wasStuck=true and stuckTool="Edit"
+  const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
+  fs.mkdirSync(STATE_DIR, { recursive: true });
+  fs.writeFileSync(stateFile, JSON.stringify({
+    window: ["aaaa", "aaaa", "aaaa"],  // 3 identical (was at warn threshold)
+    wasStuck: true,
+    stuckTool: "Edit",
+  }));
+
+  try {
+    // Run with a different action (hash won't match "aaaa") — drops consecutive below threshold.
+    // Use a non-whitelisted tool so the hook doesn't short-circuit before state processing.
+    const result = runHook(STUCK_DETECTOR, {
+      session_id: sessionId,
+      tool_name: "Read",
+      tool_input: { file_path: "/tmp/some-file.txt" },
+      cwd: "/tmp/test-project",
+    }, { HOME: env.home, USERPROFILE: env.home });
+
+    assert.strictEqual(result.status, 0, "Should exit 0");
+    assert.ok(result.json, "Should output valid JSON");
+
+    // Verify a staged file was created
+    const stagedFile = path.join(stagedDir, `${sessionId}.jsonl`);
+    assert.ok(fs.existsSync(stagedFile), `Staged file should exist at ${stagedFile}`);
+    const lines = fs.readFileSync(stagedFile, "utf8").trim().split("\n").filter(Boolean);
+    assert.ok(lines.length >= 1, "Should have at least one staged candidate");
+    const candidate = JSON.parse(lines[0]);
+    assert.strictEqual(candidate.trigger, "stuck-resolved", "trigger should be stuck-resolved");
+    assert.strictEqual(candidate.session_id, sessionId);
+    assert.ok(candidate.summary.includes("Edit"), `summary should mention stuck tool, got: ${candidate.summary}`);
+  } finally {
+    cleanupSession(sessionId);
+    env.cleanup();
+  }
+});
+
+// Test 10: never-stuck does not stage a candidate
+test("10. never-stuck does not stage a candidate", () => {
+  const sessionId = newSessionId();
+  const env = createTempHome();
+  const stagedDir = createStagedDir(env.home);
+
+  // Pre-populate state with wasStuck=false
+  const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
+  fs.mkdirSync(STATE_DIR, { recursive: true });
+  fs.writeFileSync(stateFile, JSON.stringify({
+    window: [],
+    wasStuck: false,
+    stuckTool: "",
+  }));
+
+  try {
+    const result = runHook(STUCK_DETECTOR, {
+      session_id: sessionId,
+      tool_name: "Bash",
+      tool_input: { command: "ls" },
+      cwd: "/tmp/test-project",
+    }, { HOME: env.home, USERPROFILE: env.home });
+
+    assert.strictEqual(result.status, 0, "Should exit 0");
+    assert.ok(result.json, "Should output valid JSON");
+
+    // Verify no staged file was created
+    const stagedFile = path.join(stagedDir, `${sessionId}.jsonl`);
+    assert.ok(!fs.existsSync(stagedFile), "Staged file should NOT exist when wasStuck=false");
   } finally {
     cleanupSession(sessionId);
     env.cleanup();

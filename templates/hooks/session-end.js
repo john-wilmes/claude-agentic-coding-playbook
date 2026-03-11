@@ -6,6 +6,9 @@ const path = require("path");
 const os = require("os");
 const { execSync } = require("child_process");
 
+let capture;
+try { capture = require("./knowledge-capture"); } catch { capture = null; }
+
 const LOG_DIR = path.join(os.homedir(), ".claude");
 const LOG_FILE = path.join(LOG_DIR, "hooks.log");
 
@@ -76,6 +79,11 @@ process.stdin.on("end", () => {
       }
     } catch (commitErr) {
       log(`memory auto-commit error: ${commitErr.message}`);
+    }
+
+    // Prune old staged knowledge candidates (older than 7 days)
+    if (capture) {
+      try { capture.pruneStagedFiles(7); } catch {}
     }
   } catch (err) {
     log(`error: ${err.message}`);
