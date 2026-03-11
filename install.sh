@@ -841,47 +841,90 @@ if [[ ":$PATH:" != *":$LOCAL_BIN:"* ]]; then
   echo "    export PATH=\"\$HOME/.local/bin:\$PATH\""
 fi
 
-# --- Serena MCP server (optional — requires uv) ---
+# --- MCP Server Registry ---
 
 echo ""
-echo "--- Configuring Serena MCP server (optional) ---"
+echo "--- Configuring MCP server registry ---"
 
-if [ "$DRY_RUN" = true ]; then
-  echo "[DRY RUN] Would ensure uv is installed and register Serena MCP server"
+REGISTRY_FILE="$SCRIPT_DIR/templates/registry/mcp-servers.json"
+SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+
+if [ ! -f "$REGISTRY_FILE" ]; then
+  echo "SKIPPED: MCP server registry (file not found)"
 else
-  ensure_command uv || {
-    echo "SKIPPED: Serena MCP server (could not install uv)"
-    UV_FAILED=true
-  }
-
-  if [ "${UV_FAILED:-}" != true ]; then
-    SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would register MCP servers from registry"
+  else
     if [ ! -f "$SETTINGS_FILE" ]; then
       echo "{}" > "$SETTINGS_FILE"
     fi
+    node -e "
+      const fs = require('fs');
+      const registry = JSON.parse(fs.readFileSync(process.argv[1], 'utf8'));
+      const settingsPath = process.argv[2];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.mcpServers) settings.mcpServers = {};
+      let added = 0, skipped = 0;
+      for (const [name, entry] of Object.entries(registry)) {
+        if (settings.mcpServers[name]) {
+          skipped++;
+          continue;
+        }
+        settings.mcpServers[name] = entry.config;
+        added++;
+      }
+      fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      console.log('CONFIGURED: ' + added + ' MCP servers added, ' + skipped + ' already configured');
+    " "$REGISTRY_FILE" "$SETTINGS_FILE"
+  fi
+fi
 
-    if grep -q '"serena"' "$SETTINGS_FILE" 2>/dev/null; then
-      echo "ALREADY CONFIGURED: Serena MCP server in settings.json"
-    else
-      node -e "
-        const fs = require('fs');
-        const path = require('path');
-        const settingsPath = path.resolve(process.argv[1]);
-        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-        if (!settings.mcpServers) settings.mcpServers = {};
-        settings.mcpServers.serena = {
-          command: 'uvx',
-          args: [
-            '--from', 'git+https://github.com/oraios/serena',
-            'serena', 'start-mcp-server',
-            '--context', 'claude-code',
-            '--project-from-cwd'
-          ]
-        };
-        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
-      " "$SETTINGS_FILE"
-      echo "CONFIGURED: Serena MCP server in settings.json"
-    fi
+# --- Managed Repos ---
+
+echo ""
+echo "--- Managed repos ---"
+
+RESOURCES_FILE="$CLAUDE_DIR/resources.json"
+REPOS_DIR="$CLAUDE_DIR/repos"
+
+install_repo_cron() {
+  local repos_dir="$1"
+  local cron_cmd="0 6 * * * find $repos_dir -maxdepth 1 -mindepth 1 -exec git -C {} pull --ff-only \;"
+  if ! command -v crontab &>/dev/null; then
+    echo "  NOTE: crontab not available — skip daily pull cron"
+    return
+  fi
+  if crontab -l 2>/dev/null | grep -qF "$repos_dir"; then
+    echo "ALREADY CONFIGURED: daily pull cron for $repos_dir"
+  else
+    ( crontab -l 2>/dev/null; echo "$cron_cmd" ) | crontab -
+    echo "CONFIGURED: daily pull cron (06:00) for $repos_dir"
+  fi
+}
+
+if [ ! -f "$RESOURCES_FILE" ]; then
+  echo "SKIPPED: No resources.json found (copy templates/registry/resources.example.json to $RESOURCES_FILE)"
+else
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would clone repos listed in $RESOURCES_FILE"
+  else
+    node -e "
+      const repos = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')).repos || [];
+      repos.forEach(r => console.log(r));
+    " "$RESOURCES_FILE" | while IFS= read -r repo; do
+      dir_name=$(echo "$repo" | tr '/' '_')
+      target="$REPOS_DIR/$dir_name"
+      if [ -d "$target/.git" ]; then
+        echo "ALREADY CLONED: $repo"
+      else
+        mkdir -p "$REPOS_DIR"
+        echo "Cloning $repo..."
+        gh repo clone "$repo" "$target" -- --depth=1 2>/dev/null || \
+          echo "  FAILED: could not clone $repo (check gh auth and repo access)"
+      fi
+    done
+
+    install_repo_cron "$REPOS_DIR"
   fi
 fi
 
@@ -933,7 +976,8 @@ for skill_dir in "$PROFILE_DIR/skills"/*/; do
   [ -d "$skill_dir" ] || continue
   echo "  /$(basename "$skill_dir") skill  -> $CLAUDE_DIR/skills/$(basename "$skill_dir")/"
 done
-echo "  Serena MCP       -> settings.json mcpServers (optional, requires uv)"
+echo "  MCP registry     -> settings.json mcpServers (15 servers, github enabled)"
+echo "  Managed repos    -> ~/.claude/repos/ (from resources.json, if present)"
 echo "  CLI scripts      -> $LOCAL_BIN/ (q, qa, claude-loop, knowledge-consolidate)"
 echo "  Session hooks    -> $CLAUDE_DIR/hooks/ (auto-run on session start/end)"
 echo "  Templates        -> $CLAUDE_DIR/templates/"

@@ -1,0 +1,7 @@
+{
+  "repos": [
+    "owner/frontend",
+    "owner/backend",
+    "owner/shared-libs"
+  ]
+}

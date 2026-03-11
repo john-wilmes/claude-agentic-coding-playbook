@@ -1534,6 +1534,61 @@ directory at launch.
 diagnostics, cursor position -- to the agent. This is how VS Code and Cursor
 surface language server information that a standalone CLI cannot access.
 
+### MCP server registry
+
+The playbook ships a curated registry of production-grade MCP servers at
+`templates/registry/mcp-servers.json`. Running `install.sh` merges registry
+entries into your `settings.json` without overwriting existing configuration.
+
+**What's included:**
+
+| Server | Transport | Default state | Safety flags |
+|---|---|---|---|
+| GitHub | Docker (stdio) | **Enabled** | — |
+| Datadog | npx (stdio) | Disabled | — |
+| Snowflake | uvx (stdio) | Disabled | — |
+| PostgreSQL | uvx (stdio) | Disabled | `--access-mode=restricted` |
+| Sentry | HTTP (remote) | Disabled | OAuth |
+| PagerDuty | uvx (stdio) | Disabled | No write tools |
+| Atlassian | HTTP (remote) | Disabled | OAuth |
+| Linear | HTTP (remote) | Disabled | OAuth |
+| Slack | HTTP (remote) | Disabled | OAuth |
+| CloudWatch | uvx (stdio) | Disabled | — |
+| AWS API | uvx (stdio) | Disabled | — |
+| Kubernetes | npx (stdio) | Disabled | `--read-only` |
+| Grafana | uvx (stdio) | Disabled | — |
+| Elasticsearch | uvx (stdio) | Disabled | — |
+| Serena | uvx (stdio) | Disabled | `--context claude-code` |
+
+**Enabling a server:**
+
+1. Open `~/.claude/settings.json` (or your install root's `.claude/settings.json`)
+2. Find the server entry under `mcpServers`
+3. Set `"disabled": false`
+4. Set any required environment variables (listed in the registry's `env_required` field)
+
+Re-running `install.sh` never overwrites servers you have already configured.
+New servers added to the registry in future updates are merged automatically.
+
+**Managed repos:**
+
+For fast local code search across related repositories, create
+`~/.claude/resources.json`:
+
+```json
+{
+  "repos": [
+    "org/frontend",
+    "org/backend",
+    "org/shared-libs"
+  ]
+}
+```
+
+Running `install.sh` clones any repos not already present into `~/.claude/repos/`
+(shallow clones via `gh repo clone`). A daily cron job keeps them fresh with
+`git pull --ff-only`.
+
 ---
 
 ## 13. Multi-Agent Coordination
