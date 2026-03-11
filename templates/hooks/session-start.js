@@ -7,16 +7,8 @@ const path = require("path");
 const os = require("os");
 const { execSync } = require("child_process");
 
-const LOG_DIR = path.join(os.homedir(), ".claude");
-const LOG_FILE = path.join(LOG_DIR, "hooks.log");
-
-function log(msg) {
-  try {
-    const line = `[${new Date().toISOString()}] session-start: ${msg}\n`;
-    fs.mkdirSync(LOG_DIR, { recursive: true });
-    fs.appendFileSync(LOG_FILE, line);
-  } catch {}
-}
+let log;
+try { log = require("./log"); } catch { log = { writeLog() {} }; }
 
 // Detect project context from working directory
 function detectProjectContext(cwd) {
@@ -143,8 +135,6 @@ process.stdin.on("end", () => {
     const sessionId = hookInput.session_id || "";
     const cwd = hookInput.cwd || process.cwd();
 
-    log(`session ${sessionId.slice(0, 8)} started in ${cwd}`);
-
     // Pull latest knowledge entries if knowledge repo exists
     try {
       const knowledgeDir = path.join(os.homedir(), ".claude", "knowledge");
@@ -154,11 +144,8 @@ process.stdin.on("end", () => {
           timeout: 5000,
           stdio: "pipe",
         });
-        log("knowledge repo: pulled latest");
       }
-    } catch (pullErr) {
-      log(`knowledge repo pull skipped: ${pullErr.message}`);
-    }
+    } catch {}
 
     // Read Current Work and Lessons Learned from memory file
     let currentWork = "";
@@ -243,10 +230,17 @@ process.stdin.on("end", () => {
         return e.fix ? `${line}\n    Fix: ${e.fix}` : line;
       });
       parts.push(`Relevant knowledge entries:\n${entryLines.join("\n")}`);
-      log(`injected ${relevantEntries.length} knowledge entries`);
     }
 
     const context = parts.join("\n\n");
+
+    log.writeLog({
+      hook: "session-start",
+      event: "init",
+      session_id: sessionId,
+      project: cwd,
+      details: `Injected ${parts.length} context sections, ${relevantEntries.length} knowledge entries`,
+    });
 
     // Output JSON that Claude Code injects into agent context
     const output = {
@@ -258,9 +252,14 @@ process.stdin.on("end", () => {
 
     process.stdout.write(JSON.stringify(output));
     process.exit(0);
-  } catch (err) {
-    log(`error: ${err.message}`);
+  } catch {
     // Don't block session start on errors
+    process.stdout.write(JSON.stringify({}));
     process.exit(0);
   }
 });
+
+// Export for testing
+if (typeof module !== "undefined") {
+  module.exports = { detectProjectContext, parseFrontmatter, scoreEntry, getRelevantKnowledge };
+}
