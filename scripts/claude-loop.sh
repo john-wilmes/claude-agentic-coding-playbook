@@ -458,7 +458,7 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
   # ── Run claude ─────────────────────────────────────────────────────────────
   SESSION_START_MS="$(python3 -c "import time; print(int(time.time() * 1000))")"
   EXIT_CODE=0
-  "${CLAUDE_CMD[@]}" || EXIT_CODE=$?
+  CLAUDE_LOOP=1 "${CLAUDE_CMD[@]}" || EXIT_CODE=$?
   SESSION_END_MS="$(python3 -c "import time; print(int(time.time() * 1000))")"
   DURATION_MS="$(( SESSION_END_MS - SESSION_START_MS ))"
 

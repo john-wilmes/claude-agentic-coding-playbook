@@ -175,18 +175,31 @@ try {
 "
 ```
 
-- If the output is **EXIT**: Write the sentinel and stop. Run:
+- If the output is **EXIT**:
 
-```bash
-echo '{"reason":"checkpoint","timestamp":'$(date +%s)'}' > /tmp/claude-checkpoint-exit
-```
+  Write the sentinel file:
 
-Then print exactly: "Exiting — claude-loop will respawn." Then STOP. Do not make any more tool calls or produce any more output.
+  ```bash
+  echo '{"reason":"checkpoint","timestamp":'$(date +%s)'}' > /tmp/claude-checkpoint-exit
+  ```
+
+  Then check if running under claude-loop:
+
+  ```bash
+  echo "${CLAUDE_LOOP:-0}"
+  ```
+
+  - If `1`: Print exactly "Exiting — claude-loop will respawn." Then STOP. Do not make any more tool calls or produce any more output.
+  - If `0`: Tell the user:
+
+    ```text
+    Checkpoint complete. Context is high — run `/exit` to start a fresh session.
+    ```
 
 - If the output is **STAY**: This checkpoint was triggered at a natural breakpoint (context is fine). Tell the user:
 
-```text
-Checkpoint complete. Run `/exit` to start a fresh session, or continue working.
-```
+  ```text
+  Checkpoint complete. Run `/exit` to start a fresh session, or continue working.
+  ```
 
 Do NOT invoke `/exit` -- it is a built-in CLI command that the user must run themselves.
