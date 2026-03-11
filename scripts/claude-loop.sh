@@ -340,6 +340,7 @@ LOOP_RUNNING=false
 
 cleanup() {
   LOOP_RUNNING=false
+  rm -f "${SENTINEL_FILE}"
   log_event "event=loop_event" "message=loop stopped by signal" "pid=$$" 2>/dev/null || true
   echo ""
   echo "claude-loop: received signal, stopping."
@@ -461,6 +462,19 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
   CLAUDE_LOOP=1 CLAUDE_LOOP_SENTINEL="${SENTINEL_FILE}" "${CLAUDE_CMD[@]}" || EXIT_CODE=$?
   SESSION_END_MS="$(python3 -c "import time; print(int(time.time() * 1000))")"
   DURATION_MS="$(( SESSION_END_MS - SESSION_START_MS ))"
+
+  # ── Signal-death check ────────────────────────────────────────────────────
+  # Exit code 130 = SIGINT (Ctrl+C), 143 = SIGTERM. Stop immediately,
+  # ignoring any sentinel file that context-guard may have written.
+  # Note: the `|| EXIT_CODE=$?` above suppresses bash's SIGINT trap, so
+  # this exit-code check is the primary defense for Ctrl+C during `claude`.
+  if [[ "${EXIT_CODE}" -eq 130 || "${EXIT_CODE}" -eq 143 ]]; then
+    rm -f "${SENTINEL_FILE}"
+    log_event "event=loop_event" "message=stopped by signal" "exit_code=${EXIT_CODE}"
+    echo ""
+    echo "claude-loop: stopped by signal (exit ${EXIT_CODE})."
+    break
+  fi
 
   SESSION_COUNT="$(( SESSION_COUNT + 1 ))"
 
