@@ -28,6 +28,7 @@ const CONTEXT_WINDOW = 200000;
 const SUBAGENT_THRESHOLD = 0.35;
 const WARN_THRESHOLD = 0.50;
 const BLOCK_THRESHOLD = 0.60;
+const FAILSAFE_THRESHOLD = 0.75; // Last resort: write sentinel directly under claude-loop
 
 // State file tracks warning flags and fallback accumulator across invocations
 function getStateFile(sessionId) {
@@ -228,7 +229,36 @@ process.stdin.on("end", () => {
       : "";
 
     let output;
-    if (ctx.ratio >= BLOCK_THRESHOLD) {
+    // Failsafe: at 75% under claude-loop, write sentinel directly.
+    // This fires if Claude ignored the 60% checkpoint instruction.
+    // We lose the handoff (no memory update/commit), but it's better
+    // than hitting 80% auto-compaction which destroys context entirely.
+    if (ctx.ratio >= FAILSAFE_THRESHOLD && process.env.CLAUDE_LOOP === "1") {
+      try {
+        const sentinelPath = process.env.CLAUDE_LOOP_SENTINEL
+          || path.join(os.tmpdir(), "claude-checkpoint-exit");
+        fs.writeFileSync(
+          sentinelPath,
+          JSON.stringify({ reason: "failsafe", ratio: ctx.ratio, timestamp: Date.now() })
+        );
+      } catch {}
+      log.writeLog({
+        hook: "context-guard",
+        event: "failsafe",
+        session_id: hookInput.session_id,
+        tool_use_id: hookInput.tool_use_id,
+        details: `Failsafe sentinel: ${pct}% context, checkpoint instruction was ignored`,
+        project: hookInput.cwd,
+        context: { mode: "post", ratio: ctx.ratio, pct, tokens: ctx.tokens },
+      });
+      output = {
+        hookSpecificOutput: {
+          hookEventName: "PostToolUse",
+          additionalContext:
+            `FAILSAFE: ${pct}% context used. Sentinel written directly — claude-loop will restart. Run /exit NOW.`,
+        },
+      };
+    } else if (ctx.ratio >= BLOCK_THRESHOLD) {
       // Write flag file so /checkpoint can deterministically decide to exit.
       // Uses a fixed path — checkpoint reads this instead of guessing usage.
       try {
