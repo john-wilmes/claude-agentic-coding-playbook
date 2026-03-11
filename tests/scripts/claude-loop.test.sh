@@ -304,6 +304,41 @@ t_status_exits_zero() {
 }
 run_test "--status exits 0 and prints status header" t_status_exits_zero
 
+# ─── Test 9: Signal exit code (130) stops the loop despite sentinel ──────
+# When claude exits with code 130 (SIGINT/Ctrl+C), claude-loop must stop
+# even if context-guard wrote a sentinel file during the session.
+
+t_signal_exit_stops_loop() {
+  # Stub claude: writes sentinel (simulating context-guard) then exits 130 (SIGINT)
+  local tmpbin
+  tmpbin="$(mktemp -d)"
+  cat > "${tmpbin}/claude" <<'STUBEOF'
+#!/usr/bin/env bash
+# Simulate context-guard writing sentinel at 75%
+if [[ -n "${CLAUDE_LOOP_SENTINEL:-}" ]]; then
+  touch "${CLAUDE_LOOP_SENTINEL}"
+fi
+# Exit as if killed by SIGINT
+exit 130
+STUBEOF
+  chmod +x "${tmpbin}/claude"
+
+  local out rc=0
+  out="$(PATH="${tmpbin}:${PATH}" bash "${SCRIPT}" --max-sessions 3 2>&1)" || rc=$?
+  rm -rf "${tmpbin}"
+
+  # Loop should have stopped after 1 session, not restarted
+  local session_count
+  session_count="$(echo "${out}" | grep -c "starting session" || true)"
+  [[ "${session_count}" -eq 1 ]] \
+    || { echo "Expected 1 session, got ${session_count}; output: ${out}"; return 1; }
+
+  # Should mention signal in output
+  echo "${out}" | grep -q "stopped by signal" \
+    || { echo "Expected 'stopped by signal' message; output: ${out}"; return 1; }
+}
+run_test "exit code 130 (SIGINT) stops loop despite sentinel" t_signal_exit_stops_loop
+
 # ─── Summary ──────────────────────────────────────────────────────────────────
 
 echo ""
