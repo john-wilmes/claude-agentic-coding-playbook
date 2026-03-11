@@ -409,6 +409,42 @@ for hook_file in "$SCRIPT_DIR/templates/hooks"/session-*.js; do
   [ -f "$hook_file" ] || continue
   hook_name=$(basename "$hook_file")
   install_file "$hook_file" "$CLAUDE_DIR/hooks/$hook_name" "session hook: $hook_name"
+
+  # Register session hooks in settings.json
+  # Derive hook event from filename: session-start.js -> SessionStart
+  base_name=$(basename "$hook_file" .js)           # session-start
+  event_suffix="${base_name#session-}"              # start
+  hook_event="Session$(echo "$event_suffix" | sed 's/./\U&/')"  # SessionStart
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  HOOK_CMD="node $CLAUDE_DIR/hooks/$hook_name"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add $hook_event hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    if grep -q "$hook_name" "$SETTINGS_FILE" 2>/dev/null; then
+      echo "ALREADY CONFIGURED: $hook_name hook in settings.json"
+    else
+      node -e "
+        const fs = require('fs');
+        const path = require('path');
+        const settingsPath = path.resolve(process.argv[1]);
+        const hookEvent = process.argv[2];
+        const hookCmd = process.argv[3];
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (!settings.hooks) settings.hooks = {};
+        if (!settings.hooks[hookEvent]) settings.hooks[hookEvent] = [];
+        settings.hooks[hookEvent].push({
+          hooks: [{ type: 'command', command: hookCmd, timeout: 10 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      " "$SETTINGS_FILE" "$hook_event" "$HOOK_CMD"
+      echo "CONFIGURED: $hook_name hook in settings.json ($hook_event)"
+    fi
+  fi
 done
 
 # Model router hook (PreToolUse -- auto-selects model for Task tool calls)
