@@ -493,6 +493,45 @@ if [ -f "$SCRIPT_DIR/templates/hooks/prompt-injection-guard.js" ]; then
   fi
 fi
 
+# PR review guard hook (PreToolUse -- blocks gh pr merge until CodeRabbit has reviewed)
+if [ -f "$SCRIPT_DIR/templates/hooks/pr-review-guard.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/pr-review-guard.js" "$CLAUDE_DIR/hooks/pr-review-guard.js" "pr review guard: pr-review-guard.js"
+
+  # Merge PreToolUse hook entry into settings.json
+  echo ""
+  echo "--- Configuring pr-review-guard in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  PR_GUARD_CMD="node $CLAUDE_DIR/hooks/pr-review-guard.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add PreToolUse hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    if grep -q "pr-review-guard" "$SETTINGS_FILE" 2>/dev/null; then
+      echo "ALREADY CONFIGURED: pr-review-guard hook in settings.json"
+    else
+      node -e "
+        const fs = require('fs');
+        const path = require('path');
+        const settingsPath = path.resolve(process.argv[1]);
+        const hookCmd = process.argv[2];
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (!settings.hooks) settings.hooks = {};
+        if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+        settings.hooks.PreToolUse.push({
+          matcher: 'Bash',
+          hooks: [{ type: 'command', command: hookCmd, timeout: 10 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      " "$SETTINGS_FILE" "$PR_GUARD_CMD"
+      echo "CONFIGURED: pr-review-guard hook in settings.json"
+    fi
+  fi
+fi
+
 # Post-tool verify hook (PostToolUse -- auto-runs tests after Edit/Write on code files)
 if [ -f "$SCRIPT_DIR/templates/hooks/post-tool-verify.js" ]; then
   install_file "$SCRIPT_DIR/templates/hooks/post-tool-verify.js" "$CLAUDE_DIR/hooks/post-tool-verify.js" "post-tool verify: post-tool-verify.js"
