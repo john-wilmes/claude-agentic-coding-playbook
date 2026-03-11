@@ -10,7 +10,7 @@ const path = require("path");
 const os = require("os");
 const crypto = require("crypto");
 
-const { runHook } = require("./test-helpers");
+const { runHook, todayLocal } = require("./test-helpers");
 
 // Resolve hook path relative to repo root
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
@@ -702,7 +702,7 @@ test("29. PostToolUse block writes JSONL log entry", () => {
     }, { HOME: env.home, USERPROFILE: env.home });
 
     const logDir = path.join(env.home, ".claude", "logs");
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocal();
     const logFile = path.join(logDir, `${today}.jsonl`);
     assert.ok(fs.existsSync(logFile), "Log file should exist");
     const lines = fs.readFileSync(logFile, "utf8").trim().split("\n");

@@ -9,7 +9,7 @@ const path = require("path");
 const fs = require("fs");
 const os = require("os");
 
-const { runHook, createTempHome } = require("./test-helpers");
+const { runHook, createTempHome, todayLocal } = require("./test-helpers");
 
 // Resolve hook path relative to repo root
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
@@ -188,7 +188,7 @@ test("14. Block event writes JSONL log entry", (env) => {
   assert.strictEqual(result.json.hookSpecificOutput.permissionDecision, "deny");
 
   const logDir = path.join(env.home, ".claude", "logs");
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocal();
   const logFile = path.join(logDir, `${today}.jsonl`);
   assert.ok(fs.existsSync(logFile), "Log file should exist");
   const lines = fs.readFileSync(logFile, "utf8").trim().split("\n");
