@@ -157,7 +157,25 @@ Print exactly:
 CHECKPOINT COMPLETE
 ```
 
-**Decide whether to exit the session** by checking the context-guard flag file:
+**Decide whether to exit the session.**
+
+First, check if running under claude-loop:
+
+```bash
+echo "${CLAUDE_LOOP:-0}"
+```
+
+**If `1` (running under claude-loop):** Always write the sentinel and exit. The loop supervisor manages session continuity — every checkpoint under claude-loop triggers a restart.
+
+Write the sentinel file:
+
+```bash
+echo '{"reason":"checkpoint","timestamp":'$(date +%s)'}' > "${CLAUDE_LOOP_SENTINEL:-/tmp/claude-checkpoint-exit}"
+```
+
+Print exactly "Exiting — claude-loop will respawn." Then STOP. Do not make any more tool calls or produce any more output.
+
+**If `0` (interactive session):** Check the context-guard flag file to decide:
 
 ```bash
 node -e "
@@ -176,28 +194,13 @@ try {
 "
 ```
 
-- If the output is **EXIT**:
+- If **EXIT**: Context is high. Tell the user:
 
-  Write the sentinel file:
-
-  ```bash
-  echo '{"reason":"checkpoint","timestamp":'$(date +%s)'}' > "${CLAUDE_LOOP_SENTINEL:-/tmp/claude-checkpoint-exit}"
+  ```text
+  Checkpoint complete. Context is high — run `/exit` to start a fresh session.
   ```
 
-  Then check if running under claude-loop:
-
-  ```bash
-  echo "${CLAUDE_LOOP:-0}"
-  ```
-
-  - If `1`: Print exactly "Exiting — claude-loop will respawn." Then STOP. Do not make any more tool calls or produce any more output.
-  - If `0`: Tell the user:
-
-    ```text
-    Checkpoint complete. Context is high — run `/exit` to start a fresh session.
-    ```
-
-- If the output is **STAY**: This checkpoint was triggered at a natural breakpoint (context is fine). Tell the user:
+- If **STAY**: Natural breakpoint. Tell the user:
 
   ```text
   Checkpoint complete. Run `/exit` to start a fresh session, or continue working.
