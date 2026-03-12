@@ -35,9 +35,21 @@ function classifyTask(input) {
     return { model: "sonnet", reason: "no prompt (safe default)" };
   }
 
-  const hasRead = READ_SIGNALS.some((s) => prompt.includes(s));
-  const hasWrite = WRITE_SIGNALS.some((s) => prompt.includes(s));
-  const hasArch = ARCH_SIGNALS.some((s) => prompt.includes(s));
+  // Use word-boundary matching to avoid substring false positives
+  // (e.g. "fixed" matching "fix", "searching" matching "search")
+  function matchesAny(signals) {
+    return signals.some((s) => {
+      // Multi-word signals (e.g. "root cause", "cross-file") use simple includes
+      // since word boundaries don't apply to phrases with spaces/hyphens
+      if (/[\s-]/.test(s)) return prompt.includes(s);
+      const re = new RegExp("\\b" + s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b");
+      return re.test(prompt);
+    });
+  }
+
+  const hasRead = matchesAny(READ_SIGNALS);
+  const hasWrite = matchesAny(WRITE_SIGNALS);
+  const hasArch = matchesAny(ARCH_SIGNALS);
 
   if (hasArch) {
     return { model: "opus", reason: "architecture/planning signals" };

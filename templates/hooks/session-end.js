@@ -4,19 +4,26 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { execSync } = require("child_process");
+const { execFileSync } = require("child_process");
 
 let capture;
 try { capture = require("./knowledge-capture"); } catch { capture = null; }
+
+let logModule;
+try { logModule = require("./log"); } catch { logModule = null; }
 
 const LOG_DIR = path.join(os.homedir(), ".claude");
 const LOG_FILE = path.join(LOG_DIR, "hooks.log");
 
 function log(msg) {
   try {
-    const line = `[${new Date().toISOString()}] session-end: ${msg}\n`;
-    fs.mkdirSync(LOG_DIR, { recursive: true });
-    fs.appendFileSync(LOG_FILE, line);
+    if (logModule) {
+      logModule.writeLog({ hook: "session-end", event: "info", details: msg });
+    } else {
+      const line = `[${new Date().toISOString()}] session-end: ${msg}\n`;
+      fs.mkdirSync(LOG_DIR, { recursive: true });
+      fs.appendFileSync(LOG_FILE, line);
+    }
   } catch {}
 }
 
@@ -43,9 +50,9 @@ process.stdin.on("end", () => {
 
       // Initialize ~/.claude as a git repo if it isn't one yet
       try {
-        execSync("git rev-parse --git-dir", gitOpts);
+        execFileSync("git", ["rev-parse", "--git-dir"], gitOpts);
       } catch {
-        execSync("git init", gitOpts);
+        execFileSync("git", ["init"], gitOpts);
         log("memory auto-commit: initialized ~/.claude as git repo");
       }
 
@@ -54,24 +61,24 @@ process.stdin.on("end", () => {
       const memoryPath = `projects/${encodedCwd}/memory/MEMORY.md`;
 
       try {
-        execSync("git add -- " + JSON.stringify(memoryPath), gitOpts);
+        execFileSync("git", ["add", "--", memoryPath], gitOpts);
       } catch {
         // Memory file may not exist yet -- skip
       }
 
       // Check if there are staged changes before committing
       try {
-        execSync("git diff --cached --quiet", gitOpts);
+        execFileSync("git", ["diff", "--cached", "--quiet"], gitOpts);
         // No staged changes -- skip commit
         log("memory auto-commit: no changes");
       } catch {
         // diff --quiet exits non-zero when there ARE staged changes
-        const msg = `auto: ${agentName.replace(/[`$"\\]/g, "")} session ${sessionId.slice(0, 8)}`;
-        execSync(`git commit -m "${msg}"`, gitOpts);
+        const msg = `auto: ${agentName} session ${sessionId.slice(0, 8)}`;
+        execFileSync("git", ["commit", "-m", msg], gitOpts);
         log("memory auto-commit: committed");
         // Push to remote (non-blocking, best-effort)
         try {
-          execSync("git push", { ...gitOpts, timeout: 8000 });
+          execFileSync("git", ["push"], { ...gitOpts, timeout: 8000 });
           log("memory auto-push: pushed to remote");
         } catch (pushErr) {
           log(`memory auto-push skipped: ${pushErr.message}`);

@@ -168,7 +168,7 @@ if [ "$DRY_RUN" = true ]; then
 
   # Verify install script and profile exist
   [ -f "$REPO_ROOT/install.sh" ] && say "  OK: install.sh exists" || say "  MISSING: install.sh"
-  [ -d "$REPO_ROOT/profiles/dev" ] && say "  OK: dev profile exists" || say "  MISSING: dev profile"
+  [ -d "$REPO_ROOT/profiles/combined" ] && say "  OK: combined profile exists" || say "  MISSING: combined profile"
 
   # Verify task definitions parse correctly
   VALID_TASKS=0
@@ -200,7 +200,7 @@ trap cleanup EXIT
 
 # Install playbook to the playbook home only
 say "--- Installing playbook to test home ---"
-HOME="$PLAYBOOK_HOME" bash "$REPO_ROOT/install.sh" --profile dev --force > "$RESULTS_DIR/install.log" 2>&1
+HOME="$PLAYBOOK_HOME" bash "$REPO_ROOT/install.sh" --force > "$RESULTS_DIR/install.log" 2>&1
 say "  Installed to $PLAYBOOK_HOME/.claude/"
 say ""
 

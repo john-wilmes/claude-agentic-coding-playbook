@@ -16,10 +16,19 @@ const SKIP_EXTENSIONS = new Set([
   ".md", ".json", ".yaml", ".yml", ".txt", ".toml", ".cfg", ".ini", ".env",
 ]);
 
-const DEBOUNCE_FILE = path.join(os.homedir(), ".claude", ".verify-last-run");
+// Per-session debounce files live in /tmp to avoid cross-session collisions.
+// The global ~/.claude/.verify-last-run is kept only for state (lastPassed,
+// lastFailOutput) which is intentionally shared across sessions for the same cwd.
+const STATE_FILE = path.join(os.homedir(), ".claude", ".verify-last-run");
+const DEBOUNCE_DIR = path.join(os.tmpdir(), "claude-post-tool-verify");
 const DEBOUNCE_MS = 10000;
 const TEST_TIMEOUT_MS = 30000;
 const MAX_OUTPUT_LINES = 20;
+
+function getDebounceFile(sessionId) {
+  try { fs.mkdirSync(DEBOUNCE_DIR, { recursive: true }); } catch {}
+  return path.join(DEBOUNCE_DIR, `${sessionId || "unknown"}.json`);
+}
 
 /**
  * Return true if the file should be skipped (non-code file).
@@ -43,16 +52,17 @@ function extractTestCommand(claudeMdContent) {
 }
 
 /**
- * Check whether a run for the given cwd is within the debounce window.
+ * Check whether a run for the given cwd+session is within the debounce window.
+ * Uses a per-session file in /tmp to avoid cross-session write contention.
  * @param {string} cwd
+ * @param {string} sessionId
  * @returns {boolean} true if we should skip (too soon)
  */
-function isDebounced(cwd) {
+function isDebounced(cwd, sessionId) {
   try {
-    const raw = fs.readFileSync(DEBOUNCE_FILE, "utf8");
+    const raw = fs.readFileSync(getDebounceFile(sessionId), "utf8");
     const state = JSON.parse(raw);
     const entry = state[cwd];
-    // Support both legacy number entries and new object entries
     const ts = typeof entry === "number" ? entry : (entry && entry.ts);
     if (typeof ts === "number" && Date.now() - ts < DEBOUNCE_MS) {
       return true;
@@ -64,13 +74,14 @@ function isDebounced(cwd) {
 }
 
 /**
- * Return the last persisted state for a given cwd, or null if none.
+ * Return the last persisted cross-session state for a given cwd, or null.
+ * Reads from the shared STATE_FILE which records test pass/fail outcomes.
  * @param {string} cwd
  * @returns {{ ts: number, lastPassed: boolean, lastFailOutput: string }|null}
  */
 function getLastState(cwd) {
   try {
-    const raw = fs.readFileSync(DEBOUNCE_FILE, "utf8");
+    const raw = fs.readFileSync(STATE_FILE, "utf8");
     const state = JSON.parse(raw);
     const entry = state[cwd];
     if (entry && typeof entry === "object" && "ts" in entry) {
@@ -83,28 +94,37 @@ function getLastState(cwd) {
 }
 
 /**
- * Update the debounce file with the current run state for cwd.
+ * Update debounce (per-session) and shared state (cross-session) for cwd.
  * @param {string} cwd
+ * @param {string} sessionId
  * @param {boolean} passed
  * @param {string} failOutput
  */
-function updateDebounce(cwd, passed, failOutput) {
-  let state = {};
-  try {
-    const raw = fs.readFileSync(DEBOUNCE_FILE, "utf8");
-    state = JSON.parse(raw);
-  } catch {
-    // Start fresh
-  }
-  state[cwd] = {
+function updateDebounce(cwd, sessionId, passed, failOutput) {
+  const entry = {
     ts: Date.now(),
     lastPassed: passed,
     lastFailOutput: (failOutput || "").slice(0, 500),
   };
-  // Ensure parent directory exists
-  const dir = path.dirname(DEBOUNCE_FILE);
-  try { fs.mkdirSync(dir, { recursive: true }); } catch {}
-  fs.writeFileSync(DEBOUNCE_FILE, JSON.stringify(state));
+
+  // Update per-session debounce file (no contention risk)
+  try {
+    const debounceFile = getDebounceFile(sessionId);
+    let dstate = {};
+    try { dstate = JSON.parse(fs.readFileSync(debounceFile, "utf8")); } catch {}
+    dstate[cwd] = entry;
+    fs.writeFileSync(debounceFile, JSON.stringify(dstate));
+  } catch {}
+
+  // Update shared state file (cross-session test outcomes)
+  try {
+    let sstate = {};
+    try { sstate = JSON.parse(fs.readFileSync(STATE_FILE, "utf8")); } catch {}
+    sstate[cwd] = entry;
+    const dir = path.dirname(STATE_FILE);
+    try { fs.mkdirSync(dir, { recursive: true }); } catch {}
+    fs.writeFileSync(STATE_FILE, JSON.stringify(sstate));
+  } catch {}
 }
 
 // Read hook input from stdin
@@ -125,6 +145,7 @@ process.stdin.on("end", () => {
     const toolName = hookInput.tool_name || "";
     const toolInput = hookInput.tool_input || {};
     const cwd = hookInput.cwd || process.cwd();
+    const sessionId = hookInput.session_id || "unknown";
 
     // Only act on Edit or Write tool calls
     if (toolName !== "Edit" && toolName !== "Write") {
@@ -157,8 +178,8 @@ process.stdin.on("end", () => {
       process.exit(0);
     }
 
-    // Debounce: skip if run too recently for this cwd
-    if (isDebounced(cwd)) {
+    // Debounce: skip if run too recently for this cwd+session
+    if (isDebounced(cwd, sessionId)) {
       process.stdout.write(JSON.stringify({}));
       process.exit(0);
     }
@@ -192,7 +213,7 @@ process.stdin.on("end", () => {
     }
 
     // Update debounce state after run
-    updateDebounce(cwd, testPassed, failOutput);
+    updateDebounce(cwd, sessionId, testPassed, failOutput);
 
     // Detect fail→pass transition and stage a knowledge candidate
     if (testPassed && capture && previousState && previousState.lastPassed === false) {

@@ -77,7 +77,7 @@ function upsertSnapshot(memFile, snapshotSection) {
   if (existing.includes(HEADER)) {
     // Replace from the header to the next ## section (or end of file)
     const replaced = existing.replace(
-      /## Pre-compact snapshot[\s\S]*?(?=\n## |\n# |$)/,
+      /## Pre-compact snapshot[\s\S]*?(?=\n(?:##? )|\s*$)/,
       snapshotSection.trimEnd()
     );
     fs.writeFileSync(memFile, replaced + (replaced.endsWith("\n") ? "" : "\n"));

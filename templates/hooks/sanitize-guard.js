@@ -24,11 +24,12 @@ const piiDetector = require("./pii-detector");
 // ─── Glob matching ───────────────────────────────────────────────────────────
 
 function globToRegex(glob) {
-  // Escape regex special chars except * which we handle manually
+  // Escape regex special chars except * and ? which we handle manually
   const escaped = glob
     .replace(/[.+^${}()|[\]\\]/g, "\\$&")
     .replace(/\*\*/g, "{{GLOBSTAR}}")
     .replace(/\*/g, "[^/]*")
+    .replace(/\?/g, "[^/]")
     .replace(/\{\{GLOBSTAR\}\}/g, ".*");
   return new RegExp("^" + escaped + "$");
 }
@@ -82,7 +83,20 @@ process.stdin.on("end", () => {
     if (isPostToolUse) {
       // ── PostToolUse path ──────────────────────────────────────────────────
 
-      const text = JSON.stringify(hookInput.tool_response);
+      // Extract text content from tool_response without serializing the whole
+      // JSON structure — serializing then redacting breaks JSON syntax.
+      function extractText(response) {
+        if (typeof response === "string") return response;
+        if (!response || typeof response !== "object") return "";
+        const parts = [];
+        for (const key of ["content", "output", "result", "text", "stdout", "stderr"]) {
+          if (typeof response[key] === "string") parts.push(response[key]);
+        }
+        if (parts.length > 0) return parts.join("\n");
+        return JSON.stringify(response);
+      }
+
+      const text = extractText(hookInput.tool_response);
 
       const config = piiDetector.loadConfig(cwd);
       if (!config || config.enabled === false) {
@@ -130,7 +144,7 @@ process.stdin.on("end", () => {
     // ── PreToolUse path ───────────────────────────────────────────────────────
 
     const toolName = hookInput.tool_name || "";
-    if (toolName !== "Edit" && toolName !== "Write") {
+    if (toolName !== "Edit" && toolName !== "Write" && toolName !== "Bash") {
       process.stdout.write(JSON.stringify({}));
       process.exit(0);
     }
@@ -138,7 +152,9 @@ process.stdin.on("end", () => {
     // Extract write content
     const content = toolName === "Edit"
       ? (hookInput.tool_input && hookInput.tool_input.new_string)
-      : (hookInput.tool_input && hookInput.tool_input.content);
+      : toolName === "Write"
+        ? (hookInput.tool_input && hookInput.tool_input.content)
+        : (hookInput.tool_input && hookInput.tool_input.command);
 
     if (!content) {
       process.stdout.write(JSON.stringify({}));

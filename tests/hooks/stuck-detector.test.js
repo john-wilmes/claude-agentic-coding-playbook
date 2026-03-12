@@ -10,7 +10,7 @@ const path = require("path");
 const os = require("os");
 const crypto = require("crypto");
 
-const { runHook, todayLocal, createTempHome, createStagedDir } = require("./test-helpers");
+const { runHook, runHookRaw, todayLocal, createTempHome, createStagedDir } = require("./test-helpers");
 
 // Resolve hook path relative to repo root
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
@@ -186,13 +186,10 @@ test("7. Whitelisted test commands: never warned or blocked", () => {
   }
 });
 
-// Bonus: malformed JSON input — should exit 0 and output {}
-// Note: runHook stringifies the string, producing valid JSON (a quoted string).
-// The hook parses it as a string (not an object), falls back to session "unknown".
-// Clean up stale state from prior runs to prevent false positives.
+// Test 6: Malformed JSON input — should exit 0 and output {}
+// Uses runHookRaw so the hook receives truly malformed JSON (not a quoted string).
 test("6. Malformed JSON input: exits 0 with {}", () => {
-  cleanupSession("unknown");
-  const result = runHook(STUCK_DETECTOR, "not valid json at all");
+  const result = runHookRaw(STUCK_DETECTOR, "not valid json at all");
 
   assert.strictEqual(result.status, 0, "Should exit 0");
   assert.ok(result.json, "Should output valid JSON");
@@ -231,6 +228,29 @@ test("8. Block event writes JSONL log entry", () => {
   } finally {
     cleanupSession(sessionId);
     env.cleanup();
+  }
+});
+
+// Test 11: agent_id present → hook skips entirely (subagent context) (M2)
+test("11. Subagent (agent_id present): skipped, returns {}", () => {
+  const sessionId = newSessionId();
+  try {
+    // Send 6 identical calls that would normally trigger a block — but agent_id is present
+    const payload = { command: "git status" };
+    let result;
+    for (let i = 0; i < 6; i++) {
+      result = runHook(STUCK_DETECTOR, {
+        session_id: sessionId,
+        tool_name: "Bash",
+        tool_input: payload,
+        agent_id: "subagent-xyz-123",
+      });
+    }
+    assert.strictEqual(result.status, 0, "Should exit 0");
+    assert.ok(result.json, "Should output valid JSON");
+    assert.deepStrictEqual(result.json, {}, "Should return {} for subagents, never warn or block");
+  } finally {
+    cleanupSession(sessionId);
   }
 });
 

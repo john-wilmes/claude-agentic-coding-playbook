@@ -115,6 +115,37 @@ function runHook(hookPath, stdinJson = {}, env = {}) {
 }
 
 /**
+ * Run a hook script as a subprocess with a raw string on stdin (no JSON.stringify).
+ * Use this to test how hooks handle truly malformed JSON input.
+ * @param {string} hookPath - Absolute path to the hook .js file
+ * @param {string} rawStdin - Raw string to pipe to stdin as-is
+ * @param {object} env - Additional environment variables (merged with process.env)
+ * @returns {{ status, stdout, stderr, json }}
+ */
+function runHookRaw(hookPath, rawStdin = "", env = {}) {
+  const result = spawnSync("node", [hookPath], {
+    input: rawStdin,
+    env: { ...process.env, CLAUDE_HOOK_SOURCE: "test", ...env },
+    timeout: 10000,
+    encoding: "utf8",
+  });
+
+  let json = null;
+  try {
+    if (result.stdout && result.stdout.trim()) {
+      json = JSON.parse(result.stdout.trim());
+    }
+  } catch {}
+
+  return {
+    status: result.status,
+    stdout: result.stdout || "",
+    stderr: result.stderr || "",
+    json,
+  };
+}
+
+/**
  * Create a fake project directory with optional marker files.
  * @param {object} opts - { git, packageJson, dockerfile, pyproject }
  * @returns {string} path to the project directory
@@ -241,6 +272,7 @@ module.exports = {
   createKnowledgeEntry,
   createMemoryFile,
   runHook,
+  runHookRaw,
   createProjectDir,
   createTempInvestigation,
   createStagedDir,

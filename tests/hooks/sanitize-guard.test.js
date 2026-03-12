@@ -11,7 +11,7 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
-const { runHook, createTempHome } = require("./test-helpers");
+const { runHook, runHookRaw, createTempHome } = require("./test-helpers");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const SANITIZE_GUARD = path.join(REPO_ROOT, "templates", "hooks", "sanitize-guard.js");
@@ -447,14 +447,36 @@ test("Empty tool_response object returns {}", (env) => {
   try { fs.rmSync(projectDir, { recursive: true, force: true }); } catch {}
 });
 
-// 16. Non-Edit/Write PreToolUse tool (Bash) → returns {}
-test("PreToolUse for Bash tool returns {}", (env) => {
+// 16. PreToolUse Bash tool with PII in command → blocks with deny
+// (Bash scanning added to prevent SSNs/emails being echoed or curl'd out)
+test("PreToolUse Bash tool with PII in command blocks", (env) => {
   const projectDir = createProjectDir();
   createSanitizeConfig(projectDir, { enabled: true });
 
   const hookInput = {
     tool_name: "Bash",
     tool_input: { command: "echo 'SSN: 123-45-6789'" },
+    cwd: projectDir,
+    session_id: "test-session",
+  };
+
+  const result = runHook(SANITIZE_GUARD, hookInput);
+  assert.ok(result.json, `Expected JSON output, got: ${result.stdout}`);
+  const out = result.json.hookSpecificOutput || {};
+  assert.strictEqual(out.permissionDecision, "deny", "Should block Bash command containing PII");
+  assert.ok(out.permissionDecisionReason.includes("[SSN]"), "Reason should include redacted placeholder");
+
+  try { fs.rmSync(projectDir, { recursive: true, force: true }); } catch {}
+});
+
+// 16b. PreToolUse Bash tool with no PII → passes through
+test("PreToolUse Bash tool with clean command returns {}", (env) => {
+  const projectDir = createProjectDir();
+  createSanitizeConfig(projectDir, { enabled: true });
+
+  const hookInput = {
+    tool_name: "Bash",
+    tool_input: { command: "ls -la /tmp" },
     cwd: projectDir,
     session_id: "test-session",
   };
@@ -485,6 +507,48 @@ test("Config with exclude_paths * wildcard skips matching file", (env) => {
   const result = runHook(SANITIZE_GUARD, hookInput);
   assert.ok(result.json, `Expected JSON output, got: ${result.stdout}`);
   assert.deepStrictEqual(result.json, {}, "*.log path should be excluded");
+
+  try { fs.rmSync(projectDir, { recursive: true, force: true }); } catch {}
+});
+
+// 18. Malformed JSON input → exits 0 with {} (H2: true malformed JSON via runHookRaw)
+test("Malformed JSON input exits 0 with {} (runHookRaw)", (env) => {
+  // runHookRaw sends the raw string to stdin — not wrapped in JSON.stringify
+  const result = runHookRaw(SANITIZE_GUARD, "{ this is not : valid json !!");
+  assert.strictEqual(result.status, 0, "Should exit 0 on malformed JSON");
+  assert.ok(result.json, "Should output valid JSON");
+  assert.deepStrictEqual(result.json, {}, "Should output empty object on parse error");
+});
+
+// 19. PostToolUse Bash output containing PII (SSN) → detected and redacted (H3)
+test("PostToolUse Bash tool response containing SSN is detected", (env) => {
+  const projectDir = createProjectDir();
+  createSanitizeConfig(projectDir, { enabled: true });
+
+  // Simulate a Bash tool that returned command output containing a SSN
+  const hookInput = {
+    tool_name: "Bash",
+    tool_input: { command: "cat /etc/config" },
+    tool_response: { content: "user_ssn=123-45-6789 status=active" },
+    cwd: projectDir,
+    session_id: "test-session",
+  };
+
+  const result = runHook(SANITIZE_GUARD, hookInput);
+  assert.ok(result.json, `Expected JSON output, got: ${result.stdout}`);
+  // Bash is PostToolUse — PII in the response should be detected
+  const out = result.json.hookSpecificOutput;
+  assert.ok(out, "Expected hookSpecificOutput — Bash output with SSN should be detected");
+  assert.ok(out.additionalContext, "Expected additionalContext with redacted output");
+  assert.ok(
+    out.additionalContext.includes("[SSN]"),
+    `Expected [SSN] placeholder in: ${out.additionalContext}`
+  );
+  // The raw SSN should NOT appear in the context presented to Claude
+  assert.ok(
+    !out.additionalContext.includes("123-45-6789"),
+    "Raw SSN should not appear in additionalContext"
+  );
 
   try { fs.rmSync(projectDir, { recursive: true, force: true }); } catch {}
 });
