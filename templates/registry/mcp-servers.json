@@ -153,5 +153,45 @@
     },
     "env_required": [],
     "notes": "LSP symbol navigation. --context claude-code disables tools that duplicate built-ins."
+  },
+  "zendesk": {
+    "description": "Zendesk tickets, users, organizations",
+    "config": {
+      "command": "npx",
+      "args": ["-y", "zd-mcp-server"],
+      "disabled": true
+    },
+    "env_required": ["ZENDESK_EMAIL", "ZENDESK_API_TOKEN", "ZENDESK_SUBDOMAIN"],
+    "notes": "Requires Zendesk agent email, API token, and subdomain"
+  },
+  "clickup": {
+    "description": "ClickUp tasks, spaces, lists (Public Beta)",
+    "config": {
+      "type": "http",
+      "url": "https://mcp.clickup.com/mcp",
+      "disabled": true
+    },
+    "env_required": [],
+    "notes": "OAuth flow on first use. Official ClickUp MCP (Public Beta)."
+  },
+  "mongodb": {
+    "description": "MongoDB queries and collection inspection",
+    "config": {
+      "command": "npx",
+      "args": ["-y", "mongodb-mcp-server", "--readOnly"],
+      "disabled": true
+    },
+    "env_required": ["MDB_MCP_CONNECTION_STRING"],
+    "notes": "Read-only mode prevents mutations. Requires MongoDB connection string."
+  },
+  "presidio": {
+    "description": "On-demand PII/PHI detection and anonymization",
+    "config": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "cmalpass/mcp-presidio"],
+      "disabled": true
+    },
+    "env_required": [],
+    "notes": "Detects PII/PHI entities on demand. See best-practices.md section 13 for full sanitization architecture."
   }
 }

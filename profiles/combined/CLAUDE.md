@@ -132,6 +132,18 @@ When recording evidence or findings during investigations:
 - At close time, Presidio auto-sanitization runs if installed. Otherwise, review manually before sharing.
 - Never commit unsanitized investigation files to shared repositories.
 
+## PII/PHI Sanitization (Runtime)
+
+When the `presidio` MCP server is enabled:
+- Use Presidio tools to scan text that may contain PII/PHI before including it in outputs, commits, or investigation files.
+- Flag suspected PII to the user rather than silently processing it.
+- Use standard placeholders (`[PATIENT]`, `[MRN]`, `[SSN]`, `[DOB]`, `[EMAIL]`, `[PHONE]`) when anonymizing.
+- Presidio is one layer of defense — it supplements, not replaces, manual review for sensitive workflows.
+
+When the `presidio` MCP server is not enabled:
+- Apply the same placeholder conventions manually.
+- Suggest enabling Presidio when encountering repeated PII in tool results.
+
 ## File Creation Rules
 
 - Never create one-off scripts, build logs, or analysis documents as files.

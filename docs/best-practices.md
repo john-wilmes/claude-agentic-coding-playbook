@@ -52,10 +52,11 @@ source; every recommendation is grounded in evidence.
 10. [Code Review Automation](#10-code-review-automation)
 11. [Security and Trust Boundaries](#11-security-and-trust-boundaries)
 12. [Model Context Protocol (MCP)](#12-model-context-protocol-mcp)
-13. [Multi-Agent Coordination](#13-multi-agent-coordination)
-14. [Shared Knowledge Base](#14-shared-knowledge-base)
-15. [Getting Started](#15-getting-started)
-16. [The Physics of Context](#16-the-physics-of-context)
+13. [PII/PHI Sanitization](#13-piiphi-sanitization)
+14. [Multi-Agent Coordination](#14-multi-agent-coordination)
+15. [Shared Knowledge Base](#15-shared-knowledge-base)
+16. [Getting Started](#16-getting-started)
+17. [The Physics of Context](#17-the-physics-of-context)
 - [Citations](#citations)
 
 ---
@@ -1559,6 +1560,10 @@ entries into your `settings.json` without overwriting existing configuration.
 | Grafana | uvx (stdio) | Disabled | — |
 | Elasticsearch | uvx (stdio) | Disabled | — |
 | Serena | uvx (stdio) | Disabled | `--context claude-code` |
+| Zendesk | npx (stdio) | Disabled | — |
+| ClickUp | HTTP (remote) | Disabled | OAuth |
+| MongoDB | npx (stdio) | Disabled | `--readOnly` |
+| Presidio | Docker (stdio) | Disabled | — |
 
 **Enabling a server:**
 
@@ -1618,7 +1623,76 @@ sites.
 
 ---
 
-## 13. Multi-Agent Coordination
+## 13. PII/PHI Sanitization
+
+Production systems handling personal data need defense in depth. Three
+complementary layers cover different threat surfaces:
+
+### Layer 1: MCP proxy (per-server wrapping)
+
+[MCP Conceal](https://github.com/nicobailey/mcp-conceal) wraps individual MCP
+servers and redacts PII before it reaches the LLM. Configure it as a proxy in
+front of any MCP server that returns sensitive data:
+
+```json
+{
+  "mcpServers": {
+    "zendesk-safe": {
+      "command": "npx",
+      "args": ["-y", "mcp-conceal", "--", "npx", "-y", "zd-mcp-server"],
+      "disabled": false
+    }
+  }
+}
+```
+
+This layer is **transparent to the agent** — PII is stripped before the agent
+sees tool results. Best for always-on protection of specific data sources.
+
+### Layer 2: LLM proxy (all traffic)
+
+[LiteLLM](https://docs.litellm.ai/) with Presidio guardrails intercepts all
+LLM API traffic, scanning both inputs and outputs for PII. Point Claude Code
+at the proxy:
+
+```bash
+export ANTHROPIC_BASE_URL=http://localhost:4000  # LiteLLM proxy
+```
+
+This layer protects **all agent communication**, not just MCP tool results.
+Best for organizations with blanket PII policies or compliance requirements.
+
+### Layer 3: On-demand detection (agent-initiated)
+
+The [Presidio MCP server](https://github.com/cmalpass/mcp-presidio) gives the
+agent tools to scan text for PII/PHI entities on demand. Enable it in the
+registry:
+
+```bash
+# In ~/.claude/settings.json, set presidio.disabled to false
+```
+
+The agent calls Presidio tools when it encounters text that might contain
+sensitive data — investigation evidence, support tickets, log entries. This
+layer is **agent-controlled** and works alongside the other two.
+
+### Which layer for which scenario
+
+| Scenario | Layer 1 (MCP proxy) | Layer 2 (LLM proxy) | Layer 3 (On-demand) |
+|---|---|---|---|
+| Redact PII from specific MCP servers | **Best fit** | Overkill | Manual |
+| Blanket PII policy for all LLM traffic | Partial | **Best fit** | Partial |
+| Agent-driven PII checks during investigations | No | No | **Best fit** |
+| Compliance audit trail | Partial | **Best fit** | Partial |
+| Zero-config protection | **Best fit** | Needs proxy setup | Needs agent awareness |
+
+For maximum coverage, combine Layer 1 (wrap sensitive MCP servers) with Layer 3
+(agent checks investigation evidence). Layer 2 adds network-level protection
+when compliance requirements demand it.
+
+---
+
+## 14. Multi-Agent Coordination
 
 ### Within-session: subagents
 
@@ -1881,7 +1955,7 @@ Design guidance:
 
 ---
 
-## 14. Shared Knowledge Base
+## 15. Shared Knowledge Base
 
 ### The knowledge re-discovery problem
 
@@ -1994,7 +2068,7 @@ Defenses:
 
 ---
 
-## 15. Getting Started
+## 16. Getting Started
 
 ### Quick install
 
@@ -2052,7 +2126,7 @@ Ubuntu instance.
 
 ---
 
-## 16. The Physics of Context
+## 17. The Physics of Context
 
 Context windows are not uniform containers. Transformer architecture imposes non-uniform
 internal topology: some positions accumulate more attention weight than others, and

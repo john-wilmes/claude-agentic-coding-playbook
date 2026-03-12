@@ -78,9 +78,9 @@ test_registry_server_count() {
     const r = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
     console.log(Object.keys(r).length);
   " "$REGISTRY_FILE")
-  [[ "$count" -eq 15 ]] || { echo "Expected 15 servers, got $count"; return 1; }
+  [[ "$count" -eq 19 ]] || { echo "Expected 19 servers, got $count"; return 1; }
 }
-run_test "Registry contains 15 servers" test_registry_server_count
+run_test "Registry contains 19 servers" test_registry_server_count
 
 # ─── Test 3: github is enabled, others disabled ─────────────────────────────
 
@@ -127,7 +127,7 @@ test_fresh_install() {
   result=$(merge_registry "$REGISTRY_FILE" "$tmpdir/settings.json")
   local added=${result%%:*}
   local skipped=${result##*:}
-  [[ "$added" -eq 15 ]] || { echo "Expected 15 added, got $added"; return 1; }
+  [[ "$added" -eq 19 ]] || { echo "Expected 19 added, got $added"; return 1; }
   [[ "$skipped" -eq 0 ]] || { echo "Expected 0 skipped, got $skipped"; return 1; }
 
   # Verify github is in the output
@@ -154,7 +154,7 @@ test_idempotent() {
   local added=${result%%:*}
   local skipped=${result##*:}
   [[ "$added" -eq 0 ]] || { echo "Expected 0 added on second run, got $added"; return 1; }
-  [[ "$skipped" -eq 15 ]] || { echo "Expected 15 skipped on second run, got $skipped"; return 1; }
+  [[ "$skipped" -eq 19 ]] || { echo "Expected 19 skipped on second run, got $skipped"; return 1; }
 }
 run_test "Idempotent — second run adds nothing" test_idempotent
 
