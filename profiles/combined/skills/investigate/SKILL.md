@@ -80,11 +80,26 @@ Create a new investigation scaffold.
 
 1. Check if `$INVESTIGATIONS_DIR/<id>/` already exists. If so, warn and suggest `/investigate <id>` to resume.
 2. Create directory structure: `$INVESTIGATIONS_DIR/<id>/EVIDENCE/`
-3. Ask the user:
-   - What is the investigation question? (one sentence)
-   - What is the absolute path to the repository being investigated? (leave blank if not a code investigation)
-   - Any scope constraints? (optional)
-   - Any additional context?
+3. **Conversational intake** — conduct a short interview to scope the investigation.
+
+   **Headless mode** (`CLAUDE_LOOP=1` environment variable set): Skip the interview. Parse `$ARGUMENTS` and any surrounding task description for problem statement, observed behavior, and scope. Write what's available to BRIEF.md and note gaps as "unconfirmed — extracted from task description."
+
+   **Interactive mode** (default): Ask these required questions in order, as conversational text output (not AskUserQuestion):
+   1. "What's happening that shouldn't be, or what's not happening that should?"
+   2. "What do you observe specifically? (error messages, unexpected output, wrong behavior)"
+   3. "What did you expect to happen instead?"
+
+   Then ask conditional follow-up questions based on context:
+   - If a repo path was provided and it has git: "Did this start after a recent change?"
+   - If the user mentions an error: "Can you paste the exact error output?"
+   - If scope is still unclear: "Which part of the system is this in?"
+
+   **Sufficiency check**: After the required questions, generate 3 hypotheses about what information might still be missing. Check each against what's already known. If a gap is clearly answerable only by the human (not by reading code), ask one more targeted question. Otherwise, proceed to write the brief.
+
+   Separate user responses into:
+   - **Observations**: What the user reports seeing — treated as evidence to verify
+   - **Hypothesis**: What the user thinks the cause is — treated as a testable claim, not fact
+   - **Scope**: Where to look — user-provided, may need revision based on evidence
 
 4. Create initial files:
 
@@ -94,19 +109,32 @@ Create a new investigation scaffold.
 
 ## Question
 
-{user's question}
+{one-sentence investigation question, derived from intake}
 
 ## Repo
 
 {absolute repo path, or "none"}
 
+## Observations
+
+{what the user reports seeing — error messages, unexpected behavior, symptoms}
+{label as "reported by user" — these are evidence to verify, not confirmed facts}
+
+## Hypothesis
+
+{what the user thinks the cause is, if provided}
+{label as "user hypothesis — to be tested, not assumed"}
+{if user offered no causal theory, write "No hypothesis provided."}
+
 ## Scope
 
-{scope notes, or "Full codebase"}
+{where to look — components, files, services mentioned by user}
+{note if scope is user-provided vs. inferred: "User-directed" or "Inferred from symptoms"}
 
 ## Context
 
-{additional context provided by user}
+{additional context: environment, recent changes, reproduction steps}
+{in headless mode: "unconfirmed — extracted from task description"}
 ```
 
 **STATUS.md:**
@@ -159,7 +187,7 @@ tags:
    - Grep `$INVESTIGATIONS_DIR/*/FINDINGS.md` for keywords derived from the id
    - If matches found, mention them: "Related investigations: ..."
 
-6. Tell the user: "Scaffold created. Run `/investigate <id> run` to start the investigation, or `/investigate <id> collect` to add evidence manually."
+6. Tell the user: "Investigation scoped. Run `/investigate <id> run` to dispatch specialists, or `/investigate <id> collect` to add evidence manually."
 
 ---
 
@@ -178,6 +206,8 @@ Read STATUS.md.
 Read BRIEF.md. Extract:
 - `QUESTION`: content of `## Question` section
 - `REPO_PATH`: content of `## Repo` section (trim whitespace)
+- `HYPOTHESIS`: content of `## Hypothesis` section (may be "No hypothesis provided.")
+- `OBSERVATIONS`: content of `## Observations` section
 
 If `## Repo` is absent or contains `"none"` or is blank: set `HAS_REPO = false`. Otherwise `HAS_REPO = true`.
 
@@ -269,12 +299,29 @@ After all Task calls complete:
 3. If a specialist wrote 0 files: log a warning in STATUS.md handoff notes. Do not halt.
 4. Read all evidence files in numeric order. Note any with empty Source fields (chain integrity failures).
 
+### Step 6.5: Gap detection and clarification
+
+After Round 1 evidence collection, assess whether gaps remain that require human input.
+
+1. Run the citation checker: `bash scripts/check-citations.sh "$INVESTIGATIONS_DIR" "{ID}"`
+2. Read BRIEF.md to recall the hypothesis and observations.
+3. For areas with no evidence or contradictory evidence, classify each gap:
+   - **Code-answerable**: The gap is about *what the code does* — can be filled by reading more code. Queue for Round 2 specialists.
+   - **Human-answerable**: The gap is about *what the code should do*, *what environment it runs in*, or *what the user experienced*. Requires domain knowledge, reproduction details, or business context.
+
+4. **Interactive mode** (default): If human-answerable gaps exist, print the specific question(s) and wait for the user's response. Incorporate the response into BRIEF.md (update Observations or Context sections) before proceeding to synthesis.
+
+5. **Headless mode** (`CLAUDE_LOOP=1`): Note each human-answerable gap in FINDINGS.md as "unresolved — requires human input" and continue with available evidence.
+
+6. If code-answerable gaps exist, dispatch targeted Round 2 specialists (range 200+) to fill them before synthesizing.
+
 ### Step 7: Synthesize
 
 Read all evidence files. Write FINDINGS.md:
 
 **Answer section rules:**
 - First paragraph: direct answer to the investigation question.
+- If `HYPOTHESIS` is not "No hypothesis provided.": explicitly confirm or reject the user's hypothesis with evidence. Do not assume it is correct.
 - Every factual claim must cite at least one evidence file: `(Evidence NNN)`.
 - Inferences must be labeled: `(inferred from Evidence NNN, NNN)`.
 - Name the exact file and line number if the code-archaeologist found it.
