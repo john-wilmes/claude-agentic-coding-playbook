@@ -1,0 +1,457 @@
+#!/usr/bin/env node
+// fleet-index-server.js — MCP stdio server for the repo fleet index.
+//
+// Reads pre-built fleet manifests and serves them via the Model Context
+// Protocol (JSON-RPC 2.0 over stdio). Does NOT trigger indexing.
+//
+// Tools exposed:
+//   search_repos   BM25 search over fleet manifests
+//   get_manifest   Full manifest JSON for a specific repo
+//   list_repos     List all indexed repos with optional filters
+//   get_digest     Return the compact fleet-digest.txt contents
+//
+// Usage (MCP settings.json):
+//   { "command": "node", "args": ["~/.claude/mcp/fleet-index-server.js"] }
+
+"use strict";
+
+const fs   = require("fs");
+const path = require("path");
+const os   = require("os");
+const rl   = require("readline");
+
+// ─── Default paths ───────────────────────────────────────────────────────────
+
+const HOME          = os.homedir();
+const DEFAULT_FLEET = path.join(HOME, ".claude", "fleet");
+const MANIFESTS_DIR = process.env.FLEET_MANIFESTS_DIR
+  || path.join(DEFAULT_FLEET, "manifests");
+const DIGEST_FILE   = process.env.FLEET_DIGEST_FILE
+  || path.join(DEFAULT_FLEET, "fleet-digest.txt");
+
+// ─── Load fleet-index module (try installed path first, then source tree) ────
+
+let fleetIndex = null;
+
+function loadFleetIndex() {
+  if (fleetIndex) return fleetIndex;
+
+  const candidates = [
+    path.join(HOME, ".claude", "fleet", "fleet-index.js"),
+    path.join(__dirname, "..", "fleet", "fleet-index.js"),
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      fleetIndex = require(candidate);
+      return fleetIndex;
+    } catch {
+      // try next
+    }
+  }
+
+  // Return a stub so the server still starts but tools degrade gracefully
+  fleetIndex = {
+    searchRepos: () => [],
+    listRepos: () => [],
+    getManifest: () => null,
+  };
+  return fleetIndex;
+}
+
+// ─── BM25 search helpers (inline — no fleet-index dependency for pure search) ─
+
+// If fleet-index provides searchRepos, use it.  Otherwise fall back to a
+// lightweight in-process BM25 built from the manifests on disk.
+
+const STOPWORDS = new Set([
+  "the", "is", "at", "which", "on", "a", "an", "in", "for", "to", "of",
+  "and", "or", "but", "not", "with", "by", "from", "as", "be", "was",
+  "were", "been", "are", "have", "has", "had", "do", "does", "did",
+  "will", "would", "could", "should", "may", "might", "can", "shall",
+  "this", "that", "these", "those", "it", "its", "i", "you", "he", "she",
+  "we", "they", "me", "him", "her", "us", "them", "my", "your", "his",
+  "our", "their", "what", "who", "how", "when", "where", "why", "if",
+  "then", "else", "so", "no", "yes", "all", "each", "every", "both",
+  "few", "more", "most", "other", "some", "such", "only", "same", "than",
+  "too", "very",
+]);
+
+const BM25_K1 = 1.2;
+const BM25_B  = 0.75;
+
+function tokenize(text) {
+  if (!text || typeof text !== "string") return [];
+  return text
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length >= 2 && !STOPWORDS.has(t));
+}
+
+function buildBm25Index(docs) {
+  const indexed = new Map();
+  const df      = new Map();
+  let totalLen  = 0;
+
+  for (const doc of docs) {
+    const tokens = tokenize(doc.text || "");
+    const tf = new Map();
+    for (const t of tokens) tf.set(t, (tf.get(t) || 0) + 1);
+    indexed.set(doc.id, { tokens, tf, length: tokens.length, meta: doc.meta });
+    totalLen += tokens.length;
+    for (const term of tf.keys()) df.set(term, (df.get(term) || 0) + 1);
+  }
+
+  const N     = docs.length;
+  const avgdl = N > 0 ? totalLen / N : 0;
+  return { indexed, df, avgdl, N };
+}
+
+function bm25Query(idx, queryText, topK = 10) {
+  const { indexed, df, avgdl, N } = idx;
+  if (N === 0) return [];
+
+  const qTokens = tokenize(queryText);
+  if (qTokens.length === 0) return [];
+
+  const scores = new Map();
+  for (const term of qTokens) {
+    const n = df.get(term) || 0;
+    if (n === 0) continue;
+    const idf = Math.log((N - n + 0.5) / (n + 0.5) + 1);
+    for (const [id, doc] of indexed) {
+      const f = doc.tf.get(term) || 0;
+      if (f === 0) continue;
+      const denom = f + BM25_K1 * (1 - BM25_B + BM25_B * (doc.length / avgdl));
+      scores.set(id, (scores.get(id) || 0) + idf * (f * (BM25_K1 + 1)) / denom);
+    }
+  }
+
+  return Array.from(scores.entries())
+    .map(([id, score]) => ({ id, score: Math.round(score * 1000) / 1000 }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topK);
+}
+
+// ─── Manifest helpers ─────────────────────────────────────────────────────────
+
+function readManifests() {
+  const results = [];
+  try {
+    if (!fs.existsSync(MANIFESTS_DIR)) return results;
+    for (const entry of fs.readdirSync(MANIFESTS_DIR)) {
+      if (!entry.endsWith(".json")) continue;
+      try {
+        const raw = fs.readFileSync(path.join(MANIFESTS_DIR, entry), "utf8");
+        results.push(JSON.parse(raw));
+      } catch {
+        // skip malformed manifest
+      }
+    }
+  } catch {
+    // MANIFESTS_DIR unreadable
+  }
+  return results;
+}
+
+// Build search text for a manifest entry
+function manifestToSearchText(m) {
+  const parts = [
+    m.repo || "",
+    m.description || "",
+    m.language || "",
+    m.kind || "",
+    ...(m.tags || []),
+    ...(m.entryPoints || []),
+    ...(m.exports || []),
+    ...(m.dependencies || []),
+  ];
+  return parts.filter(Boolean).join(" ");
+}
+
+// ─── Tool implementations ─────────────────────────────────────────────────────
+
+function toolSearchRepos({ query, limit = 10 }) {
+  if (!query || typeof query !== "string") {
+    return { error: "query is required and must be a string" };
+  }
+
+  const manifests = readManifests();
+  if (manifests.length === 0) {
+    return [];
+  }
+
+  // Prefer fleet-index.searchRepos if available
+  const fi = loadFleetIndex();
+  if (typeof fi.searchRepos === "function") {
+    try {
+      return fi.searchRepos(query, limit);
+    } catch {
+      // fall through to inline BM25
+    }
+  }
+
+  // Inline BM25 fallback
+  const docs = manifests.map((m) => ({
+    id:   m.repo,
+    text: manifestToSearchText(m),
+    meta: m,
+  }));
+  const idx = buildBm25Index(docs);
+  const hits = bm25Query(idx, query, limit);
+
+  return hits.map(({ id, score }) => {
+    const m = docs.find((d) => d.id === id);
+    const meta = m ? m.meta : {};
+    return {
+      repo:        id,
+      score,
+      kind:        meta.kind        || null,
+      language:    meta.language    || null,
+      description: meta.description || null,
+      quality:     meta.quality     || null,
+    };
+  });
+}
+
+function toolGetManifest({ repo }) {
+  if (!repo || typeof repo !== "string") {
+    return { error: "repo is required and must be a string" };
+  }
+
+  const manifests = readManifests();
+  const found = manifests.find((m) => m.repo === repo);
+  if (!found) {
+    return { error: `No manifest found for repo: ${repo}` };
+  }
+  return found;
+}
+
+function toolListRepos({ kind, min_quality } = {}) {
+  const manifests = readManifests();
+  let results = manifests.map((m) => ({
+    repo:        m.repo        || null,
+    kind:        m.kind        || null,
+    language:    m.language    || null,
+    quality:     m.quality     || null,
+    description: m.description || null,
+  }));
+
+  if (kind !== undefined && kind !== null) {
+    results = results.filter((r) => r.kind === kind);
+  }
+  if (min_quality !== undefined && min_quality !== null) {
+    const threshold = Number(min_quality);
+    if (!Number.isNaN(threshold)) {
+      results = results.filter((r) => (r.quality || 0) >= threshold);
+    }
+  }
+
+  return results.sort((a, b) => (a.repo || "").localeCompare(b.repo || ""));
+}
+
+function toolGetDigest() {
+  try {
+    if (!fs.existsSync(DIGEST_FILE)) {
+      return { error: `Fleet digest not found at: ${DIGEST_FILE}` };
+    }
+    return fs.readFileSync(DIGEST_FILE, "utf8");
+  } catch (err) {
+    return { error: `Failed to read digest: ${err.message}` };
+  }
+}
+
+// ─── Tool registry ────────────────────────────────────────────────────────────
+
+const TOOLS = [
+  {
+    name:        "search_repos",
+    description: "BM25 full-text search over fleet manifests. Returns repos ranked by relevance.",
+    inputSchema: {
+      type:     "object",
+      properties: {
+        query: {
+          type:        "string",
+          description: "Search query (keywords, repo names, technologies, etc.)",
+        },
+        limit: {
+          type:        "number",
+          description: "Maximum number of results to return (default: 10)",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name:        "get_manifest",
+    description: "Get the full indexed manifest for a specific repo.",
+    inputSchema: {
+      type:     "object",
+      properties: {
+        repo: {
+          type:        "string",
+          description: "Repository identifier, e.g. \"org/payment-service\"",
+        },
+      },
+      required: ["repo"],
+    },
+  },
+  {
+    name:        "list_repos",
+    description: "List all indexed repos with optional kind and quality filters.",
+    inputSchema: {
+      type:       "object",
+      properties: {
+        kind: {
+          type:        "string",
+          description: "Filter by repo kind (e.g. \"service\", \"library\", \"tool\")",
+        },
+        min_quality: {
+          type:        "number",
+          description: "Minimum quality score (0–100) to include",
+        },
+      },
+    },
+  },
+  {
+    name:        "get_digest",
+    description: "Return the compact fleet-digest.txt — a one-line-per-repo summary of all indexed repos.",
+    inputSchema: {
+      type:       "object",
+      properties: {},
+    },
+  },
+];
+
+// ─── JSON-RPC helpers ─────────────────────────────────────────────────────────
+
+function reply(id, result) {
+  const msg = JSON.stringify({ jsonrpc: "2.0", id, result });
+  process.stdout.write(msg + "\n");
+}
+
+function replyError(id, code, message) {
+  const msg = JSON.stringify({
+    jsonrpc: "2.0",
+    id,
+    error:  { code, message },
+  });
+  process.stdout.write(msg + "\n");
+}
+
+function log(msg) {
+  process.stderr.write(`[fleet-index-server] ${msg}\n`);
+}
+
+// ─── Request dispatcher ───────────────────────────────────────────────────────
+
+function dispatch(req) {
+  const { id, method, params = {} } = req;
+
+  try {
+    switch (method) {
+      case "initialize":
+        reply(id, {
+          protocolVersion: "2024-11-05",
+          capabilities:    { tools: {} },
+          serverInfo:      { name: "fleet-index", version: "1.0.0" },
+        });
+        break;
+
+      case "initialized":
+        // Notification only — no response required
+        break;
+
+      case "tools/list":
+        reply(id, { tools: TOOLS });
+        break;
+
+      case "tools/call": {
+        const toolName = params.name;
+        const args     = params.arguments || {};
+
+        let result;
+        switch (toolName) {
+          case "search_repos":
+            result = toolSearchRepos(args);
+            break;
+          case "get_manifest":
+            result = toolGetManifest(args);
+            break;
+          case "list_repos":
+            result = toolListRepos(args);
+            break;
+          case "get_digest":
+            result = toolGetDigest();
+            break;
+          default:
+            replyError(id, -32601, `Unknown tool: ${toolName}`);
+            return;
+        }
+
+        reply(id, {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        });
+        break;
+      }
+
+      case "ping":
+        reply(id, {});
+        break;
+
+      default:
+        replyError(id, -32601, `Method not found: ${method}`);
+    }
+  } catch (err) {
+    log(`Error handling ${method}: ${err.message}`);
+    replyError(id, -32603, `Internal error: ${err.message}`);
+  }
+}
+
+// ─── Stdin reader ─────────────────────────────────────────────────────────────
+
+function main() {
+  log("starting (manifests: " + MANIFESTS_DIR + ")");
+
+  const reader = rl.createInterface({
+    input:     process.stdin,
+    crlfDelay: Infinity,
+  });
+
+  reader.on("line", (line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+
+    let req;
+    try {
+      req = JSON.parse(trimmed);
+    } catch {
+      // Malformed JSON — send parse error with null id
+      replyError(null, -32700, "Parse error: invalid JSON");
+      return;
+    }
+
+    if (!req.method) {
+      replyError(req.id || null, -32600, "Invalid request: missing method");
+      return;
+    }
+
+    dispatch(req);
+  });
+
+  reader.on("close", () => {
+    log("stdin closed, shutting down");
+    process.exit(0);
+  });
+
+  // Never crash on unhandled errors — log to stderr and continue
+  process.on("uncaughtException", (err) => {
+    log(`uncaughtException: ${err.message}`);
+  });
+
+  process.on("unhandledRejection", (reason) => {
+    log(`unhandledRejection: ${reason}`);
+  });
+}
+
+main();

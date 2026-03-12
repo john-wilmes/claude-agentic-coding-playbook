@@ -940,6 +940,40 @@ if [[ ":$PATH:" != *":$LOCAL_BIN:"* ]]; then
   echo "    export PATH=\"\$HOME/.local/bin:\$PATH\""
 fi
 
+# --- Install fleet index components ---
+
+echo ""
+echo "--- Installing fleet index ---"
+
+# Fleet indexer engine
+if [ -f "$SCRIPT_DIR/templates/fleet/fleet-index.js" ]; then
+  if [ "$DRY_RUN" != true ]; then
+    mkdir -p "$CLAUDE_DIR/fleet"
+  fi
+  install_file "$SCRIPT_DIR/templates/fleet/fleet-index.js" "$CLAUDE_DIR/fleet/fleet-index.js" "fleet indexer: fleet-index.js"
+fi
+
+# Fleet MCP server
+if [ -f "$SCRIPT_DIR/templates/mcp/fleet-index-server.js" ]; then
+  if [ "$DRY_RUN" != true ]; then
+    mkdir -p "$CLAUDE_DIR/mcp"
+  fi
+  install_file "$SCRIPT_DIR/templates/mcp/fleet-index-server.js" "$CLAUDE_DIR/mcp/fleet-index-server.js" "fleet MCP server: fleet-index-server.js"
+fi
+
+# repo-fleet-index CLI script
+if [ -f "$SCRIPT_DIR/scripts/repo-fleet-index.sh" ]; then
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] SYMLINK: scripts/repo-fleet-index.sh -> $LOCAL_BIN/repo-fleet-index"
+  else
+    ln -sf "$SCRIPT_DIR/scripts/repo-fleet-index.sh" "$LOCAL_BIN/repo-fleet-index"
+    chmod +x "$SCRIPT_DIR/scripts/repo-fleet-index.sh"
+    echo "INSTALLED: scripts/repo-fleet-index.sh -> $LOCAL_BIN/repo-fleet-index"
+  fi
+else
+  echo "SKIPPED: scripts/repo-fleet-index.sh (not found)"
+fi
+
 # --- MCP Server Registry ---
 
 echo ""
@@ -1027,6 +1061,17 @@ else
     done
 
     install_repo_cron "$REPOS_DIR"
+
+    # Run fleet index refresh after repo pull
+    if [ -f "$LOCAL_BIN/repo-fleet-index" ]; then
+      local fleet_cron="5 6 * * * $LOCAL_BIN/repo-fleet-index --refresh --repos-dir $REPOS_DIR 2>/dev/null"
+      if ! crontab -l 2>/dev/null | grep -qF "repo-fleet-index"; then
+        ( crontab -l 2>/dev/null; echo "$fleet_cron" ) | crontab -
+        echo "CONFIGURED: fleet index refresh cron (06:05) after repo pull"
+      else
+        echo "ALREADY CONFIGURED: fleet index refresh cron"
+      fi
+    fi
     fi
   fi
 
@@ -1108,8 +1153,10 @@ done
 SERVER_COUNT=$(node -e "const r=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(Object.keys(r).length)" "$REGISTRY_FILE" 2>/dev/null || echo "?")
 echo "  MCP registry     -> settings.json mcpServers ($SERVER_COUNT servers)"
 echo "  Managed repos    -> ~/.claude/repos/ (from resources.json, if present)"
-echo "  CLI scripts      -> $LOCAL_BIN/ (q, qa, claude-loop, knowledge-consolidate)"
+echo "  CLI scripts      -> $LOCAL_BIN/ (q, qa, claude-loop, knowledge-consolidate, repo-fleet-index)"
 echo "  Session hooks    -> $CLAUDE_DIR/hooks/ (auto-run on session start/end)"
+echo "  Fleet index      -> $CLAUDE_DIR/fleet/ (repo manifests and digest)"
+echo "  Fleet MCP        -> $CLAUDE_DIR/mcp/ (fleet-index MCP server)"
 echo "  Templates        -> $CLAUDE_DIR/templates/"
 echo "    project-CLAUDE.md   (copy to new project roots)"
 echo "    hooks/pre-commit    (copy to .git/hooks/ in each project)"
