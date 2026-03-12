@@ -162,10 +162,10 @@ CHECKPOINT COMPLETE
 First, check if running under claude-loop:
 
 ```bash
-echo "${CLAUDE_LOOP:-0}"
+echo "CLAUDE_LOOP=${CLAUDE_LOOP:-0} SENTINEL=${CLAUDE_LOOP_SENTINEL:-}"
 ```
 
-**If `1` (running under claude-loop):** Always write the sentinel and exit. The loop supervisor manages session continuity — every checkpoint under claude-loop triggers a restart.
+**If `CLAUDE_LOOP=1` (headless/task-queue mode):** Always write the sentinel and exit. The loop supervisor manages session continuity — every checkpoint under claude-loop triggers a restart.
 
 Write the sentinel file:
 
@@ -175,7 +175,19 @@ echo '{"reason":"checkpoint","timestamp":'$(date +%s)'}' > "${CLAUDE_LOOP_SENTIN
 
 Print exactly "Exiting — claude-loop will respawn." Then STOP. Do not make any more tool calls or produce any more output.
 
-**If `0` (interactive session):** Check the context-guard flag file to decide:
+**If `CLAUDE_LOOP_SENTINEL` is set (interactive mode under claude-loop):** Write the sentinel so claude-loop will restart when the user exits:
+
+```bash
+echo '{"reason":"checkpoint","timestamp":'$(date +%s)'}' > "${CLAUDE_LOOP_SENTINEL}"
+```
+
+Then tell the user:
+
+```text
+Checkpoint complete. Sentinel written — run `/exit` to restart with fresh context, or continue working.
+```
+
+**If neither is set (standalone session, no claude-loop):** Check the context-guard flag file to decide:
 
 ```bash
 node -e "
