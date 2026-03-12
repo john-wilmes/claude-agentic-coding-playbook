@@ -304,40 +304,97 @@ t_status_exits_zero() {
 }
 run_test "--status exits 0 and prints status header" t_status_exits_zero
 
-# ─── Test 9: Signal exit code (130) stops the loop despite sentinel ──────
-# When claude exits with code 130 (SIGINT/Ctrl+C), claude-loop must stop
-# even if context-guard wrote a sentinel file during the session.
+# ─── Test 9a: Signal without sentinel stops the loop ─────────────────────────
 
-t_signal_exit_stops_loop() {
-  # Stub claude: writes sentinel (simulating context-guard) then exits 130 (SIGINT)
-  local tmpbin
+t_signal_no_sentinel_stops() {
+  local tmpbin tmpdir
   tmpbin="$(mktemp -d)"
+  tmpdir="$(mktemp -d)"
+  # Stub claude: exits 130 (SIGINT) without writing sentinel
   cat > "${tmpbin}/claude" <<'STUBEOF'
 #!/usr/bin/env bash
-# Simulate context-guard writing sentinel at 75%
-if [[ -n "${CLAUDE_LOOP_SENTINEL:-}" ]]; then
-  touch "${CLAUDE_LOOP_SENTINEL}"
-fi
-# Exit as if killed by SIGINT
 exit 130
 STUBEOF
   chmod +x "${tmpbin}/claude"
 
   local out rc=0
-  out="$(PATH="${tmpbin}:${PATH}" bash "${SCRIPT}" --max-sessions 3 2>&1)" || rc=$?
-  rm -rf "${tmpbin}"
+  out="$(cd "${tmpdir}" && PATH="${tmpbin}:${PATH}" bash "${SCRIPT}" --max-sessions 3 2>&1)" || rc=$?
+  rm -rf "${tmpbin}" "${tmpdir}"
 
-  # Loop should have stopped after 1 session, not restarted
   local session_count
   session_count="$(echo "${out}" | grep -c "starting session" || true)"
   [[ "${session_count}" -eq 1 ]] \
     || { echo "Expected 1 session, got ${session_count}; output: ${out}"; return 1; }
 
-  # Should mention signal in output
   echo "${out}" | grep -q "stopped by signal" \
     || { echo "Expected 'stopped by signal' message; output: ${out}"; return 1; }
 }
-run_test "exit code 130 (SIGINT) stops loop despite sentinel" t_signal_exit_stops_loop
+run_test "signal without sentinel stops loop" t_signal_no_sentinel_stops
+
+# ─── Test 9b: Signal with sentinel restarts (sentinel overrides signal) ──────
+
+t_signal_with_sentinel_restarts() {
+  local tmpbin tmpdir
+  tmpbin="$(mktemp -d)"
+  tmpdir="$(mktemp -d)"
+  # Stub claude: writes sentinel then exits 130
+  cat > "${tmpbin}/claude" <<'STUBEOF'
+#!/usr/bin/env bash
+if [[ -n "${CLAUDE_LOOP_SENTINEL:-}" ]]; then
+  touch "${CLAUDE_LOOP_SENTINEL}"
+fi
+exit 130
+STUBEOF
+  chmod +x "${tmpbin}/claude"
+
+  local out rc=0
+  out="$(cd "${tmpdir}" && PATH="${tmpbin}:${PATH}" bash "${SCRIPT}" --max-sessions 3 2>&1)" || rc=$?
+  rm -rf "${tmpbin}" "${tmpdir}"
+
+  # Sentinel should override signal — loop restarts until max-sessions
+  echo "${out}" | grep -q "sentinel found" \
+    || { echo "Expected 'sentinel found' message; output: ${out}"; return 1; }
+  echo "${out}" | grep -q "max sessions" \
+    || { echo "Expected loop to restart until max-sessions; output: ${out}"; return 1; }
+}
+run_test "signal with sentinel restarts (sentinel overrides)" t_signal_with_sentinel_restarts
+
+# ─── Test 10: Interactive mode restarts on normal exit (no sentinel) ──────────
+# In interactive mode (no task queue), exit code 0 should restart the loop.
+# Only signals (Ctrl+C) should stop it.
+
+t_interactive_restart_on_exit0() {
+  local tmpbin tmpdir
+  tmpbin="$(mktemp -d)"
+  tmpdir="$(mktemp -d)"
+  # Stub claude: exits 0 immediately (simulates /exit)
+  cat > "${tmpbin}/claude" <<'STUBEOF'
+#!/usr/bin/env bash
+exit 0
+STUBEOF
+  chmod +x "${tmpbin}/claude"
+
+  local out rc=0
+  # Run from tmpdir to avoid lock conflict with any active claude-loop.
+  # No --task-queue = interactive mode. --max-sessions 3 caps the loop.
+  out="$(cd "${tmpdir}" && PATH="${tmpbin}:${PATH}" bash "${SCRIPT}" --max-sessions 3 2>&1)" || rc=$?
+  rm -rf "${tmpbin}" "${tmpdir}"
+
+  # Should have started 3 sessions (restarted twice), then hit max-sessions
+  echo "${out}" | grep -q "max sessions" \
+    || { echo "Expected 'max sessions' stop; output: ${out}"; return 1; }
+
+  # Should mention interactive restart
+  echo "${out}" | grep -q "restarting session" \
+    || { echo "Expected 'restarting session' message; output: ${out}"; return 1; }
+
+  # Should NOT mention "exited without sentinel" (old stopping behavior)
+  # Use if/then instead of && to avoid set -e + pipefail killing the function
+  if echo "${out}" | grep -q "exited without sentinel"; then
+    echo "Should not stop on exit 0 in interactive mode; output: ${out}"; return 1
+  fi
+}
+run_test "interactive mode restarts on exit 0 (no sentinel needed)" t_interactive_restart_on_exit0
 
 # ─── Summary ──────────────────────────────────────────────────────────────────
 
