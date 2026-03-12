@@ -393,7 +393,7 @@ dry_run_show() {
     fi
   else
     echo "  Task queue    : (none)"
-    echo "  claude command: claude \"/continue\""
+    echo "  claude command: claude --append-system-prompt \"...\" \"/continue\""
   fi
 }
 
@@ -452,7 +452,7 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
   CURRENT_TASK=""
   # Default: interactive mode (no -p). Session stays open for user interaction.
   # User exits with Ctrl+C; sentinel from /checkpoint triggers loop restart.
-  CLAUDE_CMD=("claude" "/continue")
+  CLAUDE_CMD=("claude" "--append-system-prompt" "claude-loop started this session. Your first action must be to invoke the /continue skill using the Skill tool." "/continue")
 
   if [[ -n "${TASK_QUEUE_FILE}" ]]; then
     if ! CURRENT_TASK="$(get_next_task "${TASK_QUEUE_FILE}")"; then
