@@ -250,6 +250,17 @@ process.stdin.on("end", () => {
       parts.push(`Relevant knowledge entries:\n${entryLines.join("\n")}`);
     }
 
+    // Inject fleet digest if available
+    try {
+      const fleetDigestPath = path.join(os.homedir(), ".claude", "fleet", "fleet-digest.txt");
+      if (fs.existsSync(fleetDigestPath)) {
+        const digest = fs.readFileSync(fleetDigestPath, "utf8").trim();
+        if (digest) {
+          parts.push(`Fleet index:\n${digest}`);
+        }
+      }
+    } catch {}
+
     const context = parts.join("\n\n");
 
     log.writeLog({
@@ -257,7 +268,7 @@ process.stdin.on("end", () => {
       event: "init",
       session_id: sessionId,
       project: cwd,
-      details: `Injected ${parts.length} context sections, ${relevantEntries.length} knowledge entries`,
+      details: `Injected ${parts.length} context sections, ${relevantEntries.length} knowledge entries (fleet digest included if available)`,
     });
 
     // Output JSON that Claude Code injects into agent context
