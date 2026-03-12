@@ -149,10 +149,10 @@
         "--context", "claude-code",
         "--project-from-cwd"
       ],
-      "disabled": true
+      "disabled": false
     },
     "env_required": [],
-    "notes": "LSP symbol navigation. --context claude-code disables tools that duplicate built-ins."
+    "notes": "LSP symbol navigation. --context claude-code disables tools that duplicate built-ins. Enabled by default — vital for agent code navigation."
   },
   "zendesk": {
     "description": "Zendesk tickets, users, organizations",
@@ -193,5 +193,15 @@
     },
     "env_required": [],
     "notes": "Detects PII/PHI entities on demand. See best-practices.md section 13 for full sanitization architecture."
+  },
+  "mintlify": {
+    "description": "Mintlify documentation search — self-hosted local server",
+    "config": {
+      "command": "npx",
+      "args": ["-y", "@mintlify/mcp", "--subdomain", "${MINTLIFY_SUBDOMAIN}"],
+      "disabled": false
+    },
+    "env_required": ["MINTLIFY_SUBDOMAIN"],
+    "notes": "Set MINTLIFY_SUBDOMAIN to your Mintlify subdomain. Runs locally via stdio, searches hosted docs. Essential for agents to understand system architecture. Alternative: use HTTP mode with url https://<subdomain>.mintlify.app/mcp."
   }
 }
