@@ -771,6 +771,54 @@ if [ -f "$SCRIPT_DIR/templates/hooks/stuck-detector.js" ]; then
   fi
 fi
 
+# PII detector shared module (installed before sanitize-guard which depends on it)
+if [ -f "$SCRIPT_DIR/templates/hooks/pii-detector.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/pii-detector.js" "$CLAUDE_DIR/hooks/pii-detector.js" "pii detector module: pii-detector.js"
+fi
+
+# Sanitize guard hook (dual-mode: PostToolUse all tools + PreToolUse Edit/Write)
+if [ -f "$SCRIPT_DIR/templates/hooks/sanitize-guard.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/sanitize-guard.js" "$CLAUDE_DIR/hooks/sanitize-guard.js" "sanitize guard: sanitize-guard.js"
+
+  echo ""
+  echo "--- Configuring sanitize-guard in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  SANITIZE_CMD="node $CLAUDE_DIR/hooks/sanitize-guard.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add sanitize-guard hooks (PostToolUse + PreToolUse) to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    # PostToolUse entry: no matcher (fires on ALL tools to scan responses)
+    if grep -q "sanitize-guard" "$SETTINGS_FILE" 2>/dev/null; then
+      echo "ALREADY CONFIGURED: sanitize-guard hook in settings.json"
+    else
+      node -e "
+        const fs = require('fs');
+        const path = require('path');
+        const settingsPath = path.resolve(process.argv[1]);
+        const hookCmd = process.argv[2];
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (!settings.hooks) settings.hooks = {};
+        if (!settings.hooks.PostToolUse) settings.hooks.PostToolUse = [];
+        settings.hooks.PostToolUse.push({
+          hooks: [{ type: 'command', command: hookCmd, timeout: 5 }]
+        });
+        if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+        settings.hooks.PreToolUse.push({
+          matcher: 'Edit|Write',
+          hooks: [{ type: 'command', command: hookCmd, timeout: 5 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      " "$SETTINGS_FILE" "$SANITIZE_CMD"
+      echo "CONFIGURED: sanitize-guard hooks in settings.json (PostToolUse + PreToolUse Edit|Write)"
+    fi
+  fi
+fi
+
 # --- Install CLI scripts (q, qa, claude-loop) ---
 
 echo ""
@@ -1006,7 +1054,7 @@ for skill_dir in "$PROFILE_DIR/skills"/*/; do
   [ -d "$skill_dir" ] || continue
   echo "  /$(basename "$skill_dir") skill  -> $CLAUDE_DIR/skills/$(basename "$skill_dir")/"
 done
-echo "  MCP registry     -> settings.json mcpServers (15 servers, github enabled)"
+echo "  MCP registry     -> settings.json mcpServers (19 servers, github enabled)"
 echo "  Managed repos    -> ~/.claude/repos/ (from resources.json, if present)"
 echo "  CLI scripts      -> $LOCAL_BIN/ (q, qa, claude-loop, knowledge-consolidate)"
 echo "  Session hooks    -> $CLAUDE_DIR/hooks/ (auto-run on session start/end)"
