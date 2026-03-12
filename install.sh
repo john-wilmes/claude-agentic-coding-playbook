@@ -870,6 +870,44 @@ if [ -f "$SCRIPT_DIR/templates/hooks/sanitize-guard.js" ]; then
   fi
 fi
 
+# Filesize guard hook (PreToolUse: blocks oversized/binary file reads)
+if [ -f "$SCRIPT_DIR/templates/hooks/filesize-guard.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/filesize-guard.js" "$CLAUDE_DIR/hooks/filesize-guard.js" "filesize guard: filesize-guard.js"
+
+  echo ""
+  echo "--- Configuring filesize-guard in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  FILESIZE_CMD="node $CLAUDE_DIR/hooks/filesize-guard.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add filesize-guard hook (PreToolUse Read|Bash) to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    if grep -q "filesize-guard" "$SETTINGS_FILE" 2>/dev/null; then
+      echo "ALREADY CONFIGURED: filesize-guard hook in settings.json"
+    else
+      node -e "
+        const fs = require('fs');
+        const path = require('path');
+        const settingsPath = path.resolve(process.argv[1]);
+        const hookCmd = process.argv[2];
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (!settings.hooks) settings.hooks = {};
+        if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+        settings.hooks.PreToolUse.push({
+          matcher: 'Read|Bash',
+          hooks: [{ type: 'command', command: hookCmd, timeout: 5 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      " "$SETTINGS_FILE" "$FILESIZE_CMD"
+      echo "CONFIGURED: filesize-guard hook in settings.json (PreToolUse Read|Bash)"
+    fi
+  fi
+fi
+
 # --- Install CLI scripts (q, qa, claude-loop) ---
 
 echo ""
