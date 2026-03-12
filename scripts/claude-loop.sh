@@ -334,20 +334,39 @@ if total_duration_ms > 0:
 PYEOF
 }
 
-# ─── Cleanup / signal handling ────────────────────────────────────────────────
+# ─── Signal handling ──────────────────────────────────────────────────────────
+#
+# Soft/hard signal strategy:
+#   First signal  → sets SIGNAL_RECEIVED flag, lets main loop decide based on
+#                   sentinel (restart if context-guard requested it, else stop).
+#   Second signal → force-stops immediately (user really wants out).
+#
+# This prevents a propagated SIGINT (e.g. from `claude` exiting) from nuking
+# the sentinel file that context-guard wrote for auto-restart.
 
 LOOP_RUNNING=false
+SIGNAL_RECEIVED=false
+SIGNAL_COUNT=0
 
-cleanup() {
-  LOOP_RUNNING=false
-  rm -f "${SENTINEL_FILE}"
-  log_event "event=loop_event" "message=loop stopped by signal" "pid=$$" 2>/dev/null || true
+handle_signal() {
+  SIGNAL_COUNT=$(( SIGNAL_COUNT + 1 ))
+  SIGNAL_RECEIVED=true
+
+  if [[ "${SIGNAL_COUNT}" -ge 2 ]]; then
+    # Hard stop: user pressed Ctrl+C twice
+    rm -f "${SENTINEL_FILE}"
+    log_event "event=loop_event" "message=force stopped by repeated signal" "pid=$$" 2>/dev/null || true
+    echo ""
+    echo "claude-loop: force stopped."
+    exit 0
+  fi
+
+  # Soft stop: flag it, let the main loop handle restart-vs-stop
   echo ""
-  echo "claude-loop: received signal, stopping."
-  exit 0
+  echo "claude-loop: signal received (Ctrl+C again to force stop)."
 }
 
-trap cleanup SIGINT SIGTERM
+trap handle_signal SIGINT SIGTERM
 
 # ─── Dry-run helper ───────────────────────────────────────────────────────────
 
@@ -475,17 +494,23 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
   DURATION_MS="$(( SESSION_END_MS - SESSION_START_MS ))"
 
   # ── Signal-death check ────────────────────────────────────────────────────
-  # Exit code 130 = SIGINT (Ctrl+C), 143 = SIGTERM. Stop immediately,
-  # ignoring any sentinel file that context-guard may have written.
-  # Note: the `|| EXIT_CODE=$?` above suppresses bash's SIGINT trap, so
-  # this exit-code check is the primary defense for Ctrl+C during `claude`.
+  # Exit code 130 = SIGINT (Ctrl+C), 143 = SIGTERM.
+  # If a sentinel exists, context-guard requested a restart — honor it.
+  # Only stop if there's no sentinel (user genuinely wants out).
   if [[ "${EXIT_CODE}" -eq 130 || "${EXIT_CODE}" -eq 143 ]]; then
-    rm -f "${SENTINEL_FILE}"
-    log_event "event=loop_event" "message=stopped by signal" "exit_code=${EXIT_CODE}"
-    echo ""
-    echo "claude-loop: stopped by signal (exit ${EXIT_CODE})."
-    break
+    if [[ ! -f "${SENTINEL_FILE}" ]]; then
+      log_event "event=loop_event" "message=stopped by signal, no sentinel" "exit_code=${EXIT_CODE}"
+      echo "claude-loop: stopped by signal (exit ${EXIT_CODE})."
+      break
+    fi
+    # Sentinel exists — fall through to the sentinel-detection logic below
+    log_event "event=loop_event" "message=signal received but sentinel present, restarting" "exit_code=${EXIT_CODE}"
+    echo "claude-loop: signal received but sentinel found — will restart."
   fi
+
+  # Reset signal state for next iteration
+  SIGNAL_RECEIVED=false
+  SIGNAL_COUNT=0
 
   SESSION_COUNT="$(( SESSION_COUNT + 1 ))"
 
@@ -534,11 +559,14 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
     sleep 5
     # Loop continues (restart)
   else
-    # Natural exit or Ctrl+C handled by trap — stop the loop.
     log_event "event=loop_event" "message=natural exit, loop stopped" "exit_code=${EXIT_CODE}"
     echo "claude-loop: claude exited without sentinel (exit ${EXIT_CODE}), stopping."
     LOOP_RUNNING=false
   fi
+
+  # Reset signal state for next iteration (if restarting)
+  SIGNAL_RECEIVED=false
+  SIGNAL_COUNT=0
 
 done
 
