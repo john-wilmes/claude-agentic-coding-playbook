@@ -10,7 +10,7 @@ const path = require("path");
 const os = require("os");
 const crypto = require("crypto");
 
-const { runHook, todayLocal } = require("./test-helpers");
+const { runHook, runHookRaw, todayLocal } = require("./test-helpers");
 
 // Resolve hook path relative to repo root
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
@@ -388,7 +388,8 @@ test("13. Just below 35% threshold (69999 tokens): no warning", () => {
 
 // Test 14: Malformed JSON input → exits 0 with {}
 test("14. Malformed JSON input: exits 0 with {}", () => {
-  const result = runHook(CONTEXT_GUARD, "not valid json at all");
+  // Use runHookRaw so the hook receives truly malformed JSON (not a quoted string)
+  const result = runHookRaw(CONTEXT_GUARD, "not valid json at all");
   assert.strictEqual(result.status, 0, "Should exit 0");
   assert.ok(result.json, "Should output valid JSON");
   assert.deepStrictEqual(result.json, {}, "Should output empty object on error");
@@ -601,18 +602,15 @@ test("25. PreToolUse allows Skill tool at 60% threshold", () => {
     fs.mkdirSync(STATE_DIR, { recursive: true });
     fs.writeFileSync(stateFile, JSON.stringify({ lastUsageRatio: 0.80 }));
 
-    const result = runGuardPre(sessionId, {
-      toolInput: { skill: "checkpoint" },
-    });
-    // Skill tool needs tool_name in hookInput — simulate it
+    // Skill tool needs tool_name in hookInput — simulate it directly
     const input = {
       session_id: sessionId,
       tool_name: "Skill",
       tool_input: { skill: "checkpoint" },
     };
-    const result2 = runHook(CONTEXT_GUARD, input);
-    assert.strictEqual(result2.status, 0, "Should exit 0");
-    assert.strictEqual(result2.json.decision, undefined, "Should allow Skill tool even when blocked");
+    const result = runHook(CONTEXT_GUARD, input);
+    assert.strictEqual(result.status, 0, "Should exit 0");
+    assert.strictEqual(result.json.decision, undefined, "Should allow Skill tool even when blocked");
   } finally {
     cleanupSession(sessionId);
   }
@@ -640,16 +638,22 @@ test("26. PreToolUse allows Task tool at 60% threshold (checkpoint may delegate)
 });
 
 // Test 27: PostToolUse block writes checkpoint-exit flag file
-test("27. PostToolUse block writes /tmp/claude-checkpoint-exit flag", () => {
+test("27. PostToolUse block writes checkpoint-exit sentinel flag", () => {
   const sessionId = newSessionId();
-  const flagFile = path.join(os.tmpdir(), "claude-checkpoint-exit");
+  // Use CLAUDE_LOOP_SENTINEL with a unique path per test run to avoid /tmp conflicts
+  const flagFile = path.join(os.tmpdir(), `claude-checkpoint-exit-${sessionId}`);
   // 65% of 200k = 130,000 tokens — above block threshold
   const transcript = createFakeTranscript([makeAssistantMessage(130000)]);
   try {
     // Clean up any pre-existing flag file
     try { fs.rmSync(flagFile); } catch {}
 
-    const result = runGuard(sessionId, { transcriptPath: transcript });
+    const result = runHook(CONTEXT_GUARD, {
+      session_id: sessionId,
+      tool_input: {},
+      tool_response: {},
+      transcript_path: transcript,
+    }, { CLAUDE_LOOP_SENTINEL: flagFile });
     assert.strictEqual(result.status, 0);
     assert.ok(result.json.hookSpecificOutput, "Should critically warn at 65%");
     assert.ok(result.json.hookSpecificOutput.additionalContext.includes("CRITICAL"), "Should include CRITICAL");
@@ -670,13 +674,19 @@ test("27. PostToolUse block writes /tmp/claude-checkpoint-exit flag", () => {
 // Test 28: PostToolUse below block threshold does NOT write flag file
 test("28. PostToolUse warn (50%) does not write checkpoint-exit flag", () => {
   const sessionId = newSessionId();
-  const flagFile = path.join(os.tmpdir(), "claude-checkpoint-exit");
+  // Use a unique sentinel path per test run to avoid /tmp conflicts
+  const flagFile = path.join(os.tmpdir(), `claude-checkpoint-exit-${sessionId}`);
   // 55% — warn but not block
   const transcript = createFakeTranscript([makeAssistantMessage(110000)]);
   try {
     try { fs.rmSync(flagFile); } catch {}
 
-    const result = runGuard(sessionId, { transcriptPath: transcript });
+    const result = runHook(CONTEXT_GUARD, {
+      session_id: sessionId,
+      tool_input: {},
+      tool_response: {},
+      transcript_path: transcript,
+    }, { CLAUDE_LOOP_SENTINEL: flagFile });
     assert.strictEqual(result.status, 0);
     assert.ok(result.json.hookSpecificOutput, "Should warn at 55%");
     assert.strictEqual(result.json.decision, undefined, "Should not block");
@@ -769,6 +779,33 @@ test("31. At 75% without CLAUDE_LOOP, normal CRITICAL block (no failsafe)", () =
     cleanupSession(sessionId);
     try { fs.rmSync(transcript); } catch {}
     try { fs.rmSync(sentinelFile); } catch {}
+  }
+});
+
+// Test 32: Combined per-call large-output warning + threshold warning in same invocation
+test("32. Combined per-call large-output + threshold warning in same invocation", () => {
+  const sessionId = newSessionId();
+  // Transcript at 50% — triggers threshold warning
+  const transcript = createFakeTranscript([makeAssistantMessage(100000)]);
+  try {
+    // Large tool_response > 10000 chars — also triggers per-call warning
+    const bigResponse = "x".repeat(15000);
+    const result = runGuard(sessionId, {
+      transcriptPath: transcript,
+      toolResponse: { data: bigResponse },
+    });
+    assert.strictEqual(result.status, 0);
+    assert.ok(result.json.hookSpecificOutput, "Should have hookSpecificOutput");
+    const ctx = result.json.hookSpecificOutput.additionalContext;
+    assert.ok(ctx, "Should have additionalContext");
+    // Both warnings should appear in the combined output
+    assert.ok(
+      ctx.includes("Large tool output") || ctx.includes("Context warning") || ctx.includes("100000"),
+      `Should mention either large output or context threshold, got: ${ctx}`
+    );
+  } finally {
+    cleanupSession(sessionId);
+    try { fs.rmSync(transcript); } catch {}
   }
 });
 

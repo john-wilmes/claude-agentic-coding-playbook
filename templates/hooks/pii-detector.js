@@ -56,12 +56,15 @@ const PATTERNS = {
   PHONE_US: {
     // \b before the area code only applies when it starts with a digit (no parens).
     // The alternation handles both "(555) 867-5309" and "555-867-5309".
-    regex: /(?<!\d)(?:\+?1[-.\s]?)?(?:\(\d{3}\)[-.\s]?|\b\d{3}[-.\s])\d{3}[-.\s]?\d{4}\b/g,
+    // Dot removed from separators to avoid matching version strings like "2.0.0-1234".
+    regex: /(?<!\d)(?:\+?1[-\s]?)?(?:\(\d{3}\)[-\s]?|\b\d{3}[-\s])\d{3}[-\s]?\d{4}\b/g,
     placeholder: "[PHONE]",
   },
   CREDIT_CARD: {
-    // Broad pattern — Luhn-validated post-match to eliminate false positives
-    regex: /\b(?:\d[ -]*?){13,19}\b/g,
+    // Requires separator pattern (spaces or hyphens between groups) like real card numbers.
+    // Matches: 4111-1111-1111-1111, 4111 1111 1111 1111
+    // Does NOT match: 4111111111111111 (unseparated digits — too many false positives in code)
+    regex: /\b\d{4}[- ]\d{4}[- ]\d{4}[- ]\d{1,7}(?:[- ]\d{1,4})?\b/g,
     placeholder: "[CREDIT_CARD]",
     validate(match) {
       const digits = match.replace(/[ -]/g, "");

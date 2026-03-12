@@ -127,17 +127,21 @@ function getContextUsage(hookInput, state) {
     };
   }
 
-  // Fallback: estimate from tool I/O (both input and response)
+  // Fallback: estimate from tool I/O (both input and response).
+  // Tool I/O is only a fraction of total context — system prompt, conversation
+  // history, and assistant turns typically add ~2x overhead. Apply a 2x
+  // multiplier so the estimate is conservative rather than severely low.
+  const IO_OVERHEAD_MULTIPLIER = 2;
   const inputStr = JSON.stringify(hookInput.tool_input || {});
   const responseStr = JSON.stringify(hookInput.tool_response || {});
   const ioChars = inputStr.length + responseStr.length;
 
-  state.cumulativeEstimatedTokens += Math.round(ioChars / CHARS_PER_TOKEN);
+  state.cumulativeEstimatedTokens += Math.round((ioChars / CHARS_PER_TOKEN) * IO_OVERHEAD_MULTIPLIER);
 
   return {
     ratio: state.cumulativeEstimatedTokens / CONTEXT_WINDOW,
     tokens: state.cumulativeEstimatedTokens,
-    stats: `(~${state.cumulativeEstimatedTokens} tokens estimated from tool I/O, ${state.toolCalls} calls)`,
+    stats: `(~${state.cumulativeEstimatedTokens} tokens estimated from tool I/O x${IO_OVERHEAD_MULTIPLIER}, ${state.toolCalls} calls)`,
   };
 }
 

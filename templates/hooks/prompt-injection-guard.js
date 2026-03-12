@@ -6,8 +6,19 @@ const INJECTION_PATTERNS = [
   { pattern: /disregard\s+(all\s+)?previous/i, reason: "Prompt injection: instruction disregard attempt" },
   { pattern: /forget\s+everything/i, reason: "Prompt injection: memory wipe attempt" },
   { pattern: /you\s+are\s+now\s+a/i, reason: "Prompt injection: role assignment attempt" },
+  // Credential exfiltration via network tools (curl/wget sending secret env vars or credential files)
   { pattern: /curl\s+.*\$\{?\w*(?:KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)\w*\}?/i, reason: "Potential credential exfiltration via curl" },
   { pattern: /wget\s+.*\$\{?\w*(?:KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)\w*\}?/i, reason: "Potential credential exfiltration via wget" },
+  // Reading sensitive credential files and piping/sending them out
+  { pattern: /cat\s+(?:~\/\.ssh\/|~\/\.aws\/credentials|\/etc\/shadow|\/etc\/passwd|\$HOME\/\.ssh\/)/, reason: "Potential credential exfiltration: reading sensitive credential file" },
+  { pattern: /cat\s+\.env\b/, reason: "Potential credential exfiltration: reading .env file" },
+  // One-liner file reads in scripting languages used to exfiltrate
+  { pattern: /python3?\s+-c\s+['"].*open\s*\(.*(?:\.env|credentials|shadow|\.ssh)/, reason: "Potential credential exfiltration via Python one-liner" },
+  { pattern: /ruby\s+-e\s+['"].*File\.read.*(?:\.env|credentials|shadow|\.ssh)/, reason: "Potential credential exfiltration via Ruby one-liner" },
+  { pattern: /perl\s+-e\s+['"].*(?:open|read).*(?:\.env|credentials|shadow|\.ssh)/, reason: "Potential credential exfiltration via Perl one-liner" },
+  // Netcat/ncat used as exfiltration channel
+  { pattern: /\b(?:nc|ncat|netcat)\b.*\d{1,5}\s*</, reason: "Potential data exfiltration via netcat" },
+  { pattern: /\|\s*(?:nc|ncat|netcat)\b/, reason: "Potential data exfiltration via netcat pipe" },
 ];
 
 // Destructive command patterns — ordered from most- to least-specific so
@@ -33,14 +44,26 @@ const DESTRUCTIVE_PATTERNS = [
     },
     reason: "Destructive command: force-push to main/master is not allowed",
   },
-  // rm -rf / or rm -rf ~/ (root or home deletion only — scoped paths pass)
+  // rm -rf targeting root, home, /* glob, or using sudo on broad paths
   {
     test(cmd) {
-      return /\brm\s+.*-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*\s+(\/|~\/)\s*$/.test(cmd) ||
-             /\brm\s+.*-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*\s+(\/|~\/)\s*;/.test(cmd) ||
-             /\brm\s+.*-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*\s+(\/|~\/)$/.test(cmd);
+      // Match rm with any combination of -r/-f flags (e.g. -rf, -fr, -r -f, --recursive)
+      const hasRmRf = /\brm\b/.test(cmd) && (
+        /\brm\s+(?:\S+\s+)*-[a-zA-Z]*r[a-zA-Z]*f/.test(cmd) ||
+        /\brm\s+(?:\S+\s+)*-[a-zA-Z]*f[a-zA-Z]*r/.test(cmd) ||
+        /\brm\s+(?:\S+\s+)*--recursive/.test(cmd) ||
+        /\brm\s+(?:\S+\s+)*-r\b/.test(cmd)
+      );
+      if (!hasRmRf) return false;
+      // Block: root (/), home (~/), /* glob, /tmp/* equivalent to root, sudo rm -rf
+      return (
+        /\brm\s.*\s(\/|~\/)\s*($|;|&&|\|)/.test(cmd) ||
+        /\brm\s.*\s\/\*/.test(cmd) ||
+        /\brm\s.*\s~\/\*/.test(cmd) ||
+        /\bsudo\s+rm\b/.test(cmd)
+      );
     },
-    reason: "Destructive command: rm -rf / or rm -rf ~/ would delete the root or home directory",
+    reason: "Destructive command: rm -rf on root, home, or broad glob would cause irreversible data loss",
   },
   // DROP TABLE / DROP DATABASE / DROP SCHEMA (SQL, case-insensitive)
   {

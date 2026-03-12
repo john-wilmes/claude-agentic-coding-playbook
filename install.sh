@@ -98,13 +98,41 @@ install_sys_package() {
     local apt_pkg="$pkg"
     [[ "$pkg" == "node" ]] && apt_pkg="nodejs"
     if command -v apt-get &>/dev/null; then
-      sudo apt-get update -qq && sudo apt-get install -y "$apt_pkg"
+      echo "  Installing $apt_pkg requires sudo. Proceed? [y/N]"
+      read -r consent
+      if [[ "$consent" =~ ^[Yy] ]]; then
+        sudo apt-get update -qq && sudo apt-get install -y "$apt_pkg"
+      else
+        echo "  Skipped. Install $apt_pkg manually and re-run."
+        return 1
+      fi
     elif command -v dnf &>/dev/null; then
-      sudo dnf install -y "$apt_pkg"
+      echo "  Installing $apt_pkg requires sudo. Proceed? [y/N]"
+      read -r consent
+      if [[ "$consent" =~ ^[Yy] ]]; then
+        sudo dnf install -y "$apt_pkg"
+      else
+        echo "  Skipped. Install $apt_pkg manually and re-run."
+        return 1
+      fi
     elif command -v pacman &>/dev/null; then
-      sudo pacman -S --noconfirm "$apt_pkg"
+      echo "  Installing $apt_pkg requires sudo. Proceed? [y/N]"
+      read -r consent
+      if [[ "$consent" =~ ^[Yy] ]]; then
+        sudo pacman -S --noconfirm "$apt_pkg"
+      else
+        echo "  Skipped. Install $apt_pkg manually and re-run."
+        return 1
+      fi
     elif command -v apk &>/dev/null; then
-      sudo apk add "$apt_pkg"
+      echo "  Installing $apt_pkg requires sudo. Proceed? [y/N]"
+      read -r consent
+      if [[ "$consent" =~ ^[Yy] ]]; then
+        sudo apk add "$apt_pkg"
+      else
+        echo "  Skipped. Install $apt_pkg manually and re-run."
+        return 1
+      fi
     else
       echo "  ERROR: No supported package manager found (need apt-get, dnf, pacman, or apk)."
       return 1
@@ -202,6 +230,19 @@ install_file() {
   fi
 }
 
+copy_skill_subdirs() {
+  local skill_name="$1"
+  local dest_dir="$2"
+  for subdir in "$PROFILE_DIR/skills/$skill_name"/*/; do
+    [ -d "$subdir" ] || continue
+    local subdir_name
+    subdir_name=$(basename "$subdir")
+    if [ "$DRY_RUN" != true ]; then
+      cp -r "$subdir" "$dest_dir/$subdir_name"
+    fi
+  done
+}
+
 install_skill() {
   local skill_name="$1"
   local src="$PROFILE_DIR/skills/$skill_name/SKILL.md"
@@ -227,11 +268,13 @@ install_skill() {
     case $choice in
       o|O)
         cp "$src" "$dest"
+        copy_skill_subdirs "$skill_name" "$dest_dir"
         echo "  -> Overwritten."
         ;;
       b|B)
         cp "$dest" "$dest.backup.$(date +%Y%m%d%H%M%S)" 2>/dev/null || true
         cp "$src" "$dest"
+        copy_skill_subdirs "$skill_name" "$dest_dir"
         echo "  -> Backed up and overwritten."
         ;;
       *)
@@ -241,6 +284,7 @@ install_skill() {
   else
     mkdir -p "$dest_dir"
     cp "$src" "$dest"
+    copy_skill_subdirs "$skill_name" "$dest_dir"
     echo "INSTALLED SKILL: $skill_name"
   fi
 }
@@ -405,6 +449,11 @@ if [ -f "$SCRIPT_DIR/templates/hooks/log.js" ]; then
   install_file "$SCRIPT_DIR/templates/hooks/log.js" "$CLAUDE_DIR/hooks/log.js" "shared logging module: log.js"
 fi
 
+# BM25 search module (installed before knowledge-db which depends on it)
+if [ -f "$SCRIPT_DIR/templates/hooks/bm25.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/bm25.js" "$CLAUDE_DIR/hooks/bm25.js" "bm25 search module: bm25.js"
+fi
+
 # Knowledge database module (installed before hooks that depend on it)
 if [ -f "$SCRIPT_DIR/templates/hooks/knowledge-db.js" ]; then
   install_file "$SCRIPT_DIR/templates/hooks/knowledge-db.js" "$CLAUDE_DIR/hooks/knowledge-db.js" "knowledge database module: knowledge-db.js"
@@ -424,7 +473,7 @@ for hook_file in "$SCRIPT_DIR/templates/hooks"/session-*.js; do
   # Derive hook event from filename: session-start.js -> SessionStart
   base_name=$(basename "$hook_file" .js)           # session-start
   event_suffix="${base_name#session-}"              # start
-  hook_event="Session$(echo "$event_suffix" | sed 's/./\U&/')"  # SessionStart
+  hook_event="Session$(echo "${event_suffix:0:1}" | tr '[:lower:]' '[:upper:]')${event_suffix:1}"  # SessionStart
   SETTINGS_FILE="$CLAUDE_DIR/settings.json"
   HOOK_CMD="node $CLAUDE_DIR/hooks/$hook_name"
 
@@ -435,25 +484,27 @@ for hook_file in "$SCRIPT_DIR/templates/hooks"/session-*.js; do
       echo "{}" > "$SETTINGS_FILE"
     fi
 
-    if grep -q "$hook_name" "$SETTINGS_FILE" 2>/dev/null; then
-      echo "ALREADY CONFIGURED: $hook_name hook in settings.json"
-    else
-      node -e "
-        const fs = require('fs');
-        const path = require('path');
-        const settingsPath = path.resolve(process.argv[1]);
-        const hookEvent = process.argv[2];
-        const hookCmd = process.argv[3];
-        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-        if (!settings.hooks) settings.hooks = {};
-        if (!settings.hooks[hookEvent]) settings.hooks[hookEvent] = [];
-        settings.hooks[hookEvent].push({
-          hooks: [{ type: 'command', command: hookCmd, timeout: 10 }]
-        });
-        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
-      " "$SETTINGS_FILE" "$hook_event" "$HOOK_CMD"
-      echo "CONFIGURED: $hook_name hook in settings.json ($hook_event)"
-    fi
+    # Upsert: remove any existing entry for this hook, then add the new one
+    node -e "
+      const fs = require('fs');
+      const path = require('path');
+      const settingsPath = path.resolve(process.argv[1]);
+      const hookEvent = process.argv[2];
+      const hookCmd = process.argv[3];
+      const hookFile = process.argv[4];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.hooks) settings.hooks = {};
+      if (!settings.hooks[hookEvent]) settings.hooks[hookEvent] = [];
+      // Remove any existing entry for this hook file
+      settings.hooks[hookEvent] = settings.hooks[hookEvent].filter(e =>
+        !(e.hooks && e.hooks.some(h => h.command && h.command.includes(hookFile)))
+      );
+      settings.hooks[hookEvent].push({
+        hooks: [{ type: 'command', command: hookCmd, timeout: 10 }]
+      });
+      fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+    " "$SETTINGS_FILE" "$hook_event" "$HOOK_CMD" "$hook_name"
+    echo "CONFIGURED: $hook_name hook in settings.json ($hook_event)"
   fi
 done
 
@@ -1054,7 +1105,8 @@ for skill_dir in "$PROFILE_DIR/skills"/*/; do
   [ -d "$skill_dir" ] || continue
   echo "  /$(basename "$skill_dir") skill  -> $CLAUDE_DIR/skills/$(basename "$skill_dir")/"
 done
-echo "  MCP registry     -> settings.json mcpServers (19 servers, github enabled)"
+SERVER_COUNT=$(node -e "const r=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log(Object.keys(r).length)" "$REGISTRY_FILE" 2>/dev/null || echo "?")
+echo "  MCP registry     -> settings.json mcpServers ($SERVER_COUNT servers)"
 echo "  Managed repos    -> ~/.claude/repos/ (from resources.json, if present)"
 echo "  CLI scripts      -> $LOCAL_BIN/ (q, qa, claude-loop, knowledge-consolidate)"
 echo "  Session hooks    -> $CLAUDE_DIR/hooks/ (auto-run on session start/end)"

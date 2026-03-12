@@ -117,7 +117,7 @@ The combined CLAUDE.md includes:
 
 ## Testing
 
-Run the full test suite (161 tests across 10 suites):
+Run the full test suite (~280 tests across 19 suites):
 
 ```bash
 # Hook tests (Node.js)

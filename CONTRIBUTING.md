@@ -105,11 +105,28 @@ bash install.sh --dry-run
 Unit tests for hooks and investigation scoring can be run directly with Node:
 
 ```bash
+# Hook tests (Node.js)
+node tests/hooks/bm25.test.js
+node tests/hooks/context-guard.test.js
+node tests/hooks/knowledge-capture.test.js
+node tests/hooks/knowledge-db.test.js
+node tests/hooks/log.test.js
 node tests/hooks/model-router.test.js
-node tests/hooks/session-hooks.test.js
-node tests/hooks/prompt-injection-guard.test.js
+node tests/hooks/pii-detector.test.js
 node tests/hooks/post-tool-verify.test.js
-node tests/investigate/score.test.js
+node tests/hooks/prompt-injection-guard.test.js
+node tests/hooks/pr-review-guard.test.js
+node tests/hooks/sanitize-guard.test.js
+node tests/hooks/session-hooks.test.js
+node tests/hooks/session-start.test.js
+node tests/hooks/stuck-detector.test.js
+
+# Script tests (Bash)
+bash tests/scripts/claude-loop.test.sh
+bash tests/scripts/knowledge-consolidate.test.sh
+bash tests/scripts/mcp-registry.test.sh
+bash tests/scripts/qa.test.sh
+bash tests/scripts/q.test.sh
 ```
 
 **Note:** The E2E dogfood tests (`scripts/dogfood-e2e.sh`, `scripts/ec2-dogfood.sh`) require the `claude` CLI to be installed and must be run outside of Claude Code.

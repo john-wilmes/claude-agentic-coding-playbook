@@ -2168,7 +2168,7 @@ evaluation methodology — have explicit empirical grounding.
 #### Context rot
 
 Chroma Research (2025) tested 18 frontier models across controlled fill levels and
-found non-linear performance degradation in all of them [37]. Based on the reported
+found non-linear performance degradation in all of them [54]. Based on the reported
 degradation curves, the practical ceiling appears to be roughly 60-70% of advertised maximum.
 Counterintuitively, coherently structured content (e.g., a well-organized codebase)
 degrades faster than shuffled haystacks, because the model's attention patterns over
@@ -2215,7 +2215,7 @@ full output to the sequence. A single `/read` on a 500-line file adds ~3,000 tok
 
 | Finding | Source | Practical threshold |
 |---------|--------|---------------------|
-| Effective capacity 60-70% of maximum | Chroma [37] | Compact at 60% |
+| Effective capacity 60-70% of maximum | Chroma [54] | Compact at 60% |
 | 15-30% retrieval loss for mid-context | Liu et al. [39] | Put critical facts first/last |
 | Length penalty 13.9-85% despite perfect retrieval | arXiv:2510.05381 [48] | Minimize total input |
 | 84% of tokens are tool observations | JetBrains [38] | Mask old tool outputs |
@@ -2525,7 +2525,7 @@ Last updated: 2026-03-10
 
 37. **Speakeasy -- How We Reduced Token Usage by 100x: Dynamic Toolsets.** https://www.speakeasy.com/blog/how-we-reduced-token-usage-by-100x-dynamic-toolsets-v2 -- Three-tool pattern (search/describe/execute) replacing static MCP tool schemas; benchmarks showing 91-97% input token reduction at 40-400 tools; tradeoff analysis (2-3x more calls, ~50% longer execution).
 
-37. **Chroma Research -- Context Rot.** https://research.trychroma.com/context-rot -- Non-linear performance degradation across 18 frontier models at controlled fill levels; practical ceiling at 60-70% of advertised maximum; coherent content degrades faster than shuffled haystacks.
+54. **Chroma Research -- Context Rot.** https://research.trychroma.com/context-rot -- Non-linear performance degradation across 18 frontier models at controlled fill levels; practical ceiling at 60-70% of advertised maximum; coherent content degrades faster than shuffled haystacks.
 
 38. **JetBrains Research -- Agent Observation Token Analysis (arXiv:2508.21433).** https://arxiv.org/abs/2508.21433 -- Tool observations comprise 84% of agent context tokens in SWE-bench runs; observation masking achieves 52.7% cost reduction with +1.4% solve rate.
 

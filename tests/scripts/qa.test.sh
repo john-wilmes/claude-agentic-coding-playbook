@@ -67,6 +67,87 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Test 5: --no-log flag is recognised (wrong key → rejected before API call)
+# ---------------------------------------------------------------------------
+if output=$(env ANTHROPIC_API_KEY="invalid-key-no-call" "$QA" --no-log "hello" 2>&1); then
+  fail "--no-log with bad key should exit non-zero"
+else
+  if echo "$output" | grep -q "Unknown flag"; then
+    fail "--no-log was not recognised (got 'Unknown flag')"
+  else
+    pass "--no-log flag is recognised (no 'Unknown flag' error)"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Test 6: --model flag is recognised
+# ---------------------------------------------------------------------------
+if output=$(env ANTHROPIC_API_KEY="invalid-key-no-call" "$QA" --model claude-opus-4-6 "hello" 2>&1); then
+  fail "--model with bad key should exit non-zero"
+else
+  if echo "$output" | grep -q "Unknown flag"; then
+    fail "--model was not recognised (got 'Unknown flag')"
+  else
+    pass "--model flag is recognised (no 'Unknown flag' error)"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Test 7: unknown flag exits 1 with an error message
+# ---------------------------------------------------------------------------
+if output=$(env ANTHROPIC_API_KEY="fake" "$QA" --unknown-flag "hello" 2>&1); then
+  fail "--unknown-flag should exit non-zero"
+else
+  exit_code=$?
+  if echo "$output" | grep -qiE "unknown|unrecognized|invalid"; then
+    pass "Unknown flag exits non-zero with descriptive error"
+  else
+    fail "Unknown flag: unexpected output: $output"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Test 8: No prompt and no stdin (interactive TTY) exits 1 with clear error.
+# Note: qa reads from stdin when stdin is a pipe, treating empty stdin as an
+# empty prompt (API call). This test verifies the TTY/no-args path exits non-zero.
+# ---------------------------------------------------------------------------
+set +e
+output=$(env ANTHROPIC_API_KEY="fake" "$QA" --no-log 2>&1 </dev/null)
+exit_code=$?
+set -e
+if [[ "$exit_code" -ne 0 ]]; then
+  pass "No prompt (no args, /dev/null stdin) exits non-zero ($exit_code)"
+else
+  fail "No prompt (no args, /dev/null stdin) should exit non-zero but exited 0"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 9: --help output mentions --max-turns
+# ---------------------------------------------------------------------------
+if output=$("$QA" --help 2>&1); then
+  if echo "$output" | grep -q "\-\-max-turns"; then
+    pass "--help mentions --max-turns"
+  else
+    fail "--help output missing '--max-turns'"
+  fi
+else
+  fail "--help exited non-zero (test 9)"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 10: --help output mentions --model
+# ---------------------------------------------------------------------------
+if output=$("$QA" --help 2>&1); then
+  if echo "$output" | grep -q "\-\-model"; then
+    pass "--help mentions --model"
+  else
+    fail "--help output missing '--model'"
+  fi
+else
+  fail "--help exited non-zero (test 10)"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
