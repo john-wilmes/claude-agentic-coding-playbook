@@ -134,15 +134,35 @@ When recording evidence or findings during investigations:
 
 ## PII/PHI Sanitization (Runtime)
 
-When the `presidio` MCP server is enabled:
-- Use Presidio tools to scan text that may contain PII/PHI before including it in outputs, commits, or investigation files.
-- Flag suspected PII to the user rather than silently processing it.
-- Use standard placeholders (`[PATIENT]`, `[MRN]`, `[SSN]`, `[DOB]`, `[EMAIL]`, `[PHONE]`) when anonymizing.
-- Presidio is one layer of defense — it supplements, not replaces, manual review for sensitive workflows.
+The `sanitize-guard` hook provides automatic PII/PHI detection and redaction at runtime:
 
-When the `presidio` MCP server is not enabled:
-- Apply the same placeholder conventions manually.
-- Suggest enabling Presidio when encountering repeated PII in tool results.
+**How it works:**
+- **PostToolUse**: After any tool returns results, scans output for PII. If found, emits a redacted copy as additionalContext.
+- **PreToolUse**: Before Edit/Write, scans content for PII. If found, blocks the write and returns a redacted version to retry with.
+
+**Opt-in per repo**: Create `.claude/sanitize.yaml` in your project:
+```yaml
+sanitization:
+  enabled: true
+  entities:        # which PII types to scan (default: all)
+    - US_SSN
+    - EMAIL
+    - PHONE_US
+    - CREDIT_CARD
+    - IP_ADDRESS
+    - MRN
+    - DOB
+  exclude_paths:   # glob patterns to skip
+    - "tests/fixtures/**"
+  custom_patterns:  # repo-specific patterns
+    - name: PATIENT_ID
+      regex: "PT-\\d{6}"
+      placeholder: "[PATIENT_ID]"
+```
+
+No config file = no scanning (zero overhead for repos that don't need it).
+
+When the `presidio` MCP server is also enabled, it supplements the hook with NLP-based entity recognition for higher recall on unstructured text.
 
 ## File Creation Rules
 

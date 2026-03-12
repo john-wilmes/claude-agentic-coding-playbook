@@ -96,6 +96,9 @@ The installer **will not overwrite** existing skills or configuration without pr
 - **Model router** -- Auto-selects Haiku/Sonnet/Opus for Task tool calls based on prompt signals.
 - **Prompt injection guard** -- Blocks high-confidence injection patterns in Bash commands (zero false positives by design).
 - **Post-tool verify** -- Auto-runs project tests after Edit/Write on code files with debouncing.
+- **Context guard** -- Dual-mode context window monitoring. Warns at 35%/50%, blocks at 60%, failsafe sentinel at 75%.
+- **Stuck detector** -- Detects and breaks agent loops when the same action repeats.
+- **Sanitize guard** -- Runtime PII/PHI detection and redaction. Scans tool output (PostToolUse) and blocks writes containing PII (PreToolUse). Opt-in per repo via `.claude/sanitize.yaml`.
 
 ### CLAUDE.md Rules
 

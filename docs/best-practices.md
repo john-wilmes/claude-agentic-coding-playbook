@@ -1625,7 +1625,7 @@ sites.
 
 ## 13. PII/PHI Sanitization
 
-Production systems handling personal data need defense in depth. Three
+Production systems handling personal data need defense in depth. Four
 complementary layers cover different threat surfaces:
 
 ### Layer 1: MCP proxy (per-server wrapping)
@@ -1676,19 +1676,48 @@ The agent calls Presidio tools when it encounters text that might contain
 sensitive data — investigation evidence, support tickets, log entries. This
 layer is **agent-controlled** and works alongside the other two.
 
+### Layer 4: Runtime Hook Detection
+
+The `sanitize-guard` Claude Code hook provides regex-based PII detection directly in the agent loop — no external services required.
+
+| Aspect | Detail |
+|--------|--------|
+| **Mechanism** | PostToolUse scans all tool output; PreToolUse blocks Edit/Write with PII |
+| **Activation** | Opt-in per repo via `.claude/sanitize.yaml` |
+| **Entities** | SSN, email, phone, credit card, IP, MRN, DOB + custom patterns |
+| **Latency** | <50ms (regex, no network) |
+| **False positives** | Luhn check on credit cards, private IP exclusion, labeled-only DOB/MRN |
+| **Complements** | Layers 1-3 for defense in depth; Presidio for NLP-based recall |
+
+Configuration example:
+```yaml
+# .claude/sanitize.yaml
+sanitization:
+  enabled: true
+  entities: [US_SSN, EMAIL, PHONE_US, CREDIT_CARD, MRN]
+  exclude_paths: ["tests/fixtures/**", "**/*.test.*"]
+  custom_patterns:
+    - name: PATIENT_ID
+      regex: "PT-\\d{6}"
+      placeholder: "[PATIENT_ID]"
+```
+
+No config file means no scanning — zero overhead for repos that don't handle sensitive data.
+
 ### Which layer for which scenario
 
-| Scenario | Layer 1 (MCP proxy) | Layer 2 (LLM proxy) | Layer 3 (On-demand) |
-|---|---|---|---|
-| Redact PII from specific MCP servers | **Best fit** | Overkill | Manual |
-| Blanket PII policy for all LLM traffic | Partial | **Best fit** | Partial |
-| Agent-driven PII checks during investigations | No | No | **Best fit** |
-| Compliance audit trail | Partial | **Best fit** | Partial |
-| Zero-config protection | **Best fit** | Needs proxy setup | Needs agent awareness |
+| Scenario | Layer 1 (MCP proxy) | Layer 2 (LLM proxy) | Layer 3 (On-demand) | Layer 4 (Hook) |
+|---|---|---|---|---|
+| Redact PII from specific MCP servers | **Best fit** | Overkill | Manual | Partial |
+| Blanket PII policy for all LLM traffic | Partial | **Best fit** | Partial | Partial |
+| Agent-driven PII checks during investigations | No | No | **Best fit** | Complements |
+| Compliance audit trail | Partial | **Best fit** | Partial | No |
+| Zero-config protection | **Best fit** | Needs proxy setup | Needs agent awareness | Opt-in per repo |
+| No external services | No | No | No | **Best fit** |
 
 For maximum coverage, combine Layer 1 (wrap sensitive MCP servers) with Layer 3
-(agent checks investigation evidence). Layer 2 adds network-level protection
-when compliance requirements demand it.
+(agent checks investigation evidence) and Layer 4 (hook catches PII before writes).
+Layer 2 adds network-level protection when compliance requirements demand it.
 
 ---
 
