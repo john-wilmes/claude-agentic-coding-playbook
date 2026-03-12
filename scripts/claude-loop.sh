@@ -558,6 +558,13 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
     echo "claude-loop: sentinel restart — cooling down 5s..."
     sleep 5
     # Loop continues (restart)
+  elif [[ -z "${TASK_QUEUE_FILE}" && "${EXIT_CODE}" -eq 0 ]]; then
+    # Interactive mode: normal exit (e.g. /exit) restarts with a new session.
+    # Only signals (Ctrl+C) stop the loop — handled above.
+    log_event "event=loop_event" "message=interactive restart (normal exit)" "exit_code=${EXIT_CODE}"
+    echo "claude-loop: restarting session — cooling down 5s..."
+    sleep 5
+    # Loop continues (restart)
   else
     log_event "event=loop_event" "message=natural exit, loop stopped" "exit_code=${EXIT_CODE}"
     echo "claude-loop: claude exited without sentinel (exit ${EXIT_CODE}), stopping."
