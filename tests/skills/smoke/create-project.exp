@@ -5,19 +5,28 @@
 # Uses --append-system-prompt to guide the LLM's choices for project type/description
 # so AskUserQuestion is answered by the LLM itself.
 
-set timeout 120
+set timeout 300
 
 set project_name $env(PROJECT_NAME)
 
-# Start claude with system prompt guidance for unattended project creation
+# Start claude with MCP disabled to avoid interference and system prompt guidance
 spawn claude --model haiku --permission-mode bypassPermissions \
+    --mcp-config {{"mcpServers":{}}} --strict-mcp-config \
     --append-system-prompt "When creating a project: choose Node/TypeScript as the project type and use 'Smoke test project' as the description. Do NOT create a GitHub repo (skip the gh repo create step). Do NOT run CodeRabbit review. Answer any AskUserQuestion prompts yourself using these choices."
 
-# Wait for TUI to initialize
-sleep 5
+# Wait for TUI to fully initialize
+sleep 8
 
-# Send create-project command with project name
-send "/create-project $project_name\r"
+# Type the command with deliberate pacing for the autocomplete system
+send "/create-project $project_name"
+sleep 3
+
+# Press Enter to select from autocomplete and submit
+send "\r"
+sleep 2
+
+# Send a second Enter in case the first only selected the autocomplete item
+send "\r"
 
 # Wait for the skill to complete
 # The LLM should make its own choices based on the system prompt
