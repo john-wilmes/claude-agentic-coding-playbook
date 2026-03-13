@@ -1,6 +1,6 @@
 ---
 name: create-project
-description: Scaffold a new project with git, .gitignore, CLAUDE.md, GitHub repo, and memory directory. Use when user says "start a new project", "create a repo", or "scaffold an app". Creates the project as a sibling to the .claude/ config directory.
+description: Scaffold a new project with git, .gitignore, CLAUDE.md, AGENTS.md, GitHub repo, and memory directory. Use when user says "start a new project", "create a repo", or "scaffold an app". Creates the project as a sibling to the .claude/ config directory.
 compatibility: claude-code
 disable-model-invocation: false
 allowed-tools: Bash, Write, Read, Glob, AskUserQuestion, mcp__coderabbitai__*
@@ -74,11 +74,39 @@ Must include:
 - Architecture notes section (even if initially empty)
 - Build and dependency instructions
 
-### 7. Create package.json or equivalent
+### 7. Create AGENTS.md
 
-Use `npm init -y` for Node projects. Set name, description, and version. For Python, create `pyproject.toml`.
+Generate an `AGENTS.md` file at the project root. This is a cross-tool convention (60k+ repos) that tells any AI coding assistant how to build, test, and lint the project.
 
-### 8. Install pre-commit hook
+Populate sections from the quality gate commands chosen in step 6:
+
+```markdown
+# AGENTS.md
+
+## Build
+
+<build command from quality gates, or "No build step configured.">
+
+## Test
+
+<test command from quality gates, e.g. "npm test">
+
+## Lint
+
+<lint command from quality gates, e.g. "npx eslint .">
+
+## General
+
+- Follow existing code style and naming conventions.
+- Write tests for new functionality.
+- Do not commit credentials or secrets.
+```
+
+### 8. Create package.json or equivalent
+
+Use `npm init -y` for Node projects. Set name, description, and version. For Python, create `pyproject.toml`. For static sites, create a minimal `package.json` with dev scripts (e.g., a `start` or `serve` script) — this is optional if no tooling is needed. For "other" project types, skip this step or add the appropriate manifest for that ecosystem.
+
+### 9. Install pre-commit hook
 
 First, check if `core.hooksPath` is configured:
 ```bash
@@ -101,7 +129,14 @@ chmod +x <INSTALL_ROOT>/<project-name>/.git/hooks/pre-commit
 
 This hook blocks files >5MB, common credential patterns, and .env files from being committed.
 
-### 9. Create GitHub repo and push
+### 10. Create GitHub repo and push
+
+First verify `gh` is available:
+```bash
+command -v gh
+```
+
+If not installed, skip this step and tell the user to install GitHub CLI (`https://cli.github.com/`) and run `gh repo create` manually.
 
 ```bash
 cd <INSTALL_ROOT>/<project-name>
@@ -112,7 +147,9 @@ gh repo create <project-name> --private --source . --push
 
 Always use `--private`. Only use `--public` if the user has explicitly and unprompted requested a public repo. Never infer public visibility from context.
 
-### 10. Run CodeRabbit initial review
+### 11. Run CodeRabbit initial review
+
+If CodeRabbit MCP tools are not available (tool calls fail), skip this step. Tell the user they can install the CodeRabbit GitHub App for automatic PR reviews (`https://github.com/apps/coderabbitai`).
 
 Use the CodeRabbit MCP tools to run a full review of the initial codebase. For each finding:
 - Apply the suggestion immediately if it improves the code.
@@ -128,11 +165,11 @@ git push
 
 If there are no findings or no applicable fixes, skip this commit.
 
-### 11. Set up project memory
+### 12. Set up project memory
 
 Claude Code automatically creates the project memory directory at `~/.claude/projects/<project-key>/memory/` on first session in that directory. No manual setup needed.
 
-### 12. Report
+### 13. Report
 
 Tell the user:
 - The project path

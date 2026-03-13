@@ -67,7 +67,7 @@ Wait for the user's choice before continuing.
 
 ### 4. Promote the lesson
 
-**If `~/.claude/knowledge/entries/` exists** (preferred path):
+**If `~/.claude/knowledge/entries/` exists** (preferred path — if it does not exist, use the fallback below):
 
 Create a new markdown file there named after the lesson topic (e.g., `git-hooks-core-hookspath.md`). Use this format:
 
@@ -80,7 +80,7 @@ Source: <current project name or path>
 Date: <today's date>
 ```
 
-**Otherwise**, add the lesson to `~/.claude/CLAUDE.md`:
+**Otherwise** (including when `~/.claude/knowledge/entries/` does not exist), append the lesson to `~/.claude/CLAUDE.md`:
 
 - Find or create a `## Cross-Project Lessons` section at the end of the file (before any trailing newline).
 - Append the lesson as a bullet point: `- <lesson text>`

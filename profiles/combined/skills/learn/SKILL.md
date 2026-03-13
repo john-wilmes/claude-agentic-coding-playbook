@@ -13,6 +13,15 @@ Capture a lesson as a structured knowledge entry that persists across sessions a
 
 ## Steps
 
+### 0. Check prerequisites
+
+Check if knowledge-db.js is available:
+```bash
+ls ~/.claude/hooks/knowledge-db.js 2>/dev/null
+```
+
+If not found, fall back to writing the lesson directly to the project memory file (`lessons-learned.md` in the project memory directory). Skip steps that reference `knowledge-db.js` and instead append the structured entry to the memory file using the Edit tool.
+
 ### 1. Identify the lesson
 
 If `$ARGUMENTS` is provided, use it as the lesson description. Otherwise, review what happened in the current session and ask the user what they want to capture.
