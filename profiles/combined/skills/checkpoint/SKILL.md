@@ -115,16 +115,8 @@ If `~/.claude/knowledge` exists, export entries to JSONL and push to remote:
 if [ -f "$HOME/.claude/hooks/knowledge-db.js" ]; then
   node ~/.claude/hooks/knowledge-db.js export ~/.claude/knowledge/entries.jsonl 2>/dev/null
 fi
-cd ~/.claude/knowledge
-if [ -d ".git" ]; then
-  if [ -n "$(git status --porcelain)" ]; then
-    git add entries.jsonl
-    git commit -m "checkpoint: sync entries"
-  fi
-  if git remote get-url origin &>/dev/null; then
-    git push origin HEAD 2>/dev/null || echo "Knowledge repo push failed -- will sync on next session start"
-  fi
-fi
+# Sync the knowledge repo (commit + push)
+bash ~/.claude/scripts/skills/sync-knowledge-repo.sh --knowledge-dir ~/.claude/knowledge
 ```
 
 ### 4. Verify push
@@ -135,11 +127,10 @@ Run `git status` to confirm the working tree is clean and the branch is up to da
 
 Check how far ahead the current branch is from the default branch:
 ```bash
-base=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||') || base="main"
-git rev-list --count "$base"..HEAD 2>/dev/null
+bash ~/.claude/scripts/skills/da-check.sh
 ```
 
-If the branch is **5+ commits ahead** and any of the changed files are documentation or configuration (`.md`, `.yaml`, `.json`, `.toml`, `.mdc`), suggest a devil's advocate review:
+If the output is `DA_NEEDED`, suggest a devil's advocate review:
 
 ```text
 This branch has <N> commits with doc/config changes. Consider a devil's advocate review before creating a PR:
@@ -196,20 +187,8 @@ Then STOP. Do not make any more tool calls or produce any more output.
 **If neither is set (standalone session, no claude-loop):** Check the context-guard flag file to decide:
 
 ```bash
-node -e "
-const fs = require('fs'), path = require('path'), os = require('os');
-const flag = process.env.CLAUDE_LOOP_SENTINEL
-  || path.join(os.tmpdir(), 'claude-checkpoint-exit');
-try {
-  const data = JSON.parse(fs.readFileSync(flag, 'utf8'));
-  const ageMs = Date.now() - data.timestamp;
-  if (ageMs < 600000 && data.ratio >= 0.5) {
-    process.stdout.write('EXIT');
-  } else {
-    process.stdout.write('STAY');
-  }
-} catch { process.stdout.write('STAY'); }
-"
+FLAG_FILE="${CLAUDE_LOOP_SENTINEL:-$(mktemp -u /tmp/claude-checkpoint-exit)}"
+node ~/.claude/scripts/skills/read-sentinel.js "$FLAG_FILE"
 ```
 
 - If **EXIT**: Context is high. Tell the user:
