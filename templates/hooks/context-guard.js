@@ -239,8 +239,11 @@ process.stdin.on("end", () => {
     // than hitting 80% auto-compaction which destroys context entirely.
     if (ctx.ratio >= FAILSAFE_THRESHOLD && process.env.CLAUDE_LOOP === "1") {
       try {
-        const sentinelPath = process.env.CLAUDE_LOOP_SENTINEL
-          || path.join(os.tmpdir(), "claude-checkpoint-exit");
+        // Use CLAUDE_LOOP_PID to compute sentinel path — Claude Code may override
+        // CLAUDE_LOOP_SENTINEL after changing process.cwd() to the project directory.
+        const sentinelPath = process.env.CLAUDE_LOOP_PID
+          ? path.join(os.tmpdir(), `claude-checkpoint-exit-${process.env.CLAUDE_LOOP_PID}`)
+          : (process.env.CLAUDE_LOOP_SENTINEL || path.join(os.tmpdir(), "claude-checkpoint-exit"));
         fs.writeFileSync(
           sentinelPath,
           JSON.stringify({ reason: "failsafe", ratio: ctx.ratio, timestamp: Date.now() })
@@ -266,8 +269,9 @@ process.stdin.on("end", () => {
       // Write flag file so /checkpoint can deterministically decide to exit.
       // Uses a fixed path — checkpoint reads this instead of guessing usage.
       try {
-        const sentinelPath = process.env.CLAUDE_LOOP_SENTINEL
-          || path.join(os.tmpdir(), "claude-checkpoint-exit");
+        const sentinelPath = process.env.CLAUDE_LOOP_PID
+          ? path.join(os.tmpdir(), `claude-checkpoint-exit-${process.env.CLAUDE_LOOP_PID}`)
+          : (process.env.CLAUDE_LOOP_SENTINEL || path.join(os.tmpdir(), "claude-checkpoint-exit"));
         fs.writeFileSync(
           sentinelPath,
           JSON.stringify({ ratio: ctx.ratio, timestamp: Date.now() })

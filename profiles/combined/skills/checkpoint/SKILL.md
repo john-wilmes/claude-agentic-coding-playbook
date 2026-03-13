@@ -169,18 +169,20 @@ echo "CLAUDE_LOOP=${CLAUDE_LOOP:-0} SENTINEL=${CLAUDE_LOOP_SENTINEL:-}"
 
 **If `CLAUDE_LOOP=1` (headless/task-queue mode):** Always write the sentinel and exit. The loop supervisor manages session continuity — every checkpoint under claude-loop triggers a restart.
 
-Write the sentinel file:
+Write the sentinel file. Use `CLAUDE_LOOP_PID` to compute the path (Claude Code may override `CLAUDE_LOOP_SENTINEL` after changing its working directory):
 
 ```bash
-echo '{"reason":"checkpoint","timestamp":'$(date +%s)'}' > "${CLAUDE_LOOP_SENTINEL:-/tmp/claude-checkpoint-exit}"
+SENTINEL="/tmp/claude-checkpoint-exit-${CLAUDE_LOOP_PID}"
+echo '{"reason":"checkpoint","timestamp":'$(date +%s)'}' > "${SENTINEL}"
 ```
 
 Print exactly "Exiting — claude-loop will respawn." Then STOP. Do not make any more tool calls or produce any more output.
 
-**If `CLAUDE_LOOP_SENTINEL` is set (interactive mode under claude-loop):** Write the sentinel. claude-loop will detect it and restart the session automatically.
+**If `CLAUDE_LOOP_SENTINEL` is set (interactive mode under claude-loop):** Write the sentinel. Use `CLAUDE_LOOP_PID` to compute the path (Claude Code may override `CLAUDE_LOOP_SENTINEL`):
 
 ```bash
-echo '{"reason":"checkpoint","timestamp":'$(date +%s)'}' > "${CLAUDE_LOOP_SENTINEL}"
+SENTINEL="/tmp/claude-checkpoint-exit-${CLAUDE_LOOP_PID}"
+echo '{"reason":"checkpoint","timestamp":'$(date +%s)'}' > "${SENTINEL}"
 ```
 
 Then print exactly:
