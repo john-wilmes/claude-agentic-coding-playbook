@@ -29,12 +29,12 @@ for test in "$SMOKE_DIR"/*.sh; do
 
   if [ $rc -eq 0 ]; then
     if echo "$output" | grep -q "^SKIP"; then
-      ((SKIP++))
+      SKIP=$((SKIP + 1))
     else
-      ((PASS++))
+      PASS=$((PASS + 1))
     fi
   else
-    ((FAIL++))
+    FAIL=$((FAIL + 1))
   fi
   echo ""
 done
