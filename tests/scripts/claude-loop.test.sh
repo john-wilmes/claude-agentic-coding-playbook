@@ -396,6 +396,42 @@ STUBEOF
 }
 run_test "interactive mode restarts on exit 0 (no sentinel needed)" t_interactive_restart_on_exit0
 
+# ─── Test 11: Sentinel watcher kills claude and triggers restart ─────────
+
+t_sentinel_watcher_kills_claude() {
+  local tmpbin tmpdir
+  tmpbin="$(mktemp -d)"
+  tmpdir="$(mktemp -d)"
+  # Stub claude: writes sentinel then hangs (simulates interactive session)
+  cat > "${tmpbin}/claude" <<'STUBEOF'
+#!/usr/bin/env bash
+# Write sentinel file (simulating /checkpoint writing it)
+if [[ -n "${CLAUDE_LOOP_SENTINEL:-}" ]]; then
+  echo '{"reason":"checkpoint"}' > "${CLAUDE_LOOP_SENTINEL}"
+fi
+# Hang until killed (simulates interactive session waiting for input)
+sleep 60
+STUBEOF
+  chmod +x "${tmpbin}/claude"
+
+  local out rc=0
+  # SENTINEL_POLL_INTERVAL=0.5 for fast test; --max-sessions 2 to verify restart
+  out="$(cd "${tmpdir}" && SENTINEL_POLL_INTERVAL=0.5 PATH="${tmpbin}:${PATH}" \
+    bash "${SCRIPT}" --max-sessions 2 2>&1)" || rc=$?
+  rm -rf "${tmpbin}" "${tmpdir}"
+
+  # Should have started 2 sessions (watcher killed first, loop restarted)
+  local session_count
+  session_count="$(echo "${out}" | grep -c "starting session" || true)"
+  [[ "${session_count}" -ge 2 ]] \
+    || { echo "Expected at least 2 sessions, got ${session_count}; output: ${out}"; return 1; }
+
+  # Should mention sentinel restart
+  echo "${out}" | grep -q "sentinel" \
+    || { echo "Expected 'sentinel' in output; output: ${out}"; return 1; }
+}
+run_test "sentinel watcher kills claude and triggers restart" t_sentinel_watcher_kills_claude
+
 # ─── Summary ──────────────────────────────────────────────────────────────────
 
 echo ""

@@ -17,6 +17,8 @@ set -euo pipefail
 # Project-scoped hash: prevents cross-project collisions for lock + sentinel.
 _CWD_HASH="$(pwd | md5sum | cut -c1-8)"
 SENTINEL_FILE="/tmp/claude-checkpoint-exit-${_CWD_HASH}"
+CLAUDE_PID_FILE="/tmp/claude-loop-cpid-${_CWD_HASH}"
+SENTINEL_POLL_INTERVAL="${SENTINEL_POLL_INTERVAL:-2}"
 LOCK_FILE="/tmp/claude-loop-${_CWD_HASH}.lock"
 LOG_DIR="${HOME}/.claude/logs"
 LOG_FILE="${LOG_DIR}/claude-loop-$(date +%Y-%m-%d).jsonl"
@@ -236,6 +238,27 @@ mark_task_fail() {
   done < "${file}"
 
   mv "${tmp}" "${file}"
+}
+
+# ─── Sentinel watcher ─────────────────────────────────────────────────────────
+
+_start_sentinel_watcher() {
+  local pid_file="$1"
+  (
+    # Wait for PID file to appear
+    while [[ ! -s "${pid_file}" ]]; do sleep 0.5; done
+    local target_pid
+    target_pid="$(cat "${pid_file}")"
+    # Poll for sentinel; kill claude when found
+    while kill -0 "$target_pid" 2>/dev/null; do
+      if [[ -f "${SENTINEL_FILE}" ]]; then
+        kill -TERM "$target_pid" 2>/dev/null
+        break
+      fi
+      sleep "${SENTINEL_POLL_INTERVAL}"
+    done
+  ) </dev/null >/dev/null 2>&1 &
+  WATCHER_PID=$!
 }
 
 # ─── Status mode ──────────────────────────────────────────────────────────────
@@ -471,8 +494,8 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
     ATTEMPT="$(( PREV_ATTEMPTS + 1 ))"
   fi
 
-  # ── Remove stale sentinel ──────────────────────────────────────────────────
-  rm -f "${SENTINEL_FILE}"
+  # ── Remove stale sentinel and PID file ─────────────────────────────────────
+  rm -f "${SENTINEL_FILE}" "${CLAUDE_PID_FILE}"
 
   # ── Log session start ──────────────────────────────────────────────────────
   log_event "event=session_start" "task=${CURRENT_TASK:-}" "attempt=${ATTEMPT}"
@@ -484,12 +507,23 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
   # tells context-guard to write sentinel at 75% for auto-restart.
   # Interactive mode omits it: user is present, no auto-restart needed.
   SESSION_START_MS="$(python3 -c "import time; print(int(time.time() * 1000))")"
+
+  # Start sentinel watcher (polls for sentinel file, kills claude when found)
+  _start_sentinel_watcher "${CLAUDE_PID_FILE}"
+
+  # Run claude in foreground via subshell + exec (preserves terminal access, records PID)
   EXIT_CODE=0
-  if [[ -n "${TASK_QUEUE_FILE}" ]]; then
-    CLAUDE_LOOP=1 CLAUDE_LOOP_SENTINEL="${SENTINEL_FILE}" "${CLAUDE_CMD[@]}" || EXIT_CODE=$?
-  else
-    CLAUDE_LOOP_SENTINEL="${SENTINEL_FILE}" "${CLAUDE_CMD[@]}" || EXIT_CODE=$?
-  fi
+  (
+    echo $BASHPID > "${CLAUDE_PID_FILE}"
+    export CLAUDE_LOOP_SENTINEL="${SENTINEL_FILE}"
+    [[ -n "${TASK_QUEUE_FILE}" ]] && export CLAUDE_LOOP=1
+    exec "${CLAUDE_CMD[@]}"
+  ) || EXIT_CODE=$?
+
+  # Clean up watcher
+  kill "${WATCHER_PID}" 2>/dev/null || true
+  wait "${WATCHER_PID}" 2>/dev/null || true
+  rm -f "${CLAUDE_PID_FILE}"
   SESSION_END_MS="$(python3 -c "import time; print(int(time.time() * 1000))")"
   DURATION_MS="$(( SESSION_END_MS - SESSION_START_MS ))"
 

@@ -175,17 +175,19 @@ echo '{"reason":"checkpoint","timestamp":'$(date +%s)'}' > "${CLAUDE_LOOP_SENTIN
 
 Print exactly "Exiting — claude-loop will respawn." Then STOP. Do not make any more tool calls or produce any more output.
 
-**If `CLAUDE_LOOP_SENTINEL` is set (interactive mode under claude-loop):** Write the sentinel so claude-loop will restart when the user exits:
+**If `CLAUDE_LOOP_SENTINEL` is set (interactive mode under claude-loop):** Write the sentinel. claude-loop will detect it and restart the session automatically.
 
 ```bash
 echo '{"reason":"checkpoint","timestamp":'$(date +%s)'}' > "${CLAUDE_LOOP_SENTINEL}"
 ```
 
-Then tell the user:
+Then print exactly:
 
 ```text
-Checkpoint complete. Sentinel written — run `/exit` to restart with fresh context, or continue working.
+Checkpoint complete. Session will restart with fresh context.
 ```
+
+Then STOP. Do not make any more tool calls or produce any more output.
 
 **If neither is set (standalone session, no claude-loop):** Check the context-guard flag file to decide:
 
@@ -218,4 +220,3 @@ try {
   Checkpoint complete. Run `/exit` to start a fresh session, or continue working.
   ```
 
-Do NOT invoke `/exit` -- it is a built-in CLI command that the user must run themselves.
