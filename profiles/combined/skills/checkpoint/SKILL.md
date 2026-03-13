@@ -3,164 +3,59 @@ name: checkpoint
 description: Save all work, update memory, commit, push, and prepare to end the session. Use when user says "save my work", "wrap up", or "I'm done for now". Use at natural breakpoints or when context is getting large.
 compatibility: claude-code
 disable-model-invocation: false
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep
+allowed-tools: Bash, Task
 argument-hint: "[next-steps summary]"
 ---
 
 # Checkpoint
 
 Save all session state and prepare for a clean handoff to the next session.
+Delegates heavy work to a subagent to keep parent context lean.
 
 ## Steps
 
-### 1. Update memory files
+### 1. Delegate save work to a subagent
 
-Review what was accomplished this session. Update the project's `MEMORY.md` (or the global Documents memory if not in a project) with:
-- Non-obvious discoveries, bugs, or workarounds (Lessons Learned)
-- Any new infrastructure, patterns, or conventions worth preserving
+Spawn a subagent (model: "sonnet") using the Task tool to perform all the heavy I/O.
+Pass it the following context:
 
-**Always update the "Current Work" section** with:
-- What was done this session (brief, not a journal entry)
-- Current state if work is in progress
-- Next steps for the follow-up session
-- Date stamp (e.g. "Last session (2026-02-21 evening)")
+- The project's memory file path (e.g. `~/.claude/projects/<project>/memory/MEMORY.md`)
+- What was accomplished this session (summarize briefly)
+- `$ARGUMENTS` if provided (use as next-steps summary)
+- The current working directory
 
-Replace the previous Current Work entry -- this section should only reflect the most recent session, not accumulate history.
+The subagent prompt should instruct it to:
 
-If `$ARGUMENTS` is provided, use it as the next-steps summary.
+1. **Update memory**: Read the project's `MEMORY.md`. Update the "Current Work" section with what was done, current state, and next steps. Replace the previous entry (do not accumulate). Add date stamp. Add any non-obvious discoveries to Lessons Learned. Do not duplicate existing entries.
 
-Do not duplicate information already in memory. Read the current memory file first.
+2. **Commit and push**: Run `git status`. If there are uncommitted changes, stage relevant files (not build artifacts, logs, or secrets), commit with a descriptive message, and push to remote. If no changes or not a git repo, skip.
 
-### 1b. Review staged knowledge candidates (if applicable)
+3. **Sync knowledge repo** (if applicable): If `~/.claude/knowledge` exists and has a `.git` directory:
+   ```
+   if [ -f "$HOME/.claude/hooks/knowledge-db.js" ]; then
+     node ~/.claude/hooks/knowledge-db.js export ~/.claude/knowledge/entries.jsonl 2>/dev/null
+   fi
+   bash ~/.claude/scripts/skills/sync-knowledge-repo.sh --knowledge-dir ~/.claude/knowledge
+   ```
 
-If `knowledge-db.js` is not installed (`~/.claude/hooks/knowledge-db.js` does not exist), skip the knowledge export step entirely.
+4. **Verify**: Run `git status` to confirm clean working tree.
 
-Run the following command to check for knowledge candidates staged by hooks this session:
+5. **Return a one-line summary** of what was done (e.g. "Memory updated, committed abc1234, pushed to origin").
 
-```bash
-node ~/.claude/hooks/knowledge-db.js staged "$SESSION_ID" 2>/dev/null
-```
+### 2. Exit decision
 
-Where $SESSION_ID is the current session ID. The output is JSON array of staged candidates.
-
-If the command fails or returns an empty array, skip this step silently.
-
-If there is output, parse each line as a JSON object and present the candidates in a formatted table:
-
-```
-### Staged Knowledge Candidates
-
-The following learning opportunities were detected this session:
-
-| # | Trigger | Tool | Summary |
-|---|---------|------|---------|
-| 1 | test-fix | Edit | first line of failure output... |
-| 2 | stuck-resolved | Bash | Recovered from stuck loop on Bash |
-
-Review each candidate. For worthy entries, run `/learn` with the appropriate category and details.
-To discard all staged candidates, they will be automatically pruned after 7 days.
-```
-
-Populate the table from the JSON fields: use `trigger` for the Trigger column, `tool` for Tool, and the first line of `context` (or `summary` if present) for Summary. Number rows sequentially starting at 1.
-
-Only show this block when at least one candidate exists. Do not mention staged candidates if the directory is empty or absent.
-
-### 1c. Capture knowledge entries (if applicable)
-
-If non-obvious discoveries, bugs, or workarounds were encountered this session — things a future agent working with the same tools would benefit from knowing — suggest capturing them:
-
-```text
-This session involved some non-trivial findings. Consider capturing them as
-knowledge entries with /learn so they auto-inject into future sessions.
-
-Candidates:
-  - <brief description of finding 1>
-  - <brief description of finding 2>
-
-Run /learn now? [y/N]
-```
-
-Only suggest this when there are genuine discoveries worth preserving. Do not prompt for routine work, trivial changes, or facts already in MEMORY.md. If the user declines, continue to step 2.
-
-### 2. Run quality gates (if applicable)
-
-Check if the project has type-check, lint, or test commands defined in its CLAUDE.md. If so, run them. Report results but do not block the checkpoint on failures -- document failures in memory instead.
-
-If there is no project CLAUDE.md (e.g. Documents session), skip this step.
-
-### 2b. Run code review (if available)
-
-Check if `coderabbit` is on PATH (`command -v coderabbit`). If available:
-- Run `coderabbit review --prompt-only --type uncommitted`
-- Apply actionable findings before committing
-- If a finding is not actionable or conflicts with project architecture, skip it
-
-If `coderabbit` is not on PATH, skip this step.
-
-### 3. Commit and push
-
-Check `git status` for uncommitted changes. If there are changes:
-- Stage relevant files (not build artifacts, logs, or secrets)
-- Commit with a descriptive message
-- Push to remote
-
-If there are no changes, skip. If not in a git repo, skip.
-
-### 3b. Sync knowledge repo (if applicable)
-
-If `~/.claude/knowledge` exists, export entries to JSONL and push to remote:
-
-```bash
-# Export entries to JSONL for sharing
-if [ -f "$HOME/.claude/hooks/knowledge-db.js" ]; then
-  node ~/.claude/hooks/knowledge-db.js export ~/.claude/knowledge/entries.jsonl 2>/dev/null
-fi
-# Sync the knowledge repo (commit + push)
-bash ~/.claude/scripts/skills/sync-knowledge-repo.sh --knowledge-dir ~/.claude/knowledge
-```
-
-### 4. Verify push
-
-Run `git status` to confirm the working tree is clean and the branch is up to date with remote.
-
-### 4b. Suggest devil's advocate review (if applicable)
-
-Check how far ahead the current branch is from the default branch:
-```bash
-bash ~/.claude/scripts/skills/da-check.sh
-```
-
-If the output is `DA_NEEDED`, suggest a devil's advocate review:
-
-```text
-This branch has <N> commits with doc/config changes. Consider a devil's advocate review before creating a PR:
-- Verify external claims (URLs, prices, versions) against live sources
-- Check file paths and cross-references
-- Challenge assumptions and cite file:line for findings
-
-This is optional but high-value for documentation-heavy changes. Run it? [y/N]
-```
-
-If the user declines or the conditions are not met, skip.
-
-### 5. Exit decision
-
-Print exactly:
+After the subagent returns, print exactly:
 ```
 CHECKPOINT COMPLETE
 ```
 
-**Decide whether to exit the session.**
-
-First, check if running under claude-loop:
+Check if running under claude-loop:
 
 ```bash
 echo "CLAUDE_LOOP=${CLAUDE_LOOP:-0} SENTINEL=${CLAUDE_LOOP_SENTINEL:-}"
 ```
 
-**If `CLAUDE_LOOP=1` (headless/task-queue mode):** Always write the sentinel and exit. The loop supervisor manages session continuity — every checkpoint under claude-loop triggers a restart.
-
-Write the sentinel file. Use `CLAUDE_LOOP_PID` to compute the path (Claude Code may override `CLAUDE_LOOP_SENTINEL` after changing its working directory):
+**If `CLAUDE_LOOP=1` (headless/task-queue mode):** Write the sentinel and exit.
 
 ```bash
 SENTINEL="/tmp/claude-checkpoint-exit-${CLAUDE_LOOP_PID}"
@@ -169,14 +64,14 @@ echo '{"reason":"checkpoint","timestamp":'$(date +%s)'}' > "${SENTINEL}"
 
 Print exactly "Exiting — claude-loop will respawn." Then STOP. Do not make any more tool calls or produce any more output.
 
-**If `CLAUDE_LOOP_SENTINEL` is set (interactive mode under claude-loop):** Write the sentinel. Use `CLAUDE_LOOP_PID` to compute the path (Claude Code may override `CLAUDE_LOOP_SENTINEL`):
+**If `CLAUDE_LOOP_SENTINEL` is set (interactive mode under claude-loop):** Write the sentinel.
 
 ```bash
 SENTINEL="/tmp/claude-checkpoint-exit-${CLAUDE_LOOP_PID}"
 echo '{"reason":"checkpoint","timestamp":'$(date +%s)'}' > "${SENTINEL}"
 ```
 
-Then print exactly:
+Print exactly:
 
 ```text
 Checkpoint complete. Session will restart with fresh context.
@@ -184,22 +79,10 @@ Checkpoint complete. Session will restart with fresh context.
 
 Then STOP. Do not make any more tool calls or produce any more output.
 
-**If neither is set (standalone session, no claude-loop):** Check the context-guard flag file to decide:
+**If neither is set (standalone session, no claude-loop):** Tell the user:
 
-```bash
-FLAG_FILE="/tmp/claude-context-high-${CLAUDE_LOOP_PID:-standalone}"
-node ~/.claude/scripts/skills/read-sentinel.js "$FLAG_FILE"
+```text
+Checkpoint complete. Run `/exit` to start a fresh session.
 ```
 
-- If **EXIT**: Context is high. Tell the user:
-
-  ```text
-  Checkpoint complete. Context is high — run `/exit` to start a fresh session.
-  ```
-
-- If **STAY**: Natural breakpoint. Tell the user:
-
-  ```text
-  Checkpoint complete. Run `/exit` to start a fresh session, or continue working.
-  ```
-
+Then STOP. Do not make any more tool calls or produce any more output.
