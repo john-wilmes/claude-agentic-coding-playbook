@@ -187,7 +187,7 @@ Then STOP. Do not make any more tool calls or produce any more output.
 **If neither is set (standalone session, no claude-loop):** Check the context-guard flag file to decide:
 
 ```bash
-FLAG_FILE="${CLAUDE_LOOP_SENTINEL:-$(mktemp -u /tmp/claude-checkpoint-exit)}"
+FLAG_FILE="/tmp/claude-context-high-${CLAUDE_LOOP_PID:-standalone}"
 node ~/.claude/scripts/skills/read-sentinel.js "$FLAG_FILE"
 ```
 
