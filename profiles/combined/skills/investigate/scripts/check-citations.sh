@@ -36,9 +36,9 @@ fi
 
 # Extract all cited evidence numbers from FINDINGS.md Answer section
 # Matches patterns like (Evidence 001), (Evidence 001, 002), (inferred from Evidence 003)
-cited_numbers=$(grep -oE 'Evidence[[:space:]]+[0-9]{3}' "$FINDINGS" | grep -oE '[0-9]{3}$' | sort -u)
+cited_numbers=$(grep -oE 'Evidence[[:space:]]+[0-9]{3}' "$FINDINGS" | grep -oE '[0-9]{3}$' | sort -u || true)
 
-cited_count=$(echo "$cited_numbers" | grep -c '[0-9]' 2>/dev/null || echo 0)
+cited_count=$(echo "$cited_numbers" | grep -c '[0-9]' 2>/dev/null) || cited_count=0
 
 # Find uncited files
 uncited=()
