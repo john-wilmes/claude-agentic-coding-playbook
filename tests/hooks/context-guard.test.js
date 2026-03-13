@@ -417,46 +417,21 @@ test("15. PreToolUse below threshold (50%): allow", () => {
   }
 });
 
-// Test 16: PreToolUse at 60% → block
-test("16. PreToolUse at 60% threshold: block", () => {
+// Test 16: PreToolUse always passes through regardless of ratio
+test("16. PreToolUse always passes through regardless of ratio", () => {
   const sessionId = newSessionId();
   const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
   try {
     fs.mkdirSync(STATE_DIR, { recursive: true });
-    fs.writeFileSync(stateFile, JSON.stringify({ lastUsageRatio: 0.60 }));
+    fs.writeFileSync(stateFile, JSON.stringify({ lastUsageRatio: 0.65 }));
 
     const result = runGuardPre(sessionId, {
       toolInput: { file_path: "/home/user/project/src/main.js" },
     });
     assert.strictEqual(result.status, 0, "Should exit 0");
-    assert.strictEqual(result.json.hookSpecificOutput.permissionDecision, "deny", "Should block at 60%");
-    assert.ok(result.json.hookSpecificOutput.permissionDecisionReason.includes("BLOCKED:"), "Should have directive block message");
+    assert.deepStrictEqual(result.json, {}, "Should pass through at any ratio");
   } finally {
     cleanupSession(sessionId);
-  }
-});
-
-// Test 17: PreToolUse→PostToolUse handshake
-test("17. PreToolUse→PostToolUse handshake: PostToolUse writes ratio, PreToolUse reads it", () => {
-  const sessionId = newSessionId();
-  // 65% of 200k = 130,000 tokens
-  const transcript = createFakeTranscript([makeAssistantMessage(130000)]);
-  try {
-    // PostToolUse fires first, writes lastUsageRatio to state
-    const postResult = runGuard(sessionId, { transcriptPath: transcript });
-    assert.strictEqual(postResult.status, 0);
-    assert.ok(postResult.json.hookSpecificOutput, "PostToolUse should critically warn at 65%");
-    assert.ok(postResult.json.hookSpecificOutput.additionalContext.includes("CRITICAL"), "Should include CRITICAL");
-
-    // PreToolUse fires next, reads state and hard-blocks
-    const preResult = runGuardPre(sessionId, {
-      toolInput: { file_path: "/home/user/project/src/app.js" },
-    });
-    assert.strictEqual(preResult.status, 0);
-    assert.strictEqual(preResult.json.hookSpecificOutput.permissionDecision, "deny", "PreToolUse should hard-block from stored ratio");
-  } finally {
-    cleanupSession(sessionId);
-    try { fs.rmSync(transcript); } catch {}
   }
 });
 
@@ -496,24 +471,6 @@ test("19. PreToolUse with no state file: allow (safe default)", () => {
   }
 });
 
-// Test 20: PreToolUse allows ~/.claude/ writes when blocked
-test("20. PreToolUse allows ~/.claude/ writes when blocked", () => {
-  const sessionId = newSessionId();
-  const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
-  const homeDir = os.homedir();
-  try {
-    fs.mkdirSync(STATE_DIR, { recursive: true });
-    fs.writeFileSync(stateFile, JSON.stringify({ lastUsageRatio: 0.80 }));
-
-    const result = runGuardPre(sessionId, {
-      toolInput: { file_path: path.join(homeDir, ".claude", "projects", "test", "memory", "MEMORY.md") },
-    });
-    assert.strictEqual(result.status, 0, "Should exit 0");
-    assert.strictEqual(result.json.decision, undefined, "Should allow ~/.claude/ writes even when blocked");
-  } finally {
-    cleanupSession(sessionId);
-  }
-});
 
 // Test 21: PostToolUse stores lastUsageRatio in state
 test("21. PostToolUse stores lastUsageRatio in state file", () => {
@@ -536,106 +493,6 @@ test("21. PostToolUse stores lastUsageRatio in state file", () => {
   }
 });
 
-// Test 22: PreToolUse blocks Read tool at threshold
-test("22. PreToolUse blocks Read tool at 60% threshold", () => {
-  const sessionId = newSessionId();
-  const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
-  try {
-    fs.mkdirSync(STATE_DIR, { recursive: true });
-    fs.writeFileSync(stateFile, JSON.stringify({ lastUsageRatio: 0.65 }));
-
-    const result = runGuardPre(sessionId, {
-      toolInput: { file_path: "/home/user/project/src/main.js" },
-    });
-    assert.strictEqual(result.status, 0, "Should exit 0");
-    assert.strictEqual(result.json.hookSpecificOutput.permissionDecision, "deny", "Should block Read at threshold");
-    assert.ok(result.json.hookSpecificOutput.permissionDecisionReason.includes("BLOCKED:"), "Should have directive block message");
-  } finally {
-    cleanupSession(sessionId);
-  }
-});
-
-// Test 23: PreToolUse blocks Grep tool at threshold (no file_path)
-test("23. PreToolUse blocks Grep tool at 60% threshold", () => {
-  const sessionId = newSessionId();
-  const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
-  try {
-    fs.mkdirSync(STATE_DIR, { recursive: true });
-    fs.writeFileSync(stateFile, JSON.stringify({ lastUsageRatio: 0.65 }));
-
-    const result = runGuardPre(sessionId, {
-      toolInput: { pattern: "TODO", path: "/home/user/project" },
-    });
-    assert.strictEqual(result.status, 0, "Should exit 0");
-    assert.strictEqual(result.json.hookSpecificOutput.permissionDecision, "deny", "Should block Grep at threshold");
-  } finally {
-    cleanupSession(sessionId);
-  }
-});
-
-// Test 24: PreToolUse allows Bash tool at threshold (checkpoint needs git)
-test("24. PreToolUse allows Bash tool at 60% threshold (checkpoint needs git)", () => {
-  const sessionId = newSessionId();
-  const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
-  try {
-    fs.mkdirSync(STATE_DIR, { recursive: true });
-    fs.writeFileSync(stateFile, JSON.stringify({ lastUsageRatio: 0.65 }));
-
-    const input = {
-      session_id: sessionId,
-      tool_name: "Bash",
-      tool_input: { command: "git status" },
-    };
-    const result = runHook(CONTEXT_GUARD, input);
-    assert.strictEqual(result.status, 0, "Should exit 0");
-    assert.strictEqual(result.json.decision, undefined, "Should allow Bash even when blocked");
-  } finally {
-    cleanupSession(sessionId);
-  }
-});
-
-// Test 25: PreToolUse allows Skill tool at threshold (for /checkpoint)
-test("25. PreToolUse allows Skill tool at 60% threshold", () => {
-  const sessionId = newSessionId();
-  const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
-  try {
-    fs.mkdirSync(STATE_DIR, { recursive: true });
-    fs.writeFileSync(stateFile, JSON.stringify({ lastUsageRatio: 0.80 }));
-
-    // Skill tool needs tool_name in hookInput — simulate it directly
-    const input = {
-      session_id: sessionId,
-      tool_name: "Skill",
-      tool_input: { skill: "checkpoint" },
-    };
-    const result = runHook(CONTEXT_GUARD, input);
-    assert.strictEqual(result.status, 0, "Should exit 0");
-    assert.strictEqual(result.json.decision, undefined, "Should allow Skill tool even when blocked");
-  } finally {
-    cleanupSession(sessionId);
-  }
-});
-
-// Test 26: PreToolUse allows Task tool at threshold (checkpoint may delegate)
-test("26. PreToolUse allows Task tool at 60% threshold (checkpoint may delegate)", () => {
-  const sessionId = newSessionId();
-  const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
-  try {
-    fs.mkdirSync(STATE_DIR, { recursive: true });
-    fs.writeFileSync(stateFile, JSON.stringify({ lastUsageRatio: 0.65 }));
-
-    const input = {
-      session_id: sessionId,
-      tool_name: "Task",
-      tool_input: { prompt: "search for files" },
-    };
-    const result = runHook(CONTEXT_GUARD, input);
-    assert.strictEqual(result.status, 0, "Should exit 0");
-    assert.strictEqual(result.json.decision, undefined, "Should allow Task even when blocked");
-  } finally {
-    cleanupSession(sessionId);
-  }
-});
 
 // Test 27: PostToolUse block writes checkpoint-exit flag file
 test("27. PostToolUse block writes checkpoint-exit sentinel flag", () => {
