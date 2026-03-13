@@ -210,9 +210,9 @@
       "command": "node",
       "args": ["apps/cli/dist/index.js", "serve", "--db", "data/mma.db"],
       "cwd": "~/Documents/multi-model-analyzer",
-      "disabled": true
+      "disabled": false
     },
     "env_required": [],
-    "notes": "9 tools: query, search, get_callers, get_callees, get_dependencies, get_architecture, get_diagnostics, get_metrics, get_blast_radius. Requires MMA workspace to be built (pnpm build). DB populated by daily 'mma index' run. Disabled until workspace resolution issue is fixed — see MMA project."
+    "notes": "9 tools: query, search, get_callers, get_callees, get_dependencies, get_architecture, get_diagnostics, get_metrics, get_blast_radius. Requires: npm install in MMA workspace, then 'mma index' to create DB. DB populated by daily 'mma index' run."
   }
 }

@@ -238,31 +238,34 @@ run_test "mark_task_fail updates existing [FAIL] attempt count" t_mark_task_fail
 
 t_lock_prevents_double_run() {
   # Hold the lock ourselves, then verify the script exits non-zero with an error.
+  # Run from a tmpdir so the lock hash won't collide with any active claude-loop
+  # running in the repo directory.
+  local tmpbin tmpdir
+  tmpbin="$(mktemp -d)"
+  tmpdir="$(mktemp -d)"
+
   local cwd_hash
-  cwd_hash="$(pwd | md5sum | cut -c1-8)"
+  cwd_hash="$(echo "${tmpdir}" | md5sum | cut -c1-8)"
   local lock_file="/tmp/claude-loop-${cwd_hash}.lock"
 
   # Open lock file on fd 8 and hold it for the duration of this subshell.
   exec 8>"${lock_file}"
   flock -x 8
 
-  local out rc=0
-  # Run script without --dry-run so it tries to acquire the lock.
-  # We must not let it actually exec claude, so stub it.
-  local tmpbin
-  tmpbin="$(mktemp -d)"
+  # Stub claude so it won't actually run.
   cat > "${tmpbin}/claude" <<'EOF'
 #!/usr/bin/env bash
 exit 0
 EOF
   chmod +x "${tmpbin}/claude"
 
-  out="$(PATH="${tmpbin}:${PATH}" bash "${SCRIPT}" 2>&1)" || rc=$?
+  local out rc=0
+  out="$(cd "${tmpdir}" && PATH="${tmpbin}:${PATH}" bash "${SCRIPT}" 2>&1)" || rc=$?
 
   # Release lock and clean up
   exec 8>&-
   rm -f "${lock_file}"
-  rm -rf "${tmpbin}"
+  rm -rf "${tmpbin}" "${tmpdir}"
 
   [[ ${rc} -ne 0 ]] \
     || { echo "Expected non-zero exit when lock is held, got 0"; return 1; }

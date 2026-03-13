@@ -78,23 +78,24 @@ test_registry_server_count() {
     const r = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
     console.log(Object.keys(r).length);
   " "$REGISTRY_FILE")
-  [[ "$count" -eq 19 ]] || { echo "Expected 19 servers, got $count"; return 1; }
+  [[ "$count" -eq 21 ]] || { echo "Expected 21 servers, got $count"; return 1; }
 }
-run_test "Registry contains 19 servers" test_registry_server_count
+run_test "Registry contains 21 servers" test_registry_server_count
 
 # ─── Test 3: github is enabled, others disabled ─────────────────────────────
 
 test_github_enabled() {
   node -e "
     const r = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
-    if (r.github.config.disabled !== false) { console.error('github should be enabled'); process.exit(1); }
+    const ENABLED = new Set(['github', 'fleet-index', 'serena', 'mma']);
     for (const [name, entry] of Object.entries(r)) {
-      if (name === 'github') continue;
-      if (entry.config.disabled !== true) { console.error(name + ' should be disabled'); process.exit(1); }
+      const shouldBeEnabled = ENABLED.has(name);
+      if (shouldBeEnabled && entry.config.disabled !== false) { console.error(name + ' should be enabled'); process.exit(1); }
+      if (!shouldBeEnabled && entry.config.disabled !== true) { console.error(name + ' should be disabled'); process.exit(1); }
     }
   " "$REGISTRY_FILE"
 }
-run_test "github enabled, all others disabled" test_github_enabled
+run_test "enabled/disabled flags are correct" test_github_enabled
 
 # ─── Test 4: Each entry has required fields ──────────────────────────────────
 
@@ -127,7 +128,7 @@ test_fresh_install() {
   result=$(merge_registry "$REGISTRY_FILE" "$tmpdir/settings.json")
   local added=${result%%:*}
   local skipped=${result##*:}
-  [[ "$added" -eq 19 ]] || { echo "Expected 19 added, got $added"; return 1; }
+  [[ "$added" -eq 21 ]] || { echo "Expected 21 added, got $added"; return 1; }
   [[ "$skipped" -eq 0 ]] || { echo "Expected 0 skipped, got $skipped"; return 1; }
 
   # Verify github is in the output
@@ -154,7 +155,7 @@ test_idempotent() {
   local added=${result%%:*}
   local skipped=${result##*:}
   [[ "$added" -eq 0 ]] || { echo "Expected 0 added on second run, got $added"; return 1; }
-  [[ "$skipped" -eq 19 ]] || { echo "Expected 19 skipped on second run, got $skipped"; return 1; }
+  [[ "$skipped" -eq 21 ]] || { echo "Expected 21 skipped on second run, got $skipped"; return 1; }
 }
 run_test "Idempotent — second run adds nothing" test_idempotent
 

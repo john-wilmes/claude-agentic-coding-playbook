@@ -33,6 +33,8 @@ Do not duplicate information already in memory. Read the current memory file fir
 
 ### 1b. Review staged knowledge candidates (if applicable)
 
+If `knowledge-db.js` is not installed (`~/.claude/hooks/knowledge-db.js` does not exist), skip the knowledge export step entirely.
+
 Run the following command to check for knowledge candidates staged by hooks this session:
 
 ```bash
