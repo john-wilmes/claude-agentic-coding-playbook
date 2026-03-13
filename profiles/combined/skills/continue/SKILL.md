@@ -15,11 +15,13 @@ Pick up where the last session left off. Check inbox first, then detect context 
 
 Before any step, determine where the playbook's `.claude/` directory is installed:
 
-1. Walk up from the current working directory, checking each ancestor for a `.claude/` directory that contains `investigations/`, `skills/`, or `templates/`.
-2. Also check `~/.claude/` as a candidate.
-3. Prefer the candidate closest to the current working directory. Fall back to `~/.claude/`.
+Run the install-root discovery helper:
 
-Set `INSTALL_ROOT` to the discovered path. The investigations directory is `<INSTALL_ROOT>/.claude/investigations/`.
+```bash
+INSTALL_ROOT=$(bash ~/.claude/scripts/skills/find-install-root.sh)
+```
+
+The investigations directory is `<INSTALL_ROOT>/.claude/investigations/`.
 
 ## Steps
 

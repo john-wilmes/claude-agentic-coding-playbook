@@ -970,6 +970,25 @@ else
   echo "SKIPPED: scripts/knowledge-consolidate.sh (not found)"
 fi
 
+# Skill helper scripts (used by SKILL.md files)
+echo ""
+echo "--- Installing skill helper scripts ---"
+SKILLS_SCRIPTS_DIR="$SCRIPT_DIR/scripts/skills"
+DEST_SKILLS_DIR="$CLAUDE_DIR/scripts/skills"
+if [ -d "$SKILLS_SCRIPTS_DIR" ]; then
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] SYMLINK: scripts/skills/ -> $DEST_SKILLS_DIR/"
+  else
+    mkdir -p "$CLAUDE_DIR/scripts"
+    # Remove existing symlink or directory to avoid nesting
+    rm -rf "$DEST_SKILLS_DIR"
+    ln -sf "$SKILLS_SCRIPTS_DIR" "$DEST_SKILLS_DIR"
+    echo "INSTALLED: scripts/skills/ -> $DEST_SKILLS_DIR/"
+  fi
+else
+  echo "SKIPPED: scripts/skills/ (not found)"
+fi
+
 # Warn if ~/.local/bin is not on PATH
 if [[ ":$PATH:" != *":$LOCAL_BIN:"* ]]; then
   echo ""

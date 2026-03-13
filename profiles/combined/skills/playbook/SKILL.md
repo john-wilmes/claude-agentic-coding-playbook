@@ -15,11 +15,13 @@ Analyze the user's Claude Code configuration and intelligently merge playbook be
 
 Before running any mode, determine where the playbook's `.claude/` directory is installed. The install root may differ from `~/.claude/` if the user ran `install.sh --root <path>`.
 
-1. Walk up from the current working directory, checking each ancestor for a `.claude/` directory that contains any of: `skills/`, `templates/`, or a `CLAUDE.md` with playbook content (e.g., the "Explore, Plan, Code, Verify, Commit" workflow heading).
-2. Also check `~/.claude/` as a candidate.
-3. Use whichever path is found as `<INSTALL_ROOT>/.claude/`. All `<INSTALL_ROOT>` references below use this resolved path.
+Run the install-root discovery helper:
 
-If multiple candidates exist, prefer the one closest to the current working directory (it is the most specific). If no `.claude/` directory with playbook content is found, fall back to `~/.claude/`.
+```bash
+INSTALL_ROOT=$(bash ~/.claude/scripts/skills/find-install-root.sh)
+```
+
+All `<INSTALL_ROOT>` references below use this resolved path.
 
 ## Modes
 
@@ -151,23 +153,20 @@ Report gaps and offer to add missing sections.
 
 ### 4. Install pre-commit hook
 
-First, check if `core.hooksPath` is configured:
+Run the pre-commit hook installer:
+
 ```bash
-git config core.hooksPath
+TEMPLATE="<INSTALL_ROOT>/.claude/templates/hooks/pre-commit"
+bash ~/.claude/scripts/skills/install-precommit.sh --template "$TEMPLATE" --project "$(pwd)"
 ```
 
-**If `core.hooksPath` is set** (e.g., `~/.git-hooks`):
-- Use that directory as the hooks location instead of `.git/hooks/`
-- If a pre-commit hook already exists there, do NOT overwrite — inform the user they need to manually merge the playbook hook into their existing global hook
-- If no pre-commit hook exists there, copy the template and make it executable
-- Warn the user that this is a global hook directory shared across all repos
-
-**If `core.hooksPath` is NOT set:**
-- Check if `.git/hooks/pre-commit` exists in the project. If not, and `<INSTALL_ROOT>/.claude/templates/hooks/pre-commit` exists:
-  - Copy it to `.git/hooks/pre-commit`
-  - Make it executable (`chmod +x`)
-  - Report what it enforces (large file blocking, credential scanning, .env blocking)
-- If a pre-commit hook already exists, skip (do not overwrite custom hooks).
+Possible outputs:
+- `INSTALLED` — hook was copied to `.git/hooks/pre-commit`
+- `SKIPPED` — hook already exists (do not overwrite)
+- `INSTALLED_GLOBAL:<path>` — installed to global hooksPath (warn user this is shared)
+- `SKIPPED_GLOBAL:<path>` — hook exists at global hooksPath (tell user to merge manually)
+- `NO_TEMPLATE` — template not found at `<INSTALL_ROOT>/.claude/templates/hooks/pre-commit`
+- `NOT_A_REPO` — not in a git repo
 
 ## Steps for `check` mode
 

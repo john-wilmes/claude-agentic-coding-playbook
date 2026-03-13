@@ -15,12 +15,12 @@ Manage structured investigations.
 
 Before any subcommand, determine where the playbook's `.claude/` directory is installed. The install root may differ from `~/.claude/` if the user ran `install.sh --root <path>`.
 
-1. Walk up from the current working directory, checking each ancestor for a `.claude/` directory that contains `investigations/`, `skills/`, or `templates/`.
-2. Also check `~/.claude/` as a candidate.
-3. Prefer the candidate closest to the current working directory.
-4. Fall back to `~/.claude/` if no candidate is found.
+Run the install-root discovery helper:
 
-Set `INSTALL_ROOT` to the discovered path (the parent of `.claude/`).
+```bash
+INSTALL_ROOT=$(bash ~/.claude/scripts/skills/find-install-root.sh)
+```
+
 Set `INVESTIGATIONS_DIR` to `<INSTALL_ROOT>/.claude/investigations`.
 Set `TEMPLATES_DIR` to `<INSTALL_ROOT>/.claude/templates/investigation`.
 
@@ -402,7 +402,10 @@ Gather one piece of evidence manually. Use when you have context agents cannot a
 
 1. Read STATUS.md to confirm phase is `"new"`, `"collecting"`, or `"synthesizing"`. If `"closed"`, ask if user wants to reopen.
 2. Read BRIEF.md to recall the investigation question.
-3. Count existing evidence files in `EVIDENCE/` to determine the next number (zero-padded to 3 digits: 001, 002, ...).
+3. Get the next evidence number:
+```bash
+NEXT_NUM=$(bash ~/.claude/scripts/skills/next-evidence-number.sh "$INVESTIGATIONS_DIR/<id>")
+```
 4. Gather evidence. Either:
    - The user describes what they found and you format it
    - You actively search/read files based on the investigation question and the user's direction
