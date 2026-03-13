@@ -194,20 +194,8 @@ Then STOP. Do not make any more tool calls or produce any more output.
 **If neither is set (standalone session, no claude-loop):** Check the context-guard flag file to decide:
 
 ```bash
-node -e "
-const fs = require('fs'), path = require('path'), os = require('os');
-const flag = process.env.CLAUDE_LOOP_SENTINEL
-  || path.join(os.tmpdir(), 'claude-checkpoint-exit');
-try {
-  const data = JSON.parse(fs.readFileSync(flag, 'utf8'));
-  const ageMs = Date.now() - data.timestamp;
-  if (ageMs < 600000 && data.ratio >= 0.5) {
-    process.stdout.write('EXIT');
-  } else {
-    process.stdout.write('STAY');
-  }
-} catch { process.stdout.write('STAY'); }
-"
+FLAG_FILE="/tmp/claude-context-high-${CLAUDE_LOOP_PID:-standalone}"
+node ~/.claude/scripts/skills/read-sentinel.js "$FLAG_FILE"
 ```
 
 - If **EXIT**: Context is high. Tell the user:

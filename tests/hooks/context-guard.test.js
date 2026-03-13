@@ -494,37 +494,42 @@ test("21. PostToolUse stores lastUsageRatio in state file", () => {
 });
 
 
-// Test 27: PostToolUse block writes checkpoint-exit flag file
-test("27. PostToolUse block writes checkpoint-exit sentinel flag", () => {
+// Test 27: PostToolUse block at 60% writes context-high flag but NOT sentinel
+test("27. PostToolUse block at 60% writes context-high flag, not sentinel", () => {
   const sessionId = newSessionId();
-  // Use CLAUDE_LOOP_SENTINEL with a unique path per test run to avoid /tmp conflicts
-  const flagFile = path.join(os.tmpdir(), `claude-checkpoint-exit-${sessionId}`);
+  const fakePid = `test-${sessionId}`;
+  const sentinelFile = path.join(os.tmpdir(), `claude-checkpoint-exit-${fakePid}`);
+  const contextHighFile = path.join(os.tmpdir(), `claude-context-high-${fakePid}`);
   // 65% of 200k = 130,000 tokens — above block threshold
   const transcript = createFakeTranscript([makeAssistantMessage(130000)]);
   try {
-    // Clean up any pre-existing flag file
-    try { fs.rmSync(flagFile); } catch {}
+    try { fs.rmSync(sentinelFile); } catch {}
+    try { fs.rmSync(contextHighFile); } catch {}
 
     const result = runHook(CONTEXT_GUARD, {
       session_id: sessionId,
       tool_input: {},
       tool_response: {},
       transcript_path: transcript,
-    }, { CLAUDE_LOOP_SENTINEL: flagFile });
+    }, { CLAUDE_LOOP_PID: fakePid });
     assert.strictEqual(result.status, 0);
     assert.ok(result.json.hookSpecificOutput, "Should critically warn at 65%");
     assert.ok(result.json.hookSpecificOutput.additionalContext.includes("CRITICAL"), "Should include CRITICAL");
 
-    // Flag file should have been written
-    assert.ok(fs.existsSync(flagFile), "Should write claude-checkpoint-exit flag file");
-    const flag = JSON.parse(fs.readFileSync(flagFile, "utf8"));
-    assert.ok(flag.ratio >= 0.60, `Flag ratio should be >= 0.60, got ${flag.ratio}`);
-    assert.ok(flag.timestamp > 0, "Flag should have a timestamp");
-    assert.ok(Date.now() - flag.timestamp < 5000, "Flag timestamp should be recent");
+    // Sentinel must NOT be written — /checkpoint handles that after saving state
+    assert.ok(!fs.existsSync(sentinelFile), "Should NOT write sentinel at 60% (checkpoint skill writes it)");
+
+    // Context-high flag MUST be written for /checkpoint to read
+    assert.ok(fs.existsSync(contextHighFile), "Should write context-high flag at 60%");
+    const flagData = JSON.parse(fs.readFileSync(contextHighFile, "utf8"));
+    assert.strictEqual(flagData.reason, "context-high", "Flag reason should be 'context-high'");
+    assert.ok(flagData.ratio >= 0.6, `Flag ratio should be >= 0.6, got ${flagData.ratio}`);
+    assert.ok(flagData.timestamp > 0, "Flag should have a timestamp");
   } finally {
     cleanupSession(sessionId);
     try { fs.rmSync(transcript); } catch {}
-    try { fs.rmSync(flagFile); } catch {}
+    try { fs.rmSync(sentinelFile); } catch {}
+    try { fs.rmSync(contextHighFile); } catch {}
   }
 });
 

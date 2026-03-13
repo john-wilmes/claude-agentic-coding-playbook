@@ -2,7 +2,7 @@
 //
 // PostToolUse (no matcher — fires on ALL tools):
 //   Reads transcript, computes usage, warns at 35%/50%, advisory at 60%.
-//   Writes lastUsageRatio to state file. Writes checkpoint-exit sentinel at 60%+.
+//   Writes context-high flag at 60% (for /checkpoint). Failsafe sentinel at 75% (claude-loop only).
 //
 // PreToolUse (no matcher — fires on ALL tools):
 //   Pure pass-through. Always returns {}. No hard blocks — all enforcement is
@@ -225,15 +225,15 @@ process.stdin.on("end", () => {
         },
       };
     } else if (ctx.ratio >= BLOCK_THRESHOLD) {
-      // Write flag file so /checkpoint can deterministically decide to exit.
-      // Uses a fixed path — checkpoint reads this instead of guessing usage.
+      // Write the context-high flag so /checkpoint can decide EXIT vs STAY.
+      // This is NOT the sentinel — claude-loop does NOT watch this file.
       try {
-        const sentinelPath = process.env.CLAUDE_LOOP_PID
-          ? path.join(os.tmpdir(), `claude-checkpoint-exit-${process.env.CLAUDE_LOOP_PID}`)
-          : (process.env.CLAUDE_LOOP_SENTINEL || path.join(os.tmpdir(), "claude-checkpoint-exit"));
+        const flagPath = process.env.CLAUDE_LOOP_PID
+          ? path.join(os.tmpdir(), `claude-context-high-${process.env.CLAUDE_LOOP_PID}`)
+          : path.join(os.tmpdir(), "claude-context-high");
         fs.writeFileSync(
-          sentinelPath,
-          JSON.stringify({ ratio: ctx.ratio, timestamp: Date.now() })
+          flagPath,
+          JSON.stringify({ reason: "context-high", ratio: ctx.ratio, timestamp: Date.now() })
         );
       } catch {}
       log.writeLog({
