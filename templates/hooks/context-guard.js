@@ -1,14 +1,13 @@
-// Dual-mode context guard: PreToolUse (hard block) + PostToolUse (measure & warn).
+// Dual-mode context guard: PreToolUse (pass-through) + PostToolUse (measure & warn).
 //
 // PostToolUse (no matcher — fires on ALL tools):
-//   Reads transcript, computes usage, warns at 35%/50%, advisory block at 60%.
-//   Writes lastUsageRatio to state file for PreToolUse to read.
+//   Reads transcript, computes usage, warns at 35%/50%, advisory at 60%.
+//   Writes lastUsageRatio to state file. Writes checkpoint-exit sentinel at 60%+.
 //
 // PreToolUse (no matcher — fires on ALL tools):
-//   Reads state file only (~100 bytes). If lastUsageRatio >= 60%, hard-blocks
-//   the tool (prevents execution). Allows:
-//   - Skill, Bash, Task tools (so /checkpoint can fire, run git ops, delegate)
-//   - Tools with file_path under ~/.claude/ (so /checkpoint can update memory)
+//   Pure pass-through. Always returns {}. No hard blocks — all enforcement is
+//   advisory via PostToolUse. This avoids deadlocks where the agent is in a
+//   mode (e.g. plan mode) that requires tools not on an allowlist.
 //
 // Primary: reads actual token counts from the session transcript JSONL.
 // Fallback: estimates from tool I/O sizes when transcript is unavailable.
@@ -167,49 +166,9 @@ process.stdin.on("end", () => {
     const sessionId = hookInput.session_id || "unknown";
     const stateFile = getStateFile(sessionId);
 
-    // ── PreToolUse fast path ──────────────────────────────────────────────
-    // Reads only the state file (~100 bytes). Hard-blocks ALL tools when
-    // usage >= 60%. Allows Skill tool and ~/.claude/ file paths for checkpoint.
+    // ── PreToolUse pass-through ─────────────────────────────────────────
+    // No hard blocks. All enforcement is advisory via PostToolUse.
     if (isPreToolUse) {
-      const state = loadState(stateFile);
-      if (state.lastUsageRatio >= BLOCK_THRESHOLD) {
-        // Allow Skill, Bash, Task so /checkpoint can fire, run git, and delegate
-        const toolName = hookInput.tool_name || "";
-        if (toolName === "Skill" || toolName === "Bash" || toolName === "Task") {
-          process.stdout.write(JSON.stringify({}));
-          process.exit(0);
-        }
-        // Allow tools targeting ~/.claude/ paths (memory/config needed for checkpoint)
-        const filePath = (hookInput.tool_input && hookInput.tool_input.file_path) || "";
-        if (filePath) {
-          const homeDir = os.homedir();
-          const claudeDir = path.join(homeDir, ".claude");
-          const normalizedFile = path.normalize(filePath);
-          const normalizedClaude = path.normalize(claudeDir);
-          if (normalizedFile.startsWith(normalizedClaude + path.sep)) {
-            process.stdout.write(JSON.stringify({}));
-            process.exit(0);
-          }
-        }
-        const pct = Math.round(state.lastUsageRatio * 100);
-        log.writeLog({
-          hook: "context-guard",
-          event: "block",
-          session_id: hookInput.session_id,
-          tool_use_id: hookInput.tool_use_id,
-          details: `PreToolUse block: ${pct}% context used`,
-          project: hookInput.cwd,
-          context: { mode: "pre", ratio: state.lastUsageRatio, pct },
-        });
-        process.stdout.write(JSON.stringify({
-          hookSpecificOutput: {
-            hookEventName: "PreToolUse",
-            permissionDecision: "deny",
-            permissionDecisionReason: `BLOCKED: ${pct}% context used. Run /checkpoint now.`,
-          },
-        }));
-        process.exit(0);
-      }
       process.stdout.write(JSON.stringify({}));
       process.exit(0);
     }
@@ -290,7 +249,8 @@ process.stdin.on("end", () => {
         hookSpecificOutput: {
           hookEventName: "PostToolUse",
           additionalContext:
-            `CRITICAL: ${pct}% context used ${ctx.stats}. Run /checkpoint NOW. Do not start new work.`,
+            `CRITICAL: ${pct}% context used ${ctx.stats}. Run /checkpoint NOW to save state and exit. ` +
+            `Do not read new files or start new work. Your next action must be /checkpoint.`,
         },
       };
     } else if (ctx.ratio >= WARN_THRESHOLD && !state.warned) {
