@@ -17,6 +17,7 @@ No type-check or lint commands — this is a bash + Node scripting project.
 - `scripts/` — CLI tools (`q`, `qa`, `claude-loop`, `analyze-logs.js`)
 - `tests/hooks/` — Node.js integration tests for each hook (zero deps, stdlib only)
 - `tests/scripts/` — Bash integration tests for CLI scripts
+- `tests/skills/smoke/` — Smoke tests using `claude` CLI (gated behind `SKILL_SMOKE=1` env var)
 - `docs/` — Best practices guide, case studies, methodology docs
 
 ## Dependencies and Build

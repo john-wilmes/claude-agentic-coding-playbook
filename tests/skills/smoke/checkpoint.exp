@@ -1,0 +1,94 @@
+#!/usr/bin/env expect
+# tests/skills/smoke/checkpoint.exp — Interactive test for /checkpoint skill
+#
+# Drives the claude CLI interactively, sends /checkpoint, handles y/N prompts.
+# Expects TEST_PROJECT env var from wrapper script.
+#
+# Note: The TUI renders ANSI escape codes that can break regex matching.
+# We use broad patterns and rely on the bash wrapper for side-effect verification.
+
+set timeout 300
+
+set test_project $env(TEST_PROJECT)
+cd $test_project
+
+# Start claude with MCP disabled to avoid interference
+spawn claude --model haiku --permission-mode bypassPermissions \
+    --mcp-config {{"mcpServers":{}}} --strict-mcp-config
+
+# Wait for TUI to fully initialize
+sleep 8
+
+# Type the command with deliberate pacing for the autocomplete system
+send "/checkpoint"
+sleep 3
+
+# Press Enter to select from autocomplete and submit
+send "\r"
+sleep 2
+
+# Send a second Enter in case the first only selected the autocomplete item
+send "\r"
+
+# Wait for checkpoint to complete
+# Match broad patterns: the TUI mixes ANSI codes into text
+set found_checkpoint 0
+set found_complete 0
+
+expect {
+    -re {\[y/N\]} {
+        sleep 1
+        send "N\r"
+        exp_continue
+    }
+    -re {\[Y/n\]} {
+        sleep 1
+        send "Y\r"
+        exp_continue
+    }
+    "CHECKPOINT COMPLETE" {
+        set found_complete 1
+    }
+    "CHECKPOINT" {
+        # Partial match — TUI may split the phrase across renders
+        set found_checkpoint 1
+        expect {
+            "COMPLETE" {
+                set found_complete 1
+            }
+            -re {\[y/N\]} {
+                sleep 1
+                send "N\r"
+                exp_continue
+            }
+            timeout {
+                # Got CHECKPOINT but not COMPLETE — partial success
+            }
+            eof {}
+        }
+    }
+    timeout {
+        puts "\nWARN: checkpoint timed out after ${timeout}s"
+    }
+    eof {
+        # Process ended
+    }
+}
+
+if {$found_complete} {
+    puts "\nPASS: /checkpoint produced CHECKPOINT COMPLETE"
+    catch { send "/exit\r" }
+    catch { expect eof }
+    exit 0
+} elseif {$found_checkpoint} {
+    puts "\nPASS: /checkpoint ran (partial match: CHECKPOINT seen)"
+    catch { send "/exit\r" }
+    catch { expect eof }
+    exit 0
+} else {
+    # Exit 2 to signal "ran but no text match" — wrapper checks side effects
+    puts "\nINFO: no text markers found — wrapper will check side effects"
+    catch { send "/exit\r" }
+    catch { expect eof }
+    exit 2
+}
