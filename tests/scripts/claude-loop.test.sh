@@ -340,11 +340,11 @@ t_signal_with_sentinel_restarts() {
   local tmpbin tmpdir
   tmpbin="$(mktemp -d)"
   tmpdir="$(mktemp -d)"
-  # Stub claude: writes sentinel then exits 130
+  # Stub claude: writes sentinel using CLAUDE_LOOP_PID then exits 130
   cat > "${tmpbin}/claude" <<'STUBEOF'
 #!/usr/bin/env bash
-if [[ -n "${CLAUDE_LOOP_SENTINEL:-}" ]]; then
-  touch "${CLAUDE_LOOP_SENTINEL}"
+if [[ -n "${CLAUDE_LOOP_PID:-}" ]]; then
+  touch "/tmp/claude-checkpoint-exit-${CLAUDE_LOOP_PID}"
 fi
 exit 130
 STUBEOF
@@ -405,12 +405,13 @@ t_sentinel_watcher_kills_claude() {
   local tmpbin tmpdir
   tmpbin="$(mktemp -d)"
   tmpdir="$(mktemp -d)"
-  # Stub claude: writes sentinel then hangs (simulates interactive session)
+  # Stub claude: writes sentinel using CLAUDE_LOOP_PID then hangs (simulates interactive session)
   cat > "${tmpbin}/claude" <<'STUBEOF'
 #!/usr/bin/env bash
-# Write sentinel file (simulating /checkpoint writing it)
-if [[ -n "${CLAUDE_LOOP_SENTINEL:-}" ]]; then
-  echo '{"reason":"checkpoint"}' > "${CLAUDE_LOOP_SENTINEL}"
+# Write sentinel file using PID (simulating /checkpoint writing it)
+# CLAUDE_LOOP_PID is the stable identifier; CLAUDE_LOOP_SENTINEL may be overridden.
+if [[ -n "${CLAUDE_LOOP_PID:-}" ]]; then
+  echo '{"reason":"checkpoint"}' > "/tmp/claude-checkpoint-exit-${CLAUDE_LOOP_PID}"
 fi
 # Hang until killed (simulates interactive session waiting for input)
 sleep 60

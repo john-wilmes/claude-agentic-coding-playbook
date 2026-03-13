@@ -14,10 +14,13 @@ set -euo pipefail
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
-# Project-scoped hash: prevents cross-project collisions for lock + sentinel.
+# Project-scoped hash: prevents cross-project collisions for lock file.
 _CWD_HASH="$(pwd | md5sum | cut -c1-8)"
-SENTINEL_FILE="/tmp/claude-checkpoint-exit-${_CWD_HASH}"
-CLAUDE_PID_FILE="/tmp/claude-loop-cpid-${_CWD_HASH}"
+# Sentinel is PID-scoped (not CWD-scoped) because Claude Code overrides
+# CLAUDE_LOOP_SENTINEL after changing process.cwd() to the project directory.
+# PID is stable for the lifetime of this claude-loop instance.
+SENTINEL_FILE="/tmp/claude-checkpoint-exit-$$"
+CLAUDE_PID_FILE="/tmp/claude-loop-cpid-$$"
 SENTINEL_POLL_INTERVAL="${SENTINEL_POLL_INTERVAL:-2}"
 LOCK_FILE="/tmp/claude-loop-${_CWD_HASH}.lock"
 LOG_DIR="${HOME}/.claude/logs"
@@ -48,10 +51,12 @@ Options:
   --dry-run            Show what would be done without running claude
   --help               Show this message
 
-Sentinel file: /tmp/claude-checkpoint-exit-<cwd-hash>
-  Project-scoped sentinel. When the checkpoint skill writes this file,
+Sentinel file: /tmp/claude-checkpoint-exit-<pid>
+  PID-scoped sentinel. When the checkpoint skill writes this file,
   claude-loop restarts. Natural exit (no sentinel) stops the loop.
-  Exported as CLAUDE_LOOP_SENTINEL so hooks and skills can find it.
+  Exported as CLAUDE_LOOP_SENTINEL and CLAUDE_LOOP_PID so hooks and
+  skills can find it (CLAUDE_LOOP_PID is the fallback if Claude Code
+  overrides CLAUDE_LOOP_SENTINEL).
 
 Task queue format (tasks.md):
   - [ ] Task not yet done
@@ -515,6 +520,7 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
   EXIT_CODE=0
   (
     echo $BASHPID > "${CLAUDE_PID_FILE}"
+    export CLAUDE_LOOP_PID=$$
     export CLAUDE_LOOP_SENTINEL="${SENTINEL_FILE}"
     [[ -n "${TASK_QUEUE_FILE}" ]] && export CLAUDE_LOOP=1
     exec "${CLAUDE_CMD[@]}"
