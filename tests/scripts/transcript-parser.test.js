@@ -38,7 +38,7 @@ function test(name, fn) {
   } catch (e) {
     failed++;
     console.error(`  ✗ ${name}`);
-    console.error(`    ${e.message}`);
+    console.error(e && e.stack ? e.stack : `    ${String(e)}`);
   }
 }
 
@@ -168,13 +168,13 @@ test("Returns null when project dir does not exist", () => {
 });
 
 test("Exact match: returns full path to matching .jsonl file", () => {
-  // Build structure under a known temp dir and use getProjectDir indirectly
-  // by writing directly into the real project dir.
-  // Since findSessionFile calls getProjectDir internally (which uses os.homedir()),
-  // we must use the real home but a unique fake cwd so the dir doesn't pre-exist.
-  const fakeCwd = "/tp-test-exact-" + Date.now();
+  // Use isolated temp HOME so we don't write to the real ~/.claude/projects/
+  const origHome = process.env.HOME;
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "tp-home-"));
+  process.env.HOME = tmpHome;
+  const fakeCwd = "/tp-test-exact";
   const encoded = encodeCwd(fakeCwd);
-  const dir = path.join(os.homedir(), ".claude", "projects", encoded);
+  const dir = path.join(tmpHome, ".claude", "projects", encoded);
   fs.mkdirSync(dir, { recursive: true });
   const sessionId = "sess-exact-abc123";
   const filePath = path.join(dir, sessionId + ".jsonl");
@@ -183,14 +183,18 @@ test("Exact match: returns full path to matching .jsonl file", () => {
     const result = findSessionFile(sessionId, fakeCwd);
     assert.strictEqual(result, filePath);
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    process.env.HOME = origHome;
+    fs.rmSync(tmpHome, { recursive: true, force: true });
   }
 });
 
 test("Prefix match (single): returns file when prefix uniquely matches", () => {
-  const fakeCwd = "/tp-test-prefix-" + Date.now();
+  const origHome = process.env.HOME;
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "tp-home-"));
+  process.env.HOME = tmpHome;
+  const fakeCwd = "/tp-test-prefix";
   const encoded = encodeCwd(fakeCwd);
-  const dir = path.join(os.homedir(), ".claude", "projects", encoded);
+  const dir = path.join(tmpHome, ".claude", "projects", encoded);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "session-abc123def.jsonl"), "");
   fs.writeFileSync(path.join(dir, "session-xyz999.jsonl"), "");
@@ -199,19 +203,22 @@ test("Prefix match (single): returns file when prefix uniquely matches", () => {
     assert.ok(result !== null, "Should find a match");
     assert.ok(result.endsWith("session-abc123def.jsonl"), `Got: ${result}`);
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    process.env.HOME = origHome;
+    fs.rmSync(tmpHome, { recursive: true, force: true });
   }
 });
 
 test("Prefix match (multiple): returns most recently modified file", () => {
-  const fakeCwd = "/tp-test-multi-" + Date.now();
+  const origHome = process.env.HOME;
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "tp-home-"));
+  process.env.HOME = tmpHome;
+  const fakeCwd = "/tp-test-multi";
   const encoded = encodeCwd(fakeCwd);
-  const dir = path.join(os.homedir(), ".claude", "projects", encoded);
+  const dir = path.join(tmpHome, ".claude", "projects", encoded);
   fs.mkdirSync(dir, { recursive: true });
   const older = path.join(dir, "sess-aaa111.jsonl");
   const newer = path.join(dir, "sess-aaa222.jsonl");
   fs.writeFileSync(older, "");
-  // Ensure newer mtime by sleeping a tick then writing
   const oldTime = new Date(Date.now() - 2000);
   fs.utimesSync(older, oldTime, oldTime);
   fs.writeFileSync(newer, "");
@@ -220,28 +227,36 @@ test("Prefix match (multiple): returns most recently modified file", () => {
     assert.ok(result !== null, "Should find a match");
     assert.ok(result.endsWith("sess-aaa222.jsonl"), `Expected newer file, got: ${result}`);
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    process.env.HOME = origHome;
+    fs.rmSync(tmpHome, { recursive: true, force: true });
   }
 });
 
 test("No match: returns null", () => {
-  const fakeCwd = "/tp-test-nomatch-" + Date.now();
+  const origHome = process.env.HOME;
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "tp-home-"));
+  process.env.HOME = tmpHome;
+  const fakeCwd = "/tp-test-nomatch";
   const encoded = encodeCwd(fakeCwd);
-  const dir = path.join(os.homedir(), ".claude", "projects", encoded);
+  const dir = path.join(tmpHome, ".claude", "projects", encoded);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "session-xyz.jsonl"), "");
   try {
     const result = findSessionFile("session-abc", fakeCwd);
     assert.strictEqual(result, null);
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    process.env.HOME = origHome;
+    fs.rmSync(tmpHome, { recursive: true, force: true });
   }
 });
 
 test("Ignores non-.jsonl files", () => {
-  const fakeCwd = "/tp-test-nonjsonl-" + Date.now();
+  const origHome = process.env.HOME;
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "tp-home-"));
+  process.env.HOME = tmpHome;
+  const fakeCwd = "/tp-test-nonjsonl";
   const encoded = encodeCwd(fakeCwd);
-  const dir = path.join(os.homedir(), ".claude", "projects", encoded);
+  const dir = path.join(tmpHome, ".claude", "projects", encoded);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "session-abc.txt"), "");
   fs.writeFileSync(path.join(dir, "session-abc.json"), "");
@@ -249,7 +264,8 @@ test("Ignores non-.jsonl files", () => {
     const result = findSessionFile("session-abc", fakeCwd);
     assert.strictEqual(result, null);
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    process.env.HOME = origHome;
+    fs.rmSync(tmpHome, { recursive: true, force: true });
   }
 });
 
