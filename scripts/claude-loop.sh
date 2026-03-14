@@ -499,8 +499,8 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
     ATTEMPT="$(( PREV_ATTEMPTS + 1 ))"
   fi
 
-  # ── Remove stale sentinel and PID file ─────────────────────────────────────
-  rm -f "${SENTINEL_FILE}" "${CLAUDE_PID_FILE}"
+  # ── Remove stale sentinel, context-high flag, and PID file ─────────────────
+  rm -f "${SENTINEL_FILE}" "${CLAUDE_PID_FILE}" "/tmp/claude-context-high-$$"
 
   # ── Log session start ──────────────────────────────────────────────────────
   log_event "event=session_start" "task=${CURRENT_TASK:-}" "attempt=${ATTEMPT}"

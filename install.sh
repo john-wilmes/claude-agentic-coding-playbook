@@ -908,6 +908,44 @@ if [ -f "$SCRIPT_DIR/templates/hooks/filesize-guard.js" ]; then
   fi
 fi
 
+# Bloat guard hook (PreToolUse: blocks oversized file writes)
+if [ -f "$SCRIPT_DIR/templates/hooks/bloat-guard.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/bloat-guard.js" "$CLAUDE_DIR/hooks/bloat-guard.js" "bloat guard: bloat-guard.js"
+
+  echo ""
+  echo "--- Configuring bloat-guard in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  BLOAT_CMD="node $CLAUDE_DIR/hooks/bloat-guard.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add bloat-guard hook (PreToolUse Write) to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    if grep -q "bloat-guard" "$SETTINGS_FILE" 2>/dev/null; then
+      echo "ALREADY CONFIGURED: bloat-guard hook in settings.json"
+    else
+      node -e "
+        const fs = require('fs');
+        const path = require('path');
+        const settingsPath = path.resolve(process.argv[1]);
+        const hookCmd = process.argv[2];
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (!settings.hooks) settings.hooks = {};
+        if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+        settings.hooks.PreToolUse.push({
+          matcher: 'Write',
+          hooks: [{ type: 'command', command: hookCmd, timeout: 5 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      " "$SETTINGS_FILE" "$BLOAT_CMD"
+      echo "CONFIGURED: bloat-guard hook in settings.json (PreToolUse Write)"
+    fi
+  fi
+fi
+
 # --- Install CLI scripts (q, qa, claude-loop) ---
 
 echo ""
