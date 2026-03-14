@@ -86,7 +86,9 @@ echo "${CLAUDE_LOOP:-0}"
 - If Next Steps exist in Current Work, immediately begin working on the first one.
 - If there are no next steps and no task argument, print "claude-loop: no work to do — exiting." and STOP. Do NOT run `/checkpoint`. Do NOT write any sentinel file. Stopping without a sentinel tells claude-loop to end the loop gracefully.
 
-**If `0` (interactive session):** Propose what to work on next based on the Current Work section and context scan. Ask the user to confirm or redirect.
+**If `0` (interactive session):** Present the summary briefly, then **immediately start working** on the first Next Step from Current Work. Do NOT ask the user for confirmation — just begin. The user can always interrupt (Ctrl+C, new message) to redirect.
+
+**CRITICAL — Context conservation:** After presenting the summary, do NOT read large files (100+ lines) directly into parent context. Use subagents (Task tool with Explore or general-purpose type) for any exploration that touches multiple files or large files. The /continue skill itself consumed context; protect what remains.
 
 ---
 
@@ -174,4 +176,6 @@ echo "${CLAUDE_LOOP:-0}"
 
 **If `1` (running under claude-loop):** Do NOT ask questions. If `$ARGUMENTS` contains a task, work on that. If there is an open investigation, resume it. If nothing to do, print "claude-loop: no work to do — exiting." and STOP. Do NOT run `/checkpoint` or write any sentinel.
 
-**If `0` (interactive session):** Propose what to do next based on available context (open investigations + project memory). Ask the user to confirm or redirect.
+**If `0` (interactive session):** Present the summary briefly, then **immediately start working** on the most relevant next action (resume investigation, continue from memory). Do NOT ask the user for confirmation — just begin. The user can always interrupt to redirect.
+
+**CRITICAL — Context conservation:** Do NOT read large files directly into parent context after the summary. Use subagents for exploration.
