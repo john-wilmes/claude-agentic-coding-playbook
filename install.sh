@@ -74,6 +74,7 @@ case "$INSTALL_ROOT" in
 esac
 INSTALL_ROOT="$(cd "$INSTALL_ROOT" 2>/dev/null && pwd || echo "$INSTALL_ROOT")"
 CLAUDE_DIR="$INSTALL_ROOT/.claude"
+GLOBAL_CLAUDE_DIR="$HOME/.claude"
 
 PROFILE_DIR="$SCRIPT_DIR/profiles/combined"
 if [ ! -d "$PROFILE_DIR" ]; then
@@ -291,13 +292,13 @@ install_skill() {
 
 # --- Wizard: analyze existing configuration ---
 
-if [ "$WIZARD" = true ] && [ -f "$CLAUDE_DIR/CLAUDE.md" ]; then
+if [ "$WIZARD" = true ] && [ -f "$GLOBAL_CLAUDE_DIR/CLAUDE.md" ]; then
   echo "=== Wizard: Analyzing existing configuration ==="
   echo ""
-  echo "Found existing CLAUDE.md ($(wc -l < "$CLAUDE_DIR/CLAUDE.md") lines)."
+  echo "Found existing CLAUDE.md ($(wc -l < "$GLOBAL_CLAUDE_DIR/CLAUDE.md") lines)."
   echo ""
   echo "Sections detected:"
-  grep -E '^## ' "$CLAUDE_DIR/CLAUDE.md" | sed 's/^/  /' || echo "  (no sections found)"
+  grep -E '^## ' "$GLOBAL_CLAUDE_DIR/CLAUDE.md" | sed 's/^/  /' || echo "  (no sections found)"
   echo ""
   echo "The installer can:"
   echo "  1. Replace your CLAUDE.md with the playbook version (backup kept)"
@@ -310,7 +311,7 @@ if [ "$WIZARD" = true ] && [ -f "$CLAUDE_DIR/CLAUDE.md" ]; then
       if [ "$DRY_RUN" = true ]; then
         echo "  -> [DRY RUN] Would back up existing CLAUDE.md."
       else
-        cp "$CLAUDE_DIR/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md.backup.$(date +%Y%m%d%H%M%S)"
+        cp "$GLOBAL_CLAUDE_DIR/CLAUDE.md" "$GLOBAL_CLAUDE_DIR/CLAUDE.md.backup.$(date +%Y%m%d%H%M%S)"
         echo "  -> Existing CLAUDE.md backed up."
       fi
       FORCE_CLAUDE=true
@@ -336,14 +337,25 @@ if [ "${FORCE_CLAUDE:-false}" = "skip" ]; then
   echo "SKIPPED: CLAUDE.md (wizard choice)"
 elif [ "${FORCE_CLAUDE:-false}" = true ]; then
   if [ "$DRY_RUN" = true ]; then
-    echo "[DRY RUN] Would install: CLAUDE.md"
+    echo "[DRY RUN] Would install: CLAUDE.md -> $GLOBAL_CLAUDE_DIR/CLAUDE.md"
   else
-    mkdir -p "$CLAUDE_DIR"
-    cp "$PROFILE_DIR/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md"
-    echo "INSTALLED: CLAUDE.md"
+    mkdir -p "$GLOBAL_CLAUDE_DIR"
+    cp "$PROFILE_DIR/CLAUDE.md" "$GLOBAL_CLAUDE_DIR/CLAUDE.md"
+    echo "INSTALLED: CLAUDE.md -> $GLOBAL_CLAUDE_DIR/CLAUDE.md"
   fi
 else
-  install_file "$PROFILE_DIR/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md" "CLAUDE.md"
+  install_file "$PROFILE_DIR/CLAUDE.md" "$GLOBAL_CLAUDE_DIR/CLAUDE.md" "CLAUDE.md"
+fi
+
+# Clean up duplicate CLAUDE.md at INSTALL_ROOT if it differs from global location
+if [ "$CLAUDE_DIR" != "$GLOBAL_CLAUDE_DIR" ] && [ -f "$CLAUDE_DIR/CLAUDE.md" ]; then
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would remove duplicate: $CLAUDE_DIR/CLAUDE.md (global copy is at $GLOBAL_CLAUDE_DIR/CLAUDE.md)"
+  else
+    cp "$CLAUDE_DIR/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md.backup.$(date +%Y%m%d%H%M%S)"
+    rm "$CLAUDE_DIR/CLAUDE.md"
+    echo "REMOVED DUPLICATE: $CLAUDE_DIR/CLAUDE.md (backed up; global copy is at $GLOBAL_CLAUDE_DIR/CLAUDE.md)"
+  fi
 fi
 
 echo ""
@@ -946,6 +958,40 @@ if [ -f "$SCRIPT_DIR/templates/hooks/bloat-guard.js" ]; then
   fi
 fi
 
+# Skill guard hook (PreToolUse: blocks unregistered skills, warns on repeats)
+if [ -f "$SCRIPT_DIR/templates/hooks/skill-guard.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/skill-guard.js" "$CLAUDE_DIR/hooks/skill-guard.js" "skill guard: skill-guard.js"
+
+  # Merge PreToolUse hook entry into settings.json (matcher: Skill)
+  echo ""
+  echo "--- Configuring skill-guard in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  SKILLGUARD_CMD="node $CLAUDE_DIR/hooks/skill-guard.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add skill-guard hook (PreToolUse Skill) to $SETTINGS_FILE"
+  else
+    if [ -f "$SETTINGS_FILE" ] && grep -q "skill-guard" "$SETTINGS_FILE" 2>/dev/null; then
+      echo "ALREADY CONFIGURED: skill-guard hook in settings.json"
+    else
+      node -e "
+        const fs = require('fs');
+        const settingsPath = process.argv[1];
+        const hookCmd = process.argv[2];
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (!settings.hooks) settings.hooks = {};
+        if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+        settings.hooks.PreToolUse.push({
+          matcher: 'Skill',
+          hooks: [{ type: 'command', command: hookCmd, timeout: 10 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      " "$SETTINGS_FILE" "$SKILLGUARD_CMD"
+      echo "CONFIGURED: skill-guard hook in settings.json (PreToolUse Skill)"
+    fi
+  fi
+fi
+
 # --- Install CLI scripts (q, qa, claude-loop) ---
 
 echo ""
@@ -1240,7 +1286,7 @@ echo "=== Installation complete ==="
 echo "Install root: $INSTALL_ROOT"
 echo ""
 echo "What was installed:"
-echo "  CLAUDE.md        -> $CLAUDE_DIR/CLAUDE.md (loads for all sessions under $INSTALL_ROOT)"
+echo "  CLAUDE.md        -> $GLOBAL_CLAUDE_DIR/CLAUDE.md (global, loads for all sessions)"
 for skill_dir in "$PROFILE_DIR/skills"/*/; do
   [ -d "$skill_dir" ] || continue
   echo "  /$(basename "$skill_dir") skill  -> $CLAUDE_DIR/skills/$(basename "$skill_dir")/"
@@ -1260,12 +1306,12 @@ echo "    knowledge/          (entry format, CI, pre-commit for knowledge repos)
 echo ""
 echo "Directory structure:"
 echo "  $INSTALL_ROOT/"
-echo "    .claude/             <- playbook config (CLAUDE.md, skills, hooks, templates)"
+echo "    .claude/             <- playbook config (skills, hooks, templates)"
 echo "    research/            <- investigations and research"
 echo "    <your-projects>/     <- dev projects (siblings to .claude/)"
 echo ""
 echo "Next steps:"
-echo "  1. Review $CLAUDE_DIR/CLAUDE.md and customize for your workflow"
+echo "  1. Review $GLOBAL_CLAUDE_DIR/CLAUDE.md and customize for your workflow"
 echo "  2. cd $INSTALL_ROOT && claude     # start a session"
 echo "  3. Run /playbook to configure for your environment"
 echo "  4. Use /continue at session start, /checkpoint at session end"
