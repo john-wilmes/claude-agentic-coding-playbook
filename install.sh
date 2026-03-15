@@ -684,6 +684,48 @@ if [ -f "$SCRIPT_DIR/templates/hooks/post-tool-verify.js" ]; then
   fi
 fi
 
+# MEMORY.md size guard hook (PostToolUse -- enforces line limit on MEMORY.md writes)
+if [ -f "$SCRIPT_DIR/templates/hooks/md-size-guard.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/md-size-guard.js" "$CLAUDE_DIR/hooks/md-size-guard.js" "md size guard: md-size-guard.js"
+
+  echo ""
+  echo "--- Configuring md-size-guard in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  MDGUARD_CMD="node $CLAUDE_DIR/hooks/md-size-guard.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add PostToolUse hooks to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    if grep -q "md-size-guard" "$SETTINGS_FILE" 2>/dev/null; then
+      echo "ALREADY CONFIGURED: md-size-guard hook in settings.json"
+    else
+      node -e "
+        const fs = require('fs');
+        const path = require('path');
+        const settingsPath = path.resolve(process.argv[1]);
+        const hookCmd = process.argv[2];
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (!settings.hooks) settings.hooks = {};
+        if (!settings.hooks.PostToolUse) settings.hooks.PostToolUse = [];
+        settings.hooks.PostToolUse.push({
+          matcher: 'Edit',
+          hooks: [{ type: 'command', command: hookCmd, timeout: 10 }]
+        });
+        settings.hooks.PostToolUse.push({
+          matcher: 'Write',
+          hooks: [{ type: 'command', command: hookCmd, timeout: 10 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      " "$SETTINGS_FILE" "$MDGUARD_CMD"
+      echo "CONFIGURED: md-size-guard hook in settings.json"
+    fi
+  fi
+fi
+
 # Context guard hook (dual-mode: PostToolUse all tools + PreToolUse Edit/Write)
 if [ -f "$SCRIPT_DIR/templates/hooks/context-guard.js" ]; then
   install_file "$SCRIPT_DIR/templates/hooks/context-guard.js" "$CLAUDE_DIR/hooks/context-guard.js" "context guard: context-guard.js"
