@@ -1,0 +1,6 @@
+# markdownlint-cli2 configuration
+# Rule config lives in .markdownlint.yml; this file handles ignores.
+
+ignores:
+  # Verbatim reference copy of Claude Code's system prompt — not our prose
+  - "docs/claude-code-system-prompt.md"
