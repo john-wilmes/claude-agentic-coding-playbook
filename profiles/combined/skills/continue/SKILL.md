@@ -83,6 +83,7 @@ echo "${CLAUDE_LOOP:-0}"
 
 **If `1` (running under claude-loop):** This is an autonomous session — there is no interactive user. Do NOT ask questions or wait for confirmation. Instead:
 - If `$ARGUMENTS` contains a task after `--` (e.g. `/continue -- Next task: ...`), work on that task instead of memory's next steps.
+- After completing the task, run `/checkpoint` to signal completion to claude-loop.
 - If Next Steps exist in Current Work, immediately begin working on the first one.
 - If there are no next steps and no task argument, print "claude-loop: no work to do — exiting." and STOP. Do NOT run `/checkpoint`. Do NOT write any sentinel file. Stopping without a sentinel tells claude-loop to end the loop gracefully.
 

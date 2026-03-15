@@ -53,6 +53,7 @@ _load_helpers() {
     /^# get_task_attempts /,/^}$/ { print; next }
     /^# mark_task_done /,/^}$/ { print; next }
     /^# mark_task_fail /,/^}$/ { print; next }
+    /^# task_is_checked /,/^}$/ { print; next }
   ' "${SCRIPT}")"
   eval "${src}"
 }
@@ -435,6 +436,106 @@ STUBEOF
     || { echo "Expected 'sentinel' in output; output: ${out}"; return 1; }
 }
 run_test "sentinel watcher kills claude and triggers restart" t_sentinel_watcher_kills_claude
+
+# ─── Test 12: task_is_checked — detects [x] tasks ───────────────────────────
+
+t_task_is_checked_true() {
+  _load_helpers
+
+  local tmpfile
+  tmpfile="$(mktemp)"
+  cat > "${tmpfile}" <<'EOF'
+- [x] Build the widget
+- [ ] Deploy to staging
+EOF
+
+  local rc=0
+  task_is_checked "${tmpfile}" "Build the widget" || rc=$?
+  rm -f "${tmpfile}"
+
+  [[ ${rc} -eq 0 ]] \
+    || { echo "Expected 0 for [x] task, got ${rc}"; return 1; }
+}
+run_test "task_is_checked returns 0 for [x] task" t_task_is_checked_true
+
+t_task_is_checked_false_unchecked() {
+  _load_helpers
+
+  local tmpfile
+  tmpfile="$(mktemp)"
+  cat > "${tmpfile}" <<'EOF'
+- [ ] Build the widget
+- [x] Other task
+EOF
+
+  local rc=0
+  task_is_checked "${tmpfile}" "Build the widget" || rc=$?
+  rm -f "${tmpfile}"
+
+  [[ ${rc} -ne 0 ]] \
+    || { echo "Expected non-zero for [ ] task, got 0"; return 1; }
+}
+run_test "task_is_checked returns non-zero for [ ] task" t_task_is_checked_false_unchecked
+
+t_task_is_checked_false_fail() {
+  _load_helpers
+
+  local tmpfile
+  tmpfile="$(mktemp)"
+  cat > "${tmpfile}" <<'EOF'
+- [FAIL] Build the widget (attempts: 3)
+EOF
+
+  local rc=0
+  task_is_checked "${tmpfile}" "Build the widget" || rc=$?
+  rm -f "${tmpfile}"
+
+  [[ ${rc} -ne 0 ]] \
+    || { echo "Expected non-zero for [FAIL] task, got 0"; return 1; }
+}
+run_test "task_is_checked returns non-zero for [FAIL] task" t_task_is_checked_false_fail
+
+# ─── Test 13: Task queue — checked-off task treated as success without sentinel
+
+t_checked_task_no_sentinel_succeeds() {
+  local tmpbin tmpdir tmpqueue
+  tmpbin="$(mktemp -d)"
+  tmpdir="$(mktemp -d)"
+  tmpqueue="$(mktemp)"
+
+  # Queue: first task already [x], second is pending
+  cat > "${tmpqueue}" <<'EOF'
+- [ ] Build the widget
+- [ ] Deploy to staging
+EOF
+
+  # Stub claude: checks off the task in the queue file, then exits 0 (no sentinel)
+  cat > "${tmpbin}/claude" <<STUBEOF
+#!/usr/bin/env bash
+# Simulate agent checking off the task in the queue file
+sed -i 's/- \[ \] Build the widget/- [x] Build the widget/' "${tmpqueue}"
+exit 0
+STUBEOF
+  chmod +x "${tmpbin}/claude"
+
+  local out rc=0
+  out="$(cd "${tmpdir}" && PATH="${tmpbin}:${PATH}" \
+    bash "${SCRIPT}" --task-queue "${tmpqueue}" --max-sessions 2 2>&1)" || rc=$?
+
+  local content
+  content="$(cat "${tmpqueue}")"
+  rm -rf "${tmpbin}" "${tmpdir}" "${tmpqueue}"
+
+  # Should see "checked off, no sentinel" success message
+  echo "${out}" | grep -q "checked off, no sentinel" \
+    || { echo "Expected 'checked off, no sentinel' message; output: ${out}"; return 1; }
+
+  # Should NOT see "attempt failed" for the first task
+  if echo "${out}" | grep -q "attempt.*failed.*Build the widget"; then
+    echo "First task should not be marked as failed; output: ${out}"; return 1
+  fi
+}
+run_test "checked-off task without sentinel treated as success" t_checked_task_no_sentinel_succeeds
 
 # ─── Summary ──────────────────────────────────────────────────────────────────
 

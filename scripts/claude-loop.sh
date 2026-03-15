@@ -245,6 +245,14 @@ mark_task_fail() {
   mv "${tmp}" "${file}"
 }
 
+# task_is_checked FILE TASK_TEXT
+# Returns 0 if the task is already marked [x] in the queue file.
+task_is_checked() {
+  local file="$1"
+  local task="$2"
+  grep -qE "^\s*-\s*\[x\]\s+${task//[/\\[}" "${file}" 2>/dev/null
+}
+
 # ─── Sentinel watcher ─────────────────────────────────────────────────────────
 
 _start_sentinel_watcher() {
@@ -461,6 +469,9 @@ fi
 
 # ─── Main loop ────────────────────────────────────────────────────────────────
 
+# Clean stale sentinel files from previous runs (PID reuse protection)
+find /tmp -maxdepth 1 -name 'claude-checkpoint-exit-*' -mmin +10 -delete 2>/dev/null || true
+
 mkdir -p "${LOG_DIR}"
 log_event "event=loop_event" "message=loop started" "pid=$$"
 
@@ -573,22 +584,28 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
       log_event "event=task_advance" "task=${CURRENT_TASK}" "status=done"
       echo "claude-loop: task completed: ${CURRENT_TASK}"
     else
-      # Non-sentinel exit = task did not finish cleanly
-      if [[ "${ATTEMPT}" -ge "${MAX_TASK_ATTEMPTS}" ]]; then
-        mark_task_fail "${TASK_QUEUE_FILE}" "${CURRENT_TASK}" "${ATTEMPT}"
-        log_event "event=task_fail" "task=${CURRENT_TASK}" "attempts=${ATTEMPT}"
-        echo "claude-loop: task failed after ${ATTEMPT} attempts: ${CURRENT_TASK}"
+      # No sentinel — check if agent already checked off the task
+      if task_is_checked "${TASK_QUEUE_FILE}" "${CURRENT_TASK}"; then
+        log_event "event=task_advance" "task=${CURRENT_TASK}" "status=done_no_sentinel"
+        echo "claude-loop: task completed (checked off, no sentinel): ${CURRENT_TASK}"
       else
-        mark_task_fail "${TASK_QUEUE_FILE}" "${CURRENT_TASK}" "${ATTEMPT}"
-        log_event "event=loop_event" "message=task attempt failed" \
-          "task=${CURRENT_TASK}" "attempt=${ATTEMPT}" "max=${MAX_TASK_ATTEMPTS}"
-        echo "claude-loop: task attempt ${ATTEMPT}/${MAX_TASK_ATTEMPTS} failed: ${CURRENT_TASK}"
+        # Non-sentinel exit = task did not finish cleanly
+        if [[ "${ATTEMPT}" -ge "${MAX_TASK_ATTEMPTS}" ]]; then
+          mark_task_fail "${TASK_QUEUE_FILE}" "${CURRENT_TASK}" "${ATTEMPT}"
+          log_event "event=task_fail" "task=${CURRENT_TASK}" "attempts=${ATTEMPT}"
+          echo "claude-loop: task failed after ${ATTEMPT} attempts: ${CURRENT_TASK}"
+        else
+          mark_task_fail "${TASK_QUEUE_FILE}" "${CURRENT_TASK}" "${ATTEMPT}"
+          log_event "event=loop_event" "message=task attempt failed" \
+            "task=${CURRENT_TASK}" "attempt=${ATTEMPT}" "max=${MAX_TASK_ATTEMPTS}"
+          echo "claude-loop: task attempt ${ATTEMPT}/${MAX_TASK_ATTEMPTS} failed: ${CURRENT_TASK}"
 
-        # Exponential backoff: 10s, 20s, 40s
-        BACKOFF_S="$(( 10 * (1 << (ATTEMPT - 1)) ))"
-        echo "claude-loop: retrying in ${BACKOFF_S}s..."
-        sleep "${BACKOFF_S}"
-        continue
+          # Exponential backoff: 10s, 20s, 40s
+          BACKOFF_S="$(( 10 * (1 << (ATTEMPT - 1)) ))"
+          echo "claude-loop: retrying in ${BACKOFF_S}s..."
+          sleep "${BACKOFF_S}"
+          continue
+        fi
       fi
     fi
   fi
