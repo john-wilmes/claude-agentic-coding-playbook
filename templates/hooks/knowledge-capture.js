@@ -23,13 +23,18 @@ let DB_PATH = null;
 
 try {
   knowledgeDb = require("./knowledge-db");
-  // Compute the DB path using the current homedir (respects HOME env at load time)
-  DB_PATH = path.join(os.homedir(), ".claude", "knowledge", "knowledge.db");
-  db = knowledgeDb.openDb(DB_PATH);
 } catch {
   // knowledge-db unavailable (missing module, wrong Node version, etc.)
   knowledgeDb = null;
-  db = null;
+}
+
+function _getDb() {
+  if (!knowledgeDb) return null;
+  if (!db) {
+    DB_PATH = path.join(os.homedir(), ".claude", "knowledge", "knowledge.db");
+    db = knowledgeDb.openDb(DB_PATH);
+  }
+  return db;
 }
 
 // ─── JSONL fallback helpers ───────────────────────────────────────────────────
@@ -122,8 +127,9 @@ function _jsonlPruneStagedFiles(maxAgeDays) {
 function stageCandidate(candidate) {
   try {
     if (!candidate || !candidate.session_id) return;
-    if (db) {
-      knowledgeDb.stageCandidate(db, candidate);
+    const activeDb = _getDb();
+    if (activeDb) {
+      knowledgeDb.stageCandidate(activeDb, candidate);
     } else {
       _jsonlStageCandidate(candidate);
     }
@@ -140,8 +146,9 @@ function stageCandidate(candidate) {
  */
 function readStagedCandidates(sessionId) {
   try {
-    if (db) {
-      return knowledgeDb.readStagedCandidates(db, sessionId);
+    const activeDb = _getDb();
+    if (activeDb) {
+      return knowledgeDb.readStagedCandidates(activeDb, sessionId);
     }
     return _jsonlReadStagedCandidates(sessionId);
   } catch {
@@ -157,8 +164,9 @@ function readStagedCandidates(sessionId) {
  */
 function clearStagedCandidates(sessionId) {
   try {
-    if (db) {
-      knowledgeDb.clearStagedCandidates(db, sessionId);
+    const activeDb = _getDb();
+    if (activeDb) {
+      knowledgeDb.clearStagedCandidates(activeDb, sessionId);
     } else {
       _jsonlClearStagedCandidates(sessionId);
     }
@@ -176,8 +184,9 @@ function clearStagedCandidates(sessionId) {
  */
 function pruneStagedFiles(maxAgeDays) {
   try {
-    if (db) {
-      knowledgeDb.pruneStagedRows(db, maxAgeDays);
+    const activeDb = _getDb();
+    if (activeDb) {
+      knowledgeDb.pruneStagedRows(activeDb, maxAgeDays);
     } else {
       _jsonlPruneStagedFiles(maxAgeDays);
     }
@@ -188,7 +197,7 @@ function pruneStagedFiles(maxAgeDays) {
 
 module.exports = {
   STAGED_DIR,
-  DB_PATH,
+  get DB_PATH() { return knowledgeDb ? path.join(os.homedir(), ".claude", "knowledge", "knowledge.db") : null; },
   stageCandidate,
   readStagedCandidates,
   clearStagedCandidates,

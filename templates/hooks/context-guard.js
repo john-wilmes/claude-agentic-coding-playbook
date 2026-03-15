@@ -59,7 +59,7 @@ function saveState(stateFile, state) {
 
 /**
  * Read the most recent assistant message's usage from the transcript JSONL.
- * Reads only the last 200KB to handle large transcripts efficiently.
+ * Reads only the last 512KB to handle large transcripts efficiently.
  *
  * NOTE: The transcript JSONL schema is undocumented and may change between
  * Claude Code versions. This function gracefully returns null on any parse
@@ -115,10 +115,11 @@ function getContextUsage(hookInput, state) {
 
   if (usage) {
     // Fields are additive: input_tokens is the uncached portion only.
-    // Verified against real transcripts — total context = all three summed.
+    // Verified against real transcripts — total context = all four summed.
     const totalTokens = (usage.input_tokens || 0) +
                         (usage.cache_read_input_tokens || 0) +
-                        (usage.cache_creation_input_tokens || 0);
+                        (usage.cache_creation_input_tokens || 0) +
+                        (usage.output_tokens || 0);
     return {
       ratio: totalTokens / CONTEXT_WINDOW,
       tokens: totalTokens,

@@ -40,6 +40,8 @@ process.stdin.on("end", () => {
 
     log(`session ${sessionId.slice(0, 8)} ended for ${agentName}`);
 
+    let pushFailureMsg = null;
+
     // Auto-commit THIS session's memory file only.
     // Using "git add -A" would stage other agents' memory files when multiple
     // projects are open simultaneously, causing wrong attribution and git index
@@ -77,11 +79,18 @@ process.stdin.on("end", () => {
         execFileSync("git", ["commit", "-m", msg], gitOpts);
         log("memory auto-commit: committed");
         // Push to remote (non-blocking, best-effort)
-        try {
-          execFileSync("git", ["push"], { ...gitOpts, timeout: 8000 });
-          log("memory auto-push: pushed to remote");
-        } catch (pushErr) {
-          log(`memory auto-push skipped: ${pushErr.message}`);
+        // Set CLAUDE_NO_AUTO_PUSH=1 to skip the push entirely.
+        if (process.env.CLAUDE_NO_AUTO_PUSH === "1") {
+          log("memory auto-push: skipped (CLAUDE_NO_AUTO_PUSH=1)");
+        } else {
+          try {
+            execFileSync("git", ["push"], { ...gitOpts, timeout: 8000 });
+            log("memory auto-push: pushed to remote");
+          } catch (pushErr) {
+            const msg = pushErr.stderr ? pushErr.stderr.toString().trim() : pushErr.message;
+            log(`memory auto-push failed: ${msg}`);
+            pushFailureMsg = msg;
+          }
         }
       }
     } catch (commitErr) {
@@ -91,6 +100,15 @@ process.stdin.on("end", () => {
     // Prune old staged knowledge candidates (older than 7 days)
     if (capture) {
       try { capture.pruneStagedFiles(7); } catch {}
+    }
+
+    if (pushFailureMsg) {
+      process.stdout.write(JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "SessionEnd",
+          additionalContext: `WARNING: memory auto-push failed: ${pushFailureMsg}`,
+        },
+      }));
     }
   } catch (err) {
     log(`error: ${err.message}`);

@@ -205,17 +205,17 @@ test("4. Transcript at 60%: critical advisory via hookSpecificOutput", () => {
   }
 });
 
-// Test 5: Cache tokens counted correctly (input + cache_read + cache_creation)
+// Test 5: Cache tokens counted correctly (input + cache_read + cache_creation + output)
 test("5. Cache tokens counted correctly (input + cache_read + cache_creation)", () => {
   const sessionId = newSessionId();
-  // 1 + 60000 + 40000 = 100,001 tokens = 50%+
+  // 1 + 60000 + 40000 + 500 (output_tokens from makeAssistantMessage) = 100,501 tokens = 50%+
   const transcript = createFakeTranscript([makeAssistantMessage(1, 60000, 40000)]);
   try {
     const result = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(result.status, 0);
     assert.ok(result.json.hookSpecificOutput, "Should warn at 50%");
     assert.ok(
-      result.json.hookSpecificOutput.additionalContext.includes("100001 actual tokens"),
+      result.json.hookSpecificOutput.additionalContext.includes("100501 actual tokens"),
       `Should show actual token count, got: ${result.json.hookSpecificOutput.additionalContext}`
     );
   } finally {
@@ -343,7 +343,7 @@ test("11. Large transcript (>50KB): tail read still finds usage", () => {
     const result = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(result.status, 0);
     assert.ok(result.json.hookSpecificOutput, "Should find usage in tail and warn critically");
-    assert.ok(result.json.hookSpecificOutput.additionalContext.includes("120000 actual tokens"), "Should show actual tokens");
+    assert.ok(result.json.hookSpecificOutput.additionalContext.includes("120500 actual tokens"), "Should show actual tokens");
   } finally {
     cleanupSession(sessionId);
     try { fs.rmSync(transcript); } catch {}
@@ -372,8 +372,8 @@ test("12. Subagent (agent_id present): skipped, no warn or block", () => {
 // Test 13: Just below 35% threshold → no warning
 test("13. Just below 35% threshold (69999 tokens): no warning", () => {
   const sessionId = newSessionId();
-  // 69999 / 200000 = 34.9995% — just under 35%
-  const transcript = createFakeTranscript([makeAssistantMessage(69999)]);
+  // 69499 input + 500 output_tokens = 69999 total / 200000 = 34.9995% — just under 35%
+  const transcript = createFakeTranscript([makeAssistantMessage(69499)]);
   try {
     const result = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(result.status, 0, "Should exit 0");
@@ -476,8 +476,8 @@ test("19. PreToolUse with no state file: allow (safe default)", () => {
 test("21. PostToolUse stores lastUsageRatio in state file", () => {
   const sessionId = newSessionId();
   const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
-  // 55% of 200k = 110,000 tokens
-  const transcript = createFakeTranscript([makeAssistantMessage(110000)]);
+  // 109500 input + 500 output_tokens = 110,000 total = 55% of 200k
+  const transcript = createFakeTranscript([makeAssistantMessage(109500)]);
   try {
     const result = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(result.status, 0);

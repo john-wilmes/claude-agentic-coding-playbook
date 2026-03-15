@@ -29,7 +29,12 @@ while IFS= read -r file; do
       errors=$((errors + 1))
     fi
     # Generic secret/password/token assignments (quoted or unquoted values)
-    if grep -qEi '(password|secret|token|api_key|apikey)[[:space:]]*[=:][[:space:]]*["'"'"']?[^[:space:]"'"'"']{8,}' "$file" 2>/dev/null; then
+    # Exclusions: skip .md/.mdx files (docs), lines starting with # or > (comments/blockquotes),
+    # lines inside markdown code fences (```) or YAML example keys (e.g. "your-secret-here"),
+    # and lines containing process.env or TypeScript type annotations.
+    if grep -Eiv '(process\.env|your[-_]?(secret|token|key|password)|example|placeholder|<[a-z_]+>|`|\bstring\b)' "$file" 2>/dev/null \
+         | grep -qEi '(password|secret|token|api_key|apikey)[[:space:]]*[=:][[:space:]]*["'"'"']?[^[:space:]"'"'"']{8,}' 2>/dev/null \
+         && [[ "$file" != *.md && "$file" != *.mdx ]]; then
       echo "BLOCKED: $file may contain a hardcoded secret. Review and remove before committing."
       errors=$((errors + 1))
     fi

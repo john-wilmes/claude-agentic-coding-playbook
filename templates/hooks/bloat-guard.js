@@ -44,20 +44,20 @@ const ESCALATION_THRESHOLD = 5;
 
 /**
  * Get a session-scoped state file path.
- * Uses CLAUDE_SESSION_ID if available, falls back to PID-based.
+ * @param {string} sessionId - from hookInput.session_id
  */
-function getStateFile() {
-  const sessionId = process.env.CLAUDE_SESSION_ID || process.env.PPID || "default";
-  return path.join(STATE_DIR, `${sessionId}.json`);
+function getStateFile(sessionId) {
+  const id = sessionId || process.env.PPID || "default";
+  return path.join(STATE_DIR, `${id}.json`);
 }
 
 /**
  * Load the list of files created this session.
  * Returns an array of file paths.
  */
-function loadState() {
+function loadState(sessionId) {
   try {
-    const data = fs.readFileSync(getStateFile(), "utf8");
+    const data = fs.readFileSync(getStateFile(sessionId), "utf8");
     const parsed = JSON.parse(data);
     return Array.isArray(parsed.files) ? parsed.files : [];
   } catch {
@@ -68,10 +68,10 @@ function loadState() {
 /**
  * Save a new file path to the session state.
  */
-function saveState(files) {
+function saveState(sessionId, files) {
   try {
     fs.mkdirSync(STATE_DIR, { recursive: true });
-    fs.writeFileSync(getStateFile(), JSON.stringify({ files }));
+    fs.writeFileSync(getStateFile(sessionId), JSON.stringify({ files }));
   } catch {
     // Best-effort; don't crash the hook
   }
@@ -98,7 +98,7 @@ function expandTilde(filePath) {
  * Check a file path for bloat. Returns null to allow silently,
  * or { decision, reason } for warn/deny.
  */
-function checkNewFile(filePath) {
+function checkNewFile(filePath, sessionId) {
   if (!filePath) return null;
 
   const expanded = expandTilde(filePath);
@@ -119,9 +119,9 @@ function checkNewFile(filePath) {
   const filename = path.basename(expanded);
 
   // Track creation count (before throwaway check so throwaway files count toward session total)
-  const createdFiles = loadState();
+  const createdFiles = loadState(sessionId);
   createdFiles.push(expanded);
-  saveState(createdFiles);
+  saveState(sessionId, createdFiles);
 
   // Block throwaway filename patterns
   if (isThrowaway(filename)) {
@@ -167,6 +167,7 @@ process.stdin.on("end", () => {
     const event = JSON.parse(input);
     const toolName = event.tool_name;
     const toolInput = event.tool_input || {};
+    const sessionId = event.session_id || null;
 
     // Only inspect Write tool
     if (toolName !== "Write") {
@@ -175,7 +176,7 @@ process.stdin.on("end", () => {
     }
 
     const filePath = toolInput.file_path || null;
-    const result = checkNewFile(filePath);
+    const result = checkNewFile(filePath, sessionId);
 
     if (result) {
       log.writeLog({ hook: "bloat-guard", event: result.decision, filePath, reason: result.reason });

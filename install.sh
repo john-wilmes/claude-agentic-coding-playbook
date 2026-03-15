@@ -1301,7 +1301,7 @@ if [ -n "$KNOWLEDGE_REPO" ]; then
     git -C "$KNOWLEDGE_DIR" pull --rebase 2>/dev/null || echo "  Pull failed (may need manual resolution)"
   else
     echo "Cloning knowledge repo..."
-    git clone "$KNOWLEDGE_REPO" "$KNOWLEDGE_DIR"
+    git clone --depth=1 "$KNOWLEDGE_REPO" "$KNOWLEDGE_DIR"
     echo "INSTALLED: knowledge repo -> $KNOWLEDGE_DIR"
   fi
   # Ensure entries directory exists
