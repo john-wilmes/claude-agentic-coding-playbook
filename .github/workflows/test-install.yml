@@ -621,18 +621,22 @@ jobs:
           node --check "$HOME/.claude/hooks/session-end.js"
           echo "OK: session-end.js parses correctly"
 
-  test-hooks:
+  test-suites:
     runs-on: ubuntu-latest
-    name: Hook integration tests
+    name: All test suites
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Run session hook tests
-        run: node tests/hooks/session-hooks.test.js
-      - name: Run model-router hook tests
-        run: node tests/hooks/model-router.test.js
+      - name: Hook tests
+        run: for t in tests/hooks/*.test.js; do node "$t" || exit 1; done
+      - name: Script tests
+        run: for t in tests/scripts/*.test.sh; do bash "$t" || exit 1; done
+      - name: Skill tests (bash)
+        run: for t in tests/skills/*.test.sh; do bash "$t" || exit 1; done
+      - name: Skill tests (node)
+        run: for t in tests/skills/*.test.js; do node "$t" || exit 1; done
 
   test-investigate:
     runs-on: ubuntu-latest
