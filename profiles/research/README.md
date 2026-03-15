@@ -1,4 +1,8 @@
-# Investigation Profile
+# Investigation Profile (Archived)
+
+> **Note**: This profile has been merged into `profiles/combined/`, which is the active profile
+> installed by `install.sh`. This directory is kept for reference only and is no longer maintained.
+> See `profiles/combined/` for the current combined dev+research profile.
 
 A structured profile for troubleshooting, root cause analysis, and building retrievable knowledge.
 

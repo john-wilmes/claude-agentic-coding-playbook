@@ -210,10 +210,10 @@ The playbook includes a SWE-Bench benchmarking script that compares Claude Code'
 # Validate setup (no API calls)
 bash scripts/swe-bench.sh --dry-run
 
-# Run 5 SWE-Bench Lite tasks (~$10-25 in API costs)
+# Run 5 SWE-Bench Lite tasks (estimate: $10-25 in API costs)
 bash scripts/swe-bench.sh
 
-# Full 25-task run (~$100-250)
+# Full 25-task run (estimate: $100-250)
 bash scripts/swe-bench.sh --full
 ```
 

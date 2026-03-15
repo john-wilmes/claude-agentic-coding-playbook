@@ -152,12 +152,12 @@ process.stdin.on("end", () => {
     const filePath = toolInput.file_path;
 
     if (toolName !== "Edit" && toolName !== "Write") {
-      console.log(JSON.stringify({}));
+      process.stdout.write(JSON.stringify({}));
       return;
     }
 
     if (!filePath) {
-      console.log(JSON.stringify({}));
+      process.stdout.write(JSON.stringify({}));
       return;
     }
 
@@ -175,17 +175,17 @@ process.stdin.on("end", () => {
     }
 
     if (messages.length > 0) {
-      console.log(JSON.stringify({
+      process.stdout.write(JSON.stringify({
         hookSpecificOutput: {
           hookEventName: "PostToolUse",
           additionalContext: messages.join("\n\n"),
         },
       }));
     } else {
-      console.log(JSON.stringify({}));
+      process.stdout.write(JSON.stringify({}));
     }
   } catch {
-    console.log(JSON.stringify({}));
+    process.stdout.write(JSON.stringify({}));
   }
 });
 

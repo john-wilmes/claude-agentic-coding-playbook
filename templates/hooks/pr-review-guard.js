@@ -50,7 +50,7 @@ function checkCodeRabbitReview(prNumber) {
   try {
     reviewOutput = execSync(
       `gh pr view ${prArg} --json reviews --jq '.reviews[].author.login'`,
-      { encoding: "utf8", timeout: 8000, stdio: ["pipe", "pipe", "pipe"] }
+      { encoding: "utf8", timeout: 15000, stdio: ["pipe", "pipe", "pipe"] }
     ).trim();
   } catch {
     return { reviewed: false, error: true, reason: "gh API call failed (allowing merge)" };
@@ -65,7 +65,7 @@ function checkCodeRabbitReview(prNumber) {
   try {
     commentOutput = execSync(
       `gh pr view ${prArg} --json comments --jq '.comments[].author.login'`,
-      { encoding: "utf8", timeout: 8000, stdio: ["pipe", "pipe", "pipe"] }
+      { encoding: "utf8", timeout: 15000, stdio: ["pipe", "pipe", "pipe"] }
     ).trim();
   } catch {
     return { reviewed: false, error: true, reason: "gh API call failed on comments check (allowing merge)" };

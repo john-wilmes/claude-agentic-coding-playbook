@@ -4,8 +4,7 @@
 # Usage:
 #   q "what is the capital of France"
 #   echo "explain this error" | q
-#   q --model claude-sonnet-4-6 "complex question"
-#   q --no-log "don't log this"
+#   q --model claude-sonnet-4-6 "complex question"#   q --no-log "don't log this"
 #   q --system "You are a poet." "write a haiku about clouds"
 #   q --help
 #
@@ -15,7 +14,7 @@ set -euo pipefail
 
 # ─── Defaults ────────────────────────────────────────────────────────────────
 
-DEFAULT_MODEL="claude-haiku-4-5-20251001"
+DEFAULT_MODEL="claude-haiku-4-5"
 DEFAULT_SYSTEM="Do exactly what the user asks. Be terse."
 MAX_TOKENS=4096
 LOG_FILE="${HOME}/.claude/logs/q.jsonl"
@@ -43,7 +42,7 @@ usage() {
 Usage: q [OPTIONS] [PROMPT]
 
 Options:
-  --model MODEL       Override default model (default: claude-haiku-4-5-20251001)
+  --model MODEL       Override default model (default: claude-haiku-4-5)
   --system PROMPT     Override system prompt
   --no-log            Skip logging to ~/.claude/logs/q.jsonl
   --help              Show this message
