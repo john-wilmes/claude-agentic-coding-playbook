@@ -3,7 +3,7 @@ name: continue
 description: Continue work from where the last session left off. Use when user says "where was I", "pick up where I left off", or "what was I working on". Checks inbox, reads memory, and detects whether you're in a dev project or research context to show the right information.
 compatibility: claude-code
 disable-model-invocation: false
-allowed-tools: Read, Glob, Grep, Bash
+allowed-tools: Read, Glob, Grep, Bash, Task
 argument-hint: "[investigation-id]"
 ---
 
@@ -72,6 +72,29 @@ Check for additional context that might be relevant:
 - Run `git status` to see if there are uncommitted changes from the previous session
 - Run `git log --oneline -3` to see recent commits
 - If the project has a task list, check for in-progress or blocked tasks
+
+### 3.5D. Run quality gates (subagent)
+
+Spawn a subagent (Task tool, subagent_type: "general-purpose", model: "haiku") to run quality checks without consuming parent context. Give it these instructions:
+
+> **Quality gate check for /continue**
+>
+> 1. **Run project quality gates**: Read the project's CLAUDE.md and find any test/lint/type-check commands listed under "Quality Gates" or similar. Run each command. For each, report pass/fail and the first 20 lines of failure output.
+>
+> 2. **Check for incomplete work**: Run `git status` and `git diff --stat`. Report:
+>    - Unstaged modifications (partially completed edits)
+>    - Untracked source files (exclude build artifacts like `node_modules/`, `dist/`, `*.log`)
+>    - Staged but uncommitted changes
+>
+> 3. **Check knowledge candidates**: Run `test -f ~/.claude/hooks/knowledge-db.js && node ~/.claude/hooks/knowledge-db.js staged || echo "no-knowledge-db"`. If candidates exist, report the count.
+>
+> 4. **Return a structured summary**: gates pass/fail (with failure details), incomplete work list, knowledge candidate count.
+
+After the subagent returns, integrate results into step 4D:
+
+- **Quality gates failed** → Fixing failures becomes the first priority, before memory's next steps.
+- **Incomplete work detected** → Flag it as context for deciding what to do next.
+- **Knowledge candidates exist** → Mention them briefly (don't block on them).
 
 ### 4D. Propose action
 
