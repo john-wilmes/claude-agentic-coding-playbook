@@ -760,7 +760,7 @@ if [ -f "$SCRIPT_DIR/templates/hooks/context-guard.js" ]; then
       }
     " "$SETTINGS_FILE" "$CTXGUARD_CMD"
 
-    # PreToolUse entry: no matcher (hard-blocks ALL tools at 60%).
+    # PreToolUse entry: no matcher. Pure pass-through (returns {}). Kept for future use.
     # Upgrades old Edit|Write-only entries to no-matcher.
     node -e "
       const fs = require('fs');
@@ -1236,7 +1236,7 @@ else
 
     # Run fleet index refresh after repo pull
     if [ -f "$LOCAL_BIN/repo-fleet-index" ]; then
-      local fleet_cron="5 6 * * * $LOCAL_BIN/repo-fleet-index --refresh --repos-dir $REPOS_DIR 2>/dev/null"
+      fleet_cron="5 6 * * * $LOCAL_BIN/repo-fleet-index --refresh --repos-dir $REPOS_DIR 2>/dev/null"
       if ! crontab -l 2>/dev/null | grep -qF "repo-fleet-index"; then
         ( crontab -l 2>/dev/null; echo "$fleet_cron" ) | crontab -
         echo "CONFIGURED: fleet index refresh cron (06:05) after repo pull"

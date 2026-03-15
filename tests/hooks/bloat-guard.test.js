@@ -338,22 +338,22 @@ test("Write with null file_path returns {}", () => {
   assert.ok(isSilent(result), `Expected silent for null file_path, got: ${JSON.stringify(result.json)}`);
 });
 
-test("throwaway files are not tracked in session count", () => {
+test("throwaway files are tracked in session count", () => {
   clearState();
   const dir = createNonTmpDir();
   try {
-    // Create 5 throwaway files — they should warn but not count toward threshold
+    // Create 5 throwaway files — they should warn AND count toward threshold
     for (let i = 1; i <= 5; i++) {
       runHook(HOOK, writeInput(path.join(dir, `test-throwaway-${i}.js`)));
     }
 
-    // Next non-throwaway new file should be file #1 (not escalated)
+    // Next non-throwaway new file should be file #6 (escalated past threshold of 5)
     const file = path.join(dir, "legit-new-file.txt");
     const result = runHook(HOOK, writeInput(file));
-    assert.ok(isWarned(result), "Expected advisory warning");
+    assert.ok(isWarned(result), "Expected warning");
     assert.ok(
-      !warnReason(result).includes("threshold"),
-      `Throwaway files should not count toward threshold, got: ${warnReason(result)}`
+      warnReason(result).includes("threshold"),
+      `Throwaway files should count toward threshold, got: ${warnReason(result)}`
     );
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
