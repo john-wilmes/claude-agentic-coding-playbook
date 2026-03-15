@@ -343,9 +343,9 @@ If `check-citations.sh` is not found at the expected path, skip automated self-a
 This returns JSON with `total_evidence`, `cited_count`, `citation_rate`, `uncited_count`, and `uncited_files`. Use these values for the decision:
 
 Decision:
-   - `CITATION_RATE = 0`: force round 2 without offering a choice — "Citation rate is 0%. Findings do not reference collected evidence. Triggering round 2 automatically."
-   - `CITATION_RATE ≥ 70 AND UNCITED_COUNT ≤ 1`: PASS. Present findings summary.
-   - Otherwise: SOFT FAIL. Offer round 2.
+- `CITATION_RATE = 0`: force round 2 without offering a choice — "Citation rate is 0%. Findings do not reference collected evidence. Triggering round 2 automatically."
+- `CITATION_RATE ≥ 70 AND UNCITED_COUNT ≤ 1`: PASS. Present findings summary.
+- Otherwise: SOFT FAIL. Offer round 2.
 
 On SOFT FAIL, present:
 
