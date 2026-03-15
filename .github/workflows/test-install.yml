@@ -626,6 +626,9 @@ jobs:
     name: Hook integration tests
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - name: Run session hook tests
         run: node tests/hooks/session-hooks.test.js
       - name: Run model-router hook tests

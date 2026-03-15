@@ -132,4 +132,3 @@ bash tests/scripts/q.test.sh
 **Note:** The E2E dogfood tests (`scripts/dogfood-e2e.sh`, `scripts/ec2-dogfood.sh`) require the `claude` CLI to be installed and must be run outside of Claude Code.
 
 CI runs automatically on every push to `master` and validates that the install script completes without error in a clean environment.
-
