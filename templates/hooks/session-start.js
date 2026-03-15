@@ -170,7 +170,8 @@ process.stdin.on("end", () => {
         const knowledgeDir = path.join(os.homedir(), ".claude", "knowledge");
         const jsonlPath = path.join(knowledgeDir, "entries.jsonl");
         if (fs.existsSync(jsonlPath)) {
-          const db = knowledgeDb.openDb();
+          const dbPath = path.join(knowledgeDir, "knowledge.db");
+          const db = knowledgeDb.openDb(dbPath);
           knowledgeDb.importFromJsonl(db, jsonlPath);
         }
       }

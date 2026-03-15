@@ -21,20 +21,11 @@ If no arguments provided, ask the user for a project name.
 
 ### 1. Determine install root
 
-Find the install root by searching for the nearest `.claude/` directory in the current directory or its parents:
+Run the install-root discovery helper:
 
 ```bash
-dir="$(pwd)"
-while [ "$dir" != "/" ]; do
-  if [ -d "$dir/.claude" ] && [ -f "$dir/.claude/CLAUDE.md" ]; then
-    INSTALL_ROOT="$dir"
-    break
-  fi
-  dir="$(dirname "$dir")"
-done
+INSTALL_ROOT=$(bash ~/.claude/scripts/skills/find-install-root.sh)
 ```
-
-If no install root found, fall back to `~/Documents`. If `~/Documents` does not exist, use the current directory's parent.
 
 ### 2. Gather requirements
 

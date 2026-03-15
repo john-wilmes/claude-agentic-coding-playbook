@@ -48,7 +48,11 @@ If no lessons section exists, tell the user and offer to accept a freeform lesso
 
 ### 3. Check global scope for duplicates
 
-Read `~/.claude/CLAUDE.md`. Scan it for any existing entry that covers the same topic as the selected lesson. Also check `~/.claude/knowledge/entries/` if that directory exists.
+Read `~/.claude/CLAUDE.md`. Scan it for any existing entry that covers the same topic as the selected lesson. Also search the knowledge database if available:
+
+```bash
+node ~/.claude/hooks/knowledge-db.js search "<topic keywords>" 2>/dev/null
+```
 
 If a near-duplicate is found, tell the user:
 
@@ -67,20 +71,11 @@ Wait for the user's choice before continuing.
 
 ### 4. Promote the lesson
 
-**If `~/.claude/knowledge/entries/` exists** (preferred path — if it does not exist, use the fallback below):
+**If `~/.claude/hooks/knowledge-db.js` exists** (preferred path — if it does not exist, use the fallback below):
 
-Create a new markdown file there named after the lesson topic (e.g., `git-hooks-core-hookspath.md`). Use this format:
+Use the `/learn` skill to create a structured knowledge entry for the lesson. Pass the lesson text as the argument.
 
-```markdown
-# <Short title>
-
-<Full lesson text>
-
-Source: <current project name or path>
-Date: <today's date>
-```
-
-**Otherwise** (including when `~/.claude/knowledge/entries/` does not exist), append the lesson to `~/.claude/CLAUDE.md`:
+**Otherwise**, append the lesson to `~/.claude/CLAUDE.md`:
 
 - Find or create a `## Cross-Project Lessons` section at the end of the file (before any trailing newline).
 - Append the lesson as a bullet point: `- <lesson text>`
@@ -104,5 +99,5 @@ or
 Promoted to global scope:
   "<lesson text>"
 
-Location: ~/.claude/knowledge/entries/<filename>.md
+Location: ~/.claude/knowledge/knowledge.db
 ```

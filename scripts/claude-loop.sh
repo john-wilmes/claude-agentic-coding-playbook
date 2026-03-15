@@ -628,10 +628,6 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
     LOOP_RUNNING=false
   fi
 
-  # Reset signal state for next iteration (if restarting)
-  SIGNAL_RECEIVED=false
-  SIGNAL_COUNT=0
-
 done
 
 log_event "event=loop_event" "message=loop finished" "sessions=${SESSION_COUNT}"
