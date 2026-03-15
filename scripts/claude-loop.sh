@@ -477,6 +477,11 @@ log_event "event=loop_event" "message=loop started" "pid=$$"
 
 LOOP_RUNNING=true
 SESSION_COUNT=0
+# Retry state: when a task fails but has remaining attempts, these hold the
+# task text and attempt number so the next iteration retries instead of
+# advancing. Cleared on success, checked-off completion, or final failure.
+RETRY_TASK=""
+RETRY_ATTEMPT=0
 
 while [[ "${LOOP_RUNNING}" == "true" ]]; do
 
@@ -494,7 +499,10 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
   CLAUDE_CMD=("claude" "--append-system-prompt" "claude-loop started this session. Your first action must be to invoke the /continue skill using the Skill tool." "/continue")
 
   if [[ -n "${TASK_QUEUE_FILE}" ]]; then
-    if ! CURRENT_TASK="$(get_next_task "${TASK_QUEUE_FILE}")"; then
+    if [[ -n "${RETRY_TASK}" ]]; then
+      # Resume the same task that failed on a previous attempt
+      CURRENT_TASK="${RETRY_TASK}"
+    elif ! CURRENT_TASK="$(get_next_task "${TASK_QUEUE_FILE}")"; then
       log_event "event=loop_event" "message=task queue exhausted"
       echo "claude-loop: task queue exhausted, stopping."
       break
@@ -506,8 +514,12 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
   # ── Get attempt count for this task ────────────────────────────────────────
   ATTEMPT=1
   if [[ -n "${CURRENT_TASK}" ]]; then
-    PREV_ATTEMPTS="$(get_task_attempts "${TASK_QUEUE_FILE}" "${CURRENT_TASK}")"
-    ATTEMPT="$(( PREV_ATTEMPTS + 1 ))"
+    if [[ -n "${RETRY_TASK}" ]]; then
+      ATTEMPT="${RETRY_ATTEMPT}"
+    else
+      PREV_ATTEMPTS="$(get_task_attempts "${TASK_QUEUE_FILE}" "${CURRENT_TASK}")"
+      ATTEMPT="$(( PREV_ATTEMPTS + 1 ))"
+    fi
   fi
 
   # ── Remove stale sentinel, context-high flag, and PID file ─────────────────
@@ -580,22 +592,31 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
   if [[ -n "${CURRENT_TASK}" ]]; then
     if [[ "${SENTINEL_DETECTED}" == "true" ]]; then
       # Clean checkpoint exit = task completed successfully
+      RETRY_TASK=""
+      RETRY_ATTEMPT=0
       mark_task_done "${TASK_QUEUE_FILE}" "${CURRENT_TASK}"
       log_event "event=task_advance" "task=${CURRENT_TASK}" "status=done"
       echo "claude-loop: task completed: ${CURRENT_TASK}"
     else
       # No sentinel — check if agent already checked off the task
       if task_is_checked "${TASK_QUEUE_FILE}" "${CURRENT_TASK}"; then
+        RETRY_TASK=""
+        RETRY_ATTEMPT=0
         log_event "event=task_advance" "task=${CURRENT_TASK}" "status=done_no_sentinel"
         echo "claude-loop: task completed (checked off, no sentinel): ${CURRENT_TASK}"
       else
         # Non-sentinel exit = task did not finish cleanly
         if [[ "${ATTEMPT}" -ge "${MAX_TASK_ATTEMPTS}" ]]; then
+          # All attempts exhausted — permanently mark failed and advance
+          RETRY_TASK=""
+          RETRY_ATTEMPT=0
           mark_task_fail "${TASK_QUEUE_FILE}" "${CURRENT_TASK}" "${ATTEMPT}"
           log_event "event=task_fail" "task=${CURRENT_TASK}" "attempts=${ATTEMPT}"
           echo "claude-loop: task failed after ${ATTEMPT} attempts: ${CURRENT_TASK}"
         else
-          mark_task_fail "${TASK_QUEUE_FILE}" "${CURRENT_TASK}" "${ATTEMPT}"
+          # More attempts remain — retry without writing [FAIL] to the queue file
+          RETRY_TASK="${CURRENT_TASK}"
+          RETRY_ATTEMPT="$(( ATTEMPT + 1 ))"
           log_event "event=loop_event" "message=task attempt failed" \
             "task=${CURRENT_TASK}" "attempt=${ATTEMPT}" "max=${MAX_TASK_ATTEMPTS}"
           echo "claude-loop: task attempt ${ATTEMPT}/${MAX_TASK_ATTEMPTS} failed: ${CURRENT_TASK}"
