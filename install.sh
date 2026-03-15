@@ -18,7 +18,7 @@ Install agentic coding practices for Claude Code.
 
 Options:
   --root <path>              Install root directory (default: ~/Documents)
-                             The .claude/ config goes here, projects are siblings
+                             The research/ dir goes here, projects are siblings
   --wizard                   Interactive wizard to merge with existing configuration
   --force                    Overwrite existing files without prompting
   --dry-run                  Show what would be installed without making changes
@@ -26,8 +26,8 @@ Options:
   -h, --help                 Show this help message
 
 Examples:
-  ./install.sh                          # Install to ~/Documents/.claude/
-  ./install.sh --root ~/projects        # Install to ~/projects/.claude/
+  ./install.sh                          # Install to ~/.claude/, research to ~/Documents/
+  ./install.sh --root ~/projects        # Install to ~/.claude/, research to ~/projects/
   ./install.sh --wizard                 # Interactive merge with existing config
   ./install.sh --force                  # Overwrite everything
   ./install.sh --dry-run                # Preview what would be installed
@@ -73,8 +73,8 @@ case "$INSTALL_ROOT" in
   "~")   INSTALL_ROOT="$HOME" ;;
 esac
 INSTALL_ROOT="$(cd "$INSTALL_ROOT" 2>/dev/null && pwd || echo "$INSTALL_ROOT")"
-CLAUDE_DIR="$INSTALL_ROOT/.claude"
 GLOBAL_CLAUDE_DIR="$HOME/.claude"
+CLAUDE_DIR="$GLOBAL_CLAUDE_DIR"
 
 PROFILE_DIR="$SCRIPT_DIR/profiles/combined"
 if [ ! -d "$PROFILE_DIR" ]; then
@@ -345,17 +345,6 @@ elif [ "${FORCE_CLAUDE:-false}" = true ]; then
   fi
 else
   install_file "$PROFILE_DIR/CLAUDE.md" "$GLOBAL_CLAUDE_DIR/CLAUDE.md" "CLAUDE.md"
-fi
-
-# Clean up duplicate CLAUDE.md at INSTALL_ROOT if it differs from global location
-if [ "$CLAUDE_DIR" != "$GLOBAL_CLAUDE_DIR" ] && [ -f "$CLAUDE_DIR/CLAUDE.md" ]; then
-  if [ "$DRY_RUN" = true ]; then
-    echo "[DRY RUN] Would remove duplicate: $CLAUDE_DIR/CLAUDE.md (global copy is at $GLOBAL_CLAUDE_DIR/CLAUDE.md)"
-  else
-    cp "$CLAUDE_DIR/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md.backup.$(date +%Y%m%d%H%M%S)"
-    rm "$CLAUDE_DIR/CLAUDE.md"
-    echo "REMOVED DUPLICATE: $CLAUDE_DIR/CLAUDE.md (backed up; global copy is at $GLOBAL_CLAUDE_DIR/CLAUDE.md)"
-  fi
 fi
 
 echo ""
@@ -1347,10 +1336,10 @@ echo "      Note: If core.hooksPath is set globally, install the hook there inst
 echo "    knowledge/          (entry format, CI, pre-commit for knowledge repos)"
 echo ""
 echo "Directory structure:"
+echo "  ~/.claude/               <- playbook config (skills, hooks, templates)"
 echo "  $INSTALL_ROOT/"
-echo "    .claude/             <- playbook config (skills, hooks, templates)"
-echo "    research/            <- investigations and research"
-echo "    <your-projects>/     <- dev projects (siblings to .claude/)"
+echo "    research/              <- investigations and research"
+echo "    <your-projects>/       <- dev projects"
 echo ""
 echo "Next steps:"
 echo "  1. Review $GLOBAL_CLAUDE_DIR/CLAUDE.md and customize for your workflow"
