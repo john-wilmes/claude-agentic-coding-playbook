@@ -188,7 +188,7 @@ process.stdin.on("end", () => {
     if (filePath === null) {
       // Not a tool we inspect, or no extractable path
       process.stdout.write("{}");
-      process.exit(0);
+      return;
     }
 
     const reason = checkFile(filePath);

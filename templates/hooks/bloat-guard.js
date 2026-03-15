@@ -172,7 +172,7 @@ process.stdin.on("end", () => {
     // Only inspect Write tool
     if (toolName !== "Write") {
       process.stdout.write("{}");
-      process.exit(0);
+      return;
     }
 
     const filePath = toolInput.file_path || null;

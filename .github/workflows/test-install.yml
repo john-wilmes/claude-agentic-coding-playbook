@@ -631,6 +631,8 @@ jobs:
           node-version: "22"
       - name: Hook tests
         run: for t in tests/hooks/*.test.js; do node "$t" || exit 1; done
+      - name: Fleet tests
+        run: for t in tests/fleet/*.test.js; do node "$t" || exit 1; done
       - name: Script tests
         run: for t in tests/scripts/*.test.sh; do bash "$t" || exit 1; done
       - name: Skill tests (bash)

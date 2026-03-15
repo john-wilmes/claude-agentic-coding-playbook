@@ -208,9 +208,25 @@ function parseSimpleYaml(text) {
   }
 
   for (let raw of lines) {
-    // Strip inline comments (but not inside quoted values)
-    const commentIdx = raw.indexOf(" #");
-    const stripped = commentIdx >= 0 ? raw.slice(0, commentIdx) : raw;
+    // Strip inline comments, but not # characters inside quoted strings.
+    // Walk the raw line: track whether we are inside single or double quotes;
+    // if we encounter " #" (space + hash) outside any quote, that starts a comment.
+    let stripped = raw;
+    {
+      let inSingle = false;
+      let inDouble = false;
+      let commentStart = -1;
+      for (let i = 0; i < raw.length; i++) {
+        const ch = raw[i];
+        if (ch === "'" && !inDouble) { inSingle = !inSingle; }
+        else if (ch === '"' && !inSingle) { inDouble = !inDouble; }
+        else if (!inSingle && !inDouble && ch === "#" && i > 0 && raw[i - 1] === " ") {
+          commentStart = i - 1; // include the preceding space
+          break;
+        }
+      }
+      if (commentStart >= 0) stripped = raw.slice(0, commentStart);
+    }
     const line = stripped.trimEnd();
     if (!line.trim() || line.trim().startsWith("#")) continue;
 

@@ -86,7 +86,7 @@ Spawn a subagent (Task tool, subagent_type: "general-purpose", model: "haiku") t
 >    - Untracked source files (exclude build artifacts like `node_modules/`, `dist/`, `*.log`)
 >    - Staged but uncommitted changes
 >
-> 3. **Check knowledge candidates**: Run `test -f ~/.claude/hooks/knowledge-db.js && node ~/.claude/hooks/knowledge-db.js staged || echo "no-knowledge-db"`. If candidates exist, report the count.
+> 3. **Check knowledge candidates**: Run `ls ~/.claude/knowledge/staged/ 2>/dev/null | wc -l`. If the count is > 0, report it as pending knowledge sessions to review.
 >
 > 4. **Return a structured summary**: gates pass/fail (with failure details), incomplete work list, knowledge candidate count.
 

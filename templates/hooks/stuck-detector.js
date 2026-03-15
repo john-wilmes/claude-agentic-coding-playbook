@@ -33,6 +33,9 @@ const WHITELISTED_PREFIXES = [
   "cargo test", "cargo clippy",
   "go test",
   "make test", "make check", "make lint",
+  "bun test",
+  "deno test",
+  "rspec",
 ];
 
 function getStateDir() {

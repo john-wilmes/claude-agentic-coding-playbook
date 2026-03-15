@@ -15,7 +15,7 @@ try { logModule = require("./log"); } catch { logModule = null; }
 const LOG_DIR = path.join(os.homedir(), ".claude");
 const LOG_FILE = path.join(LOG_DIR, "hooks.log");
 
-function log(msg) {
+function logEntry(msg) {
   try {
     if (logModule) {
       logModule.writeLog({ hook: "session-end", event: "info", details: msg });
@@ -38,7 +38,7 @@ process.stdin.on("end", () => {
     const cwd = hookInput.cwd || process.cwd();
     const agentName = path.basename(cwd) || "unknown";
 
-    log(`session ${sessionId.slice(0, 8)} ended for ${agentName}`);
+    logEntry(`session ${sessionId.slice(0, 8)} ended for ${agentName}`);
 
     let pushFailureMsg = null;
 
@@ -55,7 +55,7 @@ process.stdin.on("end", () => {
         execFileSync("git", ["rev-parse", "--git-dir"], gitOpts);
       } catch {
         execFileSync("git", ["init"], gitOpts);
-        log("memory auto-commit: initialized ~/.claude as git repo");
+        logEntry("memory auto-commit: initialized ~/.claude as git repo");
       }
 
       // Encode cwd to the project key Claude Code uses for memory paths
@@ -72,29 +72,29 @@ process.stdin.on("end", () => {
       try {
         execFileSync("git", ["diff", "--cached", "--quiet"], gitOpts);
         // No staged changes -- skip commit
-        log("memory auto-commit: no changes");
+        logEntry("memory auto-commit: no changes");
       } catch {
         // diff --quiet exits non-zero when there ARE staged changes
         const msg = `auto: ${agentName} session ${sessionId.slice(0, 8)}`;
         execFileSync("git", ["commit", "-m", msg], gitOpts);
-        log("memory auto-commit: committed");
+        logEntry("memory auto-commit: committed");
         // Push to remote (non-blocking, best-effort)
         // Set CLAUDE_NO_AUTO_PUSH=1 to skip the push entirely.
         if (process.env.CLAUDE_NO_AUTO_PUSH === "1") {
-          log("memory auto-push: skipped (CLAUDE_NO_AUTO_PUSH=1)");
+          logEntry("memory auto-push: skipped (CLAUDE_NO_AUTO_PUSH=1)");
         } else {
           try {
             execFileSync("git", ["push"], { ...gitOpts, timeout: 8000 });
-            log("memory auto-push: pushed to remote");
+            logEntry("memory auto-push: pushed to remote");
           } catch (pushErr) {
             const msg = pushErr.stderr ? pushErr.stderr.toString().trim() : pushErr.message;
-            log(`memory auto-push failed: ${msg}`);
+            logEntry(`memory auto-push failed: ${msg}`);
             pushFailureMsg = msg;
           }
         }
       }
     } catch (commitErr) {
-      log(`memory auto-commit error: ${commitErr.message}`);
+      logEntry(`memory auto-commit error: ${commitErr.message}`);
     }
 
     // Prune old staged knowledge candidates (older than 7 days)
@@ -111,7 +111,7 @@ process.stdin.on("end", () => {
       }));
     }
   } catch (err) {
-    log(`error: ${err.message}`);
+    logEntry(`error: ${err.message}`);
   }
 
   process.exit(0);
