@@ -281,65 +281,81 @@ test("Returns null when project dir does not exist", () => {
 });
 
 test("Returns null for empty dir (no .jsonl files)", () => {
-  const fakeCwd = "/tp-test-empty-" + Date.now();
-  const encoded = encodeCwd(fakeCwd);
-  const dir = path.join(os.homedir(), ".claude", "projects", encoded);
-  fs.mkdirSync(dir, { recursive: true });
+  const origHome = process.env.HOME;
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "tp-home-"));
+  process.env.HOME = tmpHome;
   try {
+    const fakeCwd = "/tp-test-empty-" + Date.now();
+    const encoded = encodeCwd(fakeCwd);
+    const dir = path.join(tmpHome, ".claude", "projects", encoded);
+    fs.mkdirSync(dir, { recursive: true });
     const result = findMostRecentSession(fakeCwd);
     assert.strictEqual(result, null);
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    process.env.HOME = origHome;
+    fs.rmSync(tmpHome, { recursive: true, force: true });
   }
 });
 
 test("Returns the most recently modified .jsonl file", () => {
-  const fakeCwd = "/tp-test-recent-" + Date.now();
-  const encoded = encodeCwd(fakeCwd);
-  const dir = path.join(os.homedir(), ".claude", "projects", encoded);
-  fs.mkdirSync(dir, { recursive: true });
-  const older = path.join(dir, "session-old.jsonl");
-  const newer = path.join(dir, "session-new.jsonl");
-  fs.writeFileSync(older, "");
-  fs.writeFileSync(newer, "");
-  const oldTime = new Date(Date.now() - 5000);
-  fs.utimesSync(older, oldTime, oldTime);
+  const origHome = process.env.HOME;
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "tp-home-"));
+  process.env.HOME = tmpHome;
   try {
+    const fakeCwd = "/tp-test-recent-" + Date.now();
+    const encoded = encodeCwd(fakeCwd);
+    const dir = path.join(tmpHome, ".claude", "projects", encoded);
+    fs.mkdirSync(dir, { recursive: true });
+    const older = path.join(dir, "session-old.jsonl");
+    const newer = path.join(dir, "session-new.jsonl");
+    fs.writeFileSync(older, "");
+    fs.writeFileSync(newer, "");
+    const oldTime = new Date(Date.now() - 5000);
+    fs.utimesSync(older, oldTime, oldTime);
     const result = findMostRecentSession(fakeCwd);
     assert.strictEqual(result, newer);
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    process.env.HOME = origHome;
+    fs.rmSync(tmpHome, { recursive: true, force: true });
   }
 });
 
 test("Returns single file when only one .jsonl exists", () => {
-  const fakeCwd = "/tp-test-single-" + Date.now();
-  const encoded = encodeCwd(fakeCwd);
-  const dir = path.join(os.homedir(), ".claude", "projects", encoded);
-  fs.mkdirSync(dir, { recursive: true });
-  const only = path.join(dir, "session-only.jsonl");
-  fs.writeFileSync(only, "");
+  const origHome = process.env.HOME;
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "tp-home-"));
+  process.env.HOME = tmpHome;
   try {
+    const fakeCwd = "/tp-test-single-" + Date.now();
+    const encoded = encodeCwd(fakeCwd);
+    const dir = path.join(tmpHome, ".claude", "projects", encoded);
+    fs.mkdirSync(dir, { recursive: true });
+    const only = path.join(dir, "session-only.jsonl");
+    fs.writeFileSync(only, "");
     const result = findMostRecentSession(fakeCwd);
     assert.strictEqual(result, only);
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    process.env.HOME = origHome;
+    fs.rmSync(tmpHome, { recursive: true, force: true });
   }
 });
 
 test("Ignores non-.jsonl files when finding most recent", () => {
-  const fakeCwd = "/tp-test-recnonjsonl-" + Date.now();
-  const encoded = encodeCwd(fakeCwd);
-  const dir = path.join(os.homedir(), ".claude", "projects", encoded);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, "readme.txt"), "");
-  const jsonl = path.join(dir, "session-a.jsonl");
-  fs.writeFileSync(jsonl, "");
+  const origHome = process.env.HOME;
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "tp-home-"));
+  process.env.HOME = tmpHome;
   try {
+    const fakeCwd = "/tp-test-recnonjsonl-" + Date.now();
+    const encoded = encodeCwd(fakeCwd);
+    const dir = path.join(tmpHome, ".claude", "projects", encoded);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "readme.txt"), "");
+    const jsonl = path.join(dir, "session-a.jsonl");
+    fs.writeFileSync(jsonl, "");
     const result = findMostRecentSession(fakeCwd);
     assert.strictEqual(result, jsonl);
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    process.env.HOME = origHome;
+    fs.rmSync(tmpHome, { recursive: true, force: true });
   }
 });
 
