@@ -161,7 +161,7 @@ process.stdin.on("end", () => {
       return;
     }
 
-    const cwd = process.cwd();
+    const cwd = input.cwd || process.cwd();
     const messages = [];
 
     if (isMemoryFile(filePath, cwd)) {
@@ -175,7 +175,12 @@ process.stdin.on("end", () => {
     }
 
     if (messages.length > 0) {
-      console.log(JSON.stringify({ additionalContext: messages.join("\n\n") }));
+      console.log(JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PostToolUse",
+          additionalContext: messages.join("\n\n"),
+        },
+      }));
     } else {
       console.log(JSON.stringify({}));
     }

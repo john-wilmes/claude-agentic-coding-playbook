@@ -42,7 +42,7 @@ chmod +x install.sh
 
 | Flag | Description |
 |------|-------------|
-| `--root <path>` | Install root directory (default: `~/Documents`). Config goes to `<root>/.claude/`, projects are siblings |
+| `--root <path>` | Controls where `research/` is created (default: `~/Documents`). Config always goes to `~/.claude/` |
 | `--knowledge-repo <url>` | Git URL for a shared knowledge repository (cloned to `<root>/.claude/knowledge/`) |
 | `--wizard` | Interactive merge with your existing configuration |
 | `--force` | Overwrite existing files without prompting |
@@ -51,26 +51,27 @@ chmod +x install.sh
 ### What Gets Installed
 
 ```
-<install-root>/                        # e.g. ~/Documents
-  .claude/                             # Playbook configuration
-    CLAUDE.md                          #   Combined dev + research workflows
-    skills/
-      checkpoint/SKILL.md             #   /checkpoint - save state, commit, end session
-      continue/SKILL.md               #   /continue - resume work (auto-detects dev vs research)
-      create-project/SKILL.md         #   /create-project - scaffold a new project
-      investigate/SKILL.md            #   /investigate - full investigation lifecycle
-      learn/SKILL.md                  #   /learn - capture knowledge entries
-      playbook/SKILL.md              #   /playbook - analyze and improve config
-      promote/SKILL.md               #   /promote - promote lessons to global scope
-    hooks/                             #   Session start/end hooks, model router
-    templates/
-      project-CLAUDE.md              #   Template for project-level CLAUDE.md
-      hooks/pre-commit               #   Git pre-commit hook (blocks secrets, large files)
-      investigation/                 #   Templates for investigation files
-      knowledge/                     #   Knowledge entry format
-  research/                           # Research/investigation workspace
-  project-a/                          # Dev project (created with /create-project)
-  project-b/                          # Dev project
+~/.claude/                             # Playbook configuration (always here)
+  CLAUDE.md                            #   Combined dev + research workflows
+  skills/
+    checkpoint/SKILL.md               #   /checkpoint - save state, commit, end session
+    continue/SKILL.md                 #   /continue - resume work (auto-detects dev vs research)
+    create-project/SKILL.md           #   /create-project - scaffold a new project
+    investigate/SKILL.md              #   /investigate - full investigation lifecycle
+    learn/SKILL.md                    #   /learn - capture knowledge entries
+    playbook/SKILL.md                 #   /playbook - analyze and improve config
+    promote/SKILL.md                  #   /promote - promote lessons to global scope
+  hooks/                               #   Session start/end hooks, model router
+  templates/
+    project-CLAUDE.md                 #   Template for project-level CLAUDE.md
+    hooks/pre-commit                  #   Git pre-commit hook (blocks secrets, large files)
+    investigation/                    #   Templates for investigation files
+    knowledge/                        #   Knowledge entry format
+
+<install-root>/                        # e.g. ~/Documents (set with --root)
+  research/                            # Research/investigation workspace
+  project-a/                           # Dev project (created with /create-project)
+  project-b/                           # Dev project
 ```
 
 The installer **will not overwrite** existing skills or configuration without prompting. Use `--wizard` to analyze your current setup and merge intelligently.
@@ -117,7 +118,7 @@ The combined CLAUDE.md includes:
 
 ## Testing
 
-Run the full test suite (~280 tests across 19 suites):
+Run the full test suite:
 
 ```bash
 # Hook tests (Node.js)
@@ -126,8 +127,11 @@ for t in tests/hooks/*.test.js; do node "$t" || exit 1; done
 # Script tests (Bash)
 for t in tests/scripts/*.test.sh; do bash "$t" || exit 1; done
 
+# Skills tests
+for t in tests/skills/*.test.sh; do bash "$t" || exit 1; done && for t in tests/skills/*.test.js; do node "$t" || exit 1; done
+
 # Or all at once
-for t in tests/hooks/*.test.js; do node "$t" || exit 1; done && for t in tests/scripts/*.test.sh; do bash "$t" || exit 1; done
+for t in tests/hooks/*.test.js; do node "$t" || exit 1; done && for t in tests/scripts/*.test.sh; do bash "$t" || exit 1; done && for t in tests/skills/*.test.sh; do bash "$t" || exit 1; done && for t in tests/skills/*.test.js; do node "$t" || exit 1; done
 ```
 
 ## CLI Scripts

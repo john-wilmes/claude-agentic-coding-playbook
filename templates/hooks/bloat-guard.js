@@ -118,6 +118,11 @@ function checkNewFile(filePath) {
 
   const filename = path.basename(expanded);
 
+  // Track creation count (before throwaway check so throwaway files count toward session total)
+  const createdFiles = loadState();
+  createdFiles.push(expanded);
+  saveState(createdFiles);
+
   // Block throwaway filename patterns
   if (isThrowaway(filename)) {
     return {
@@ -128,11 +133,6 @@ function checkNewFile(filePath) {
         `If this file is genuinely needed, ensure it is referenced by an existing file.`,
     };
   }
-
-  // Track creation count
-  const createdFiles = loadState();
-  createdFiles.push(expanded);
-  saveState(createdFiles);
 
   const count = createdFiles.length;
 
