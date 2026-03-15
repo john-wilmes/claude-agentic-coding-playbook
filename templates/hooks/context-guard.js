@@ -70,7 +70,7 @@ function readTranscriptUsage(transcriptPath) {
   try {
     const stats = fs.statSync(transcriptPath);
     const size = stats.size;
-    const TAIL_SIZE = 200 * 1024;
+    const TAIL_SIZE = 512 * 1024;
     const start = Math.max(0, size - TAIL_SIZE);
 
     const fd = fs.openSync(transcriptPath, "r");

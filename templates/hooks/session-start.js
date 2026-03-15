@@ -151,6 +151,17 @@ process.stdin.on("end", () => {
     const sessionId = hookInput.session_id || "";
     const cwd = hookInput.cwd || process.cwd();
 
+    // Clear stale context-guard state so a fresh session doesn't inherit
+    // the previous session's lastUsageRatio (which can trigger immediate blocks)
+    try {
+      const guardDir = path.join(os.tmpdir(), "claude-context-guard");
+      if (fs.existsSync(guardDir)) {
+        for (const f of fs.readdirSync(guardDir)) {
+          fs.unlinkSync(path.join(guardDir, f));
+        }
+      }
+    } catch {}
+
     // Import knowledge entries from JSONL if available
     try {
       let knowledgeDb;
