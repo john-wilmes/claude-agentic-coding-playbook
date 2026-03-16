@@ -61,7 +61,7 @@ chmod +x install.sh
     learn/SKILL.md                    #   /learn - capture knowledge entries
     playbook/SKILL.md                 #   /playbook - analyze and improve config
     promote/SKILL.md                  #   /promote - promote lessons to global scope
-  hooks/                               #   Session start/end hooks, model router
+  hooks/                               #   19 hooks — safety, quality, resource management (see docs/hooks.md)
   templates/
     project-CLAUDE.md                 #   Template for project-level CLAUDE.md
     hooks/pre-commit                  #   Git pre-commit hook (blocks secrets, large files)
@@ -92,6 +92,8 @@ The installer **will not overwrite** existing skills or configuration without pr
 
 ### Hooks
 
+CLAUDE.md rules are advisory (~50-90% compliance). Hooks are deterministic (>95%) — they run scripts at specific points in the agent's workflow, guaranteeing enforcement. See [Hook Reference](docs/hooks.md) for the full guide including configuration, customization, and the "why hooks" philosophy.
+
 **Session lifecycle:**
 - **Session start** -- Injects memory, knowledge entries, and git context. Warns when MEMORY.md or CLAUDE.md exceed size thresholds.
 - **Session end** -- Captures session summary and updates knowledge database on exit.
@@ -118,7 +120,7 @@ The installer **will not overwrite** existing skills or configuration without pr
 - **Knowledge capture** -- Extracts reusable lessons from session activity for the knowledge database.
 - **Knowledge database** -- Retrieves relevant knowledge entries via BM25 search at session start.
 
-Utility modules (`log.js`, `bm25.js`, `pii-detector.js`) are shared libraries used by the hooks above.
+Utility modules (`log.js`, `bm25.js`, `pii-detector.js`) are shared libraries used by the hooks above. See [Hook Reference](docs/hooks.md) for details on every hook.
 
 ### CLAUDE.md Rules
 
