@@ -184,7 +184,7 @@ As you work, consult your memory files to build on previous experience.
 
 # Environment
 You have been invoked in the following environment:
- - Primary working directory: C:\Users\johnw\Documents\agentic-coding-playbook
+ - Primary working directory: /home/user/my-project
   - Is a git repository: true
  - Platform: win32
  - Shell: bash (use Unix shell syntax, not Windows — e.g., /dev/null not NUL, forward slashes in paths)
