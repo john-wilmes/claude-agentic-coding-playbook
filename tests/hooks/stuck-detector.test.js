@@ -254,6 +254,210 @@ test("11. Subagent (agent_id present): skipped, returns {}", () => {
   }
 });
 
+// ─── Cross-session persistence tests ─────────────────────────────────────────
+
+console.log("\ncross-session persistence:");
+
+// Test 12: CLAUDE_LOOP_PID causes sessions to share state
+test("12. Cross-session: two sessions with same CLAUDE_LOOP_PID share window", () => {
+  const session1 = newSessionId();
+  const session2 = newSessionId();
+  const loopPid = `test-${Date.now()}`;
+  const stateKey = `loop-${loopPid}`;
+  try {
+    const payload = { command: "echo stuck" };
+    const env = { CLAUDE_LOOP_PID: loopPid };
+    // 2 calls in session 1
+    runHook(STUCK_DETECTOR, { session_id: session1, tool_name: "Bash", tool_input: payload }, env);
+    runHook(STUCK_DETECTOR, { session_id: session1, tool_name: "Bash", tool_input: payload }, env);
+    // 1 more call in session 2 — should be 3rd consecutive (warn)
+    const result = runHook(STUCK_DETECTOR, { session_id: session2, tool_name: "Bash", tool_input: payload }, env);
+
+    assert.strictEqual(result.status, 0);
+    assert.ok(result.json.hookSpecificOutput, "Should warn at 3rd call across sessions");
+    assert.ok(
+      result.json.hookSpecificOutput.additionalContext &&
+      result.json.hookSpecificOutput.additionalContext.includes("3 times"),
+      "Should mention 3 times"
+    );
+  } finally {
+    cleanupSession(stateKey);
+  }
+});
+
+// Test 13: Without CLAUDE_LOOP_PID, sessions have independent state
+test("13. Without CLAUDE_LOOP_PID: sessions are independent", () => {
+  const session1 = newSessionId();
+  const session2 = newSessionId();
+  try {
+    const payload = { command: "echo stuck" };
+    // 2 calls in session 1
+    runHook(STUCK_DETECTOR, { session_id: session1, tool_name: "Bash", tool_input: payload });
+    runHook(STUCK_DETECTOR, { session_id: session1, tool_name: "Bash", tool_input: payload });
+    // 1 call in session 2 — should NOT warn (fresh window)
+    const result = runHook(STUCK_DETECTOR, { session_id: session2, tool_name: "Bash", tool_input: payload });
+
+    assert.strictEqual(result.status, 0);
+    assert.strictEqual(result.json.hookSpecificOutput, undefined, "Should not warn — different session");
+  } finally {
+    cleanupSession(session1);
+    cleanupSession(session2);
+  }
+});
+
+// ─── Cycle detection tests ──────────────────────────────────────────────────
+
+console.log("\ncycle detection:");
+
+// Test 14: A,B repeated 2 times → warn
+test("14. Cycle len 2, 2 reps (A,B,A,B): warn", () => {
+  const sessionId = newSessionId();
+  try {
+    const a = { command: "echo a" };
+    const b = { command: "echo b" };
+    // A, B, A, B = 2 reps of [A,B]
+    runDetector(sessionId, "Bash", a);
+    runDetector(sessionId, "Bash", b);
+    runDetector(sessionId, "Bash", a);
+    const result = runDetector(sessionId, "Bash", b);
+
+    assert.strictEqual(result.status, 0);
+    assert.ok(result.json.hookSpecificOutput, "Should have hookSpecificOutput");
+    assert.ok(
+      result.json.hookSpecificOutput.additionalContext &&
+      result.json.hookSpecificOutput.additionalContext.includes("repeating pattern"),
+      "Should warn about repeating pattern"
+    );
+    assert.strictEqual(result.json.hookSpecificOutput.permissionDecision, undefined, "Should not block at 2 reps");
+  } finally {
+    cleanupSession(sessionId);
+  }
+});
+
+// Test 15: A,B repeated 3 times → block
+test("15. Cycle len 2, 3 reps (A,B,A,B,A,B): block", () => {
+  const sessionId = newSessionId();
+  try {
+    const a = { command: "echo a" };
+    const b = { command: "echo b" };
+    // A, B, A, B, A, B = 3 reps of [A,B]
+    runDetector(sessionId, "Bash", a);
+    runDetector(sessionId, "Bash", b);
+    runDetector(sessionId, "Bash", a);
+    runDetector(sessionId, "Bash", b);
+    runDetector(sessionId, "Bash", a);
+    const result = runDetector(sessionId, "Bash", b);
+
+    assert.strictEqual(result.status, 0);
+    assert.ok(result.json.hookSpecificOutput, "Should have hookSpecificOutput");
+    assert.strictEqual(
+      result.json.hookSpecificOutput.permissionDecision, "deny",
+      "Should block at 3 reps"
+    );
+    assert.ok(
+      result.json.hookSpecificOutput.permissionDecisionReason.includes("repeating pattern"),
+      "Should mention repeating pattern in block reason"
+    );
+  } finally {
+    cleanupSession(sessionId);
+  }
+});
+
+// Test 16: Cycle len 3, 3 reps → block
+test("16. Cycle len 3, 3 reps (A,B,C x3): block", () => {
+  const sessionId = newSessionId();
+  try {
+    const a = { command: "echo a" };
+    const b = { command: "echo b" };
+    const c = { command: "echo c" };
+    // A,B,C,A,B,C,A,B,C = 3 reps
+    for (let i = 0; i < 2; i++) {
+      runDetector(sessionId, "Bash", a);
+      runDetector(sessionId, "Bash", b);
+      runDetector(sessionId, "Bash", c);
+    }
+    runDetector(sessionId, "Bash", a);
+    runDetector(sessionId, "Bash", b);
+    const result = runDetector(sessionId, "Bash", c);
+
+    assert.strictEqual(result.status, 0);
+    assert.strictEqual(
+      result.json.hookSpecificOutput.permissionDecision, "deny",
+      "Should block cycle of length 3 at 3 reps"
+    );
+  } finally {
+    cleanupSession(sessionId);
+  }
+});
+
+// Test 17: No false positive — A,B,C,D,A,B (only 1 full rep + partial)
+test("17. No false positive: A,B,C,D,A,B (partial cycle, no trigger)", () => {
+  const sessionId = newSessionId();
+  try {
+    runDetector(sessionId, "Bash", { command: "echo a" });
+    runDetector(sessionId, "Bash", { command: "echo b" });
+    runDetector(sessionId, "Bash", { command: "echo c" });
+    runDetector(sessionId, "Bash", { command: "echo d" });
+    runDetector(sessionId, "Bash", { command: "echo a" });
+    const result = runDetector(sessionId, "Bash", { command: "echo b" });
+
+    assert.strictEqual(result.status, 0);
+    assert.strictEqual(result.json.hookSpecificOutput, undefined, "Should not trigger on partial cycle");
+  } finally {
+    cleanupSession(sessionId);
+  }
+});
+
+// Test 18: Consecutive detection still works independently of cycle detection
+test("18. Consecutive detection still works alongside cycle detection", () => {
+  const sessionId = newSessionId();
+  try {
+    const payload = { command: "echo same" };
+    runDetector(sessionId, "Bash", payload);
+    runDetector(sessionId, "Bash", payload);
+    const result = runDetector(sessionId, "Bash", payload); // 3 consecutive
+
+    assert.strictEqual(result.status, 0);
+    assert.ok(result.json.hookSpecificOutput, "Should have hookSpecificOutput");
+    assert.ok(
+      result.json.hookSpecificOutput.additionalContext &&
+      result.json.hookSpecificOutput.additionalContext.includes("3 times"),
+      "Consecutive detection should still fire"
+    );
+  } finally {
+    cleanupSession(sessionId);
+  }
+});
+
+// Test 19: Cycle detection across sessions under claude-loop
+test("19. Cycle detection works across sessions with CLAUDE_LOOP_PID", () => {
+  const session1 = newSessionId();
+  const session2 = newSessionId();
+  const loopPid = `test-cycle-${Date.now()}`;
+  const stateKey = `loop-${loopPid}`;
+  try {
+    const a = { command: "echo a" };
+    const b = { command: "echo b" };
+    const env = { CLAUDE_LOOP_PID: loopPid };
+    // Session 1: A, B, A, B
+    runHook(STUCK_DETECTOR, { session_id: session1, tool_name: "Bash", tool_input: a }, env);
+    runHook(STUCK_DETECTOR, { session_id: session1, tool_name: "Bash", tool_input: b }, env);
+    runHook(STUCK_DETECTOR, { session_id: session1, tool_name: "Bash", tool_input: a }, env);
+    runHook(STUCK_DETECTOR, { session_id: session1, tool_name: "Bash", tool_input: b }, env);
+    // Session 2: A, B → completes 3rd repetition → block
+    runHook(STUCK_DETECTOR, { session_id: session2, tool_name: "Bash", tool_input: a }, env);
+    const result = runHook(STUCK_DETECTOR, { session_id: session2, tool_name: "Bash", tool_input: b }, env);
+
+    assert.strictEqual(result.status, 0);
+    assert.strictEqual(
+      result.json.hookSpecificOutput.permissionDecision, "deny",
+      "Should block cycle detected across sessions"
+    );
+  } finally {
+    cleanupSession(stateKey);
+  }
+});
+
 // ─── Knowledge capture tests ─────────────────────────────────────────────────
 
 console.log("\nknowledge capture (runHook):");
