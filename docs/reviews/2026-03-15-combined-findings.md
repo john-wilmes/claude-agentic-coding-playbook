@@ -73,7 +73,7 @@ Two independent reviews of the full codebase at commit d9e7275 (master).
 | L7 | DA | `profiles/research/README.md` | Suggests active maintenance for orphaned profile |
 | L8 | DA | `README.md:209-213` | Unverified cost estimates |
 | L9 | DA | `tests/hooks/fleet-index.test.js` | Test in hooks/ for source in fleet/ |
-| L10 | CR | `templates/hooks/pii-detector.js:212` | YAML ` #` stripping breaks regex values |
+| L10 | CR | `templates/hooks/pii-detector.js:212` | YAML `#` stripping breaks regex values |
 | L11 | CR | `templates/hooks/stuck-detector.js` | Missing modern test runners (bun, deno, rspec) |
 | L12 | CR | `templates/hooks/pr-review-guard.js` | 8s timeout too tight for slow networks |
 | L13 | CR | `profiles/combined/skills/continue/SKILL.md:89` | References `knowledge-db.js staged` CLI mode that doesn't exist |
