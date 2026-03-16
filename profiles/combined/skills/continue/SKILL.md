@@ -73,28 +73,23 @@ Check for additional context that might be relevant:
 - Run `git log --oneline -3` to see recent commits
 - If the project has a task list, check for in-progress or blocked tasks
 
-### 3.5D. Run quality gates (subagent)
+### 3.5D. Check for incomplete work
 
-Spawn a subagent (Task tool, subagent_type: "general-purpose", model: "haiku") to run quality checks without consuming parent context. Give it these instructions:
+Run these quick checks directly (no subagent needed):
 
-> **Quality gate check for /continue**
->
-> 1. **Run project quality gates**: Read the project's CLAUDE.md and find any test/lint/type-check commands listed under "Quality Gates" or similar. Run each command. For each, report pass/fail and the first 20 lines of failure output.
->
-> 2. **Check for incomplete work**: Run `git status` and `git diff --stat`. Report:
->    - Unstaged modifications (partially completed edits)
->    - Untracked source files (exclude build artifacts like `node_modules/`, `dist/`, `*.log`)
->    - Staged but uncommitted changes
->
-> 3. **Check knowledge candidates**: Run `ls ~/.claude/knowledge/staged/ 2>/dev/null | wc -l`. If the count is > 0, report it as pending knowledge sessions to review.
->
-> 4. **Return a structured summary**: gates pass/fail (with failure details), incomplete work list, knowledge candidate count.
+1. **Check for incomplete work**: `git status` and `git diff --stat` were already run in 3D. Summarize:
+   - Unstaged modifications (partially completed edits)
+   - Untracked source files (exclude build artifacts like `node_modules/`, `dist/`, `*.log`)
+   - Staged but uncommitted changes
 
-After the subagent returns, integrate results into step 4D:
+2. **Check knowledge candidates**: Run `ls ~/.claude/knowledge/staged/ 2>/dev/null | wc -l`. If > 0, note pending knowledge sessions.
 
-- **Quality gates failed** → Fixing failures becomes the first priority, before memory's next steps.
+Integrate results into step 4D:
+
 - **Incomplete work detected** → Flag it as context for deciding what to do next.
 - **Knowledge candidates exist** → Mention them briefly (don't block on them).
+
+Do NOT run the full quality gate test suite here — that belongs in the pre-commit workflow, not session resume. Running hundreds of tests on `/continue` wastes context and can crash the session.
 
 ### 4D. Propose action
 
