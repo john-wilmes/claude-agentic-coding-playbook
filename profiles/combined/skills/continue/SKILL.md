@@ -25,6 +25,62 @@ The investigations directory is `<INSTALL_ROOT>/.claude/investigations/`.
 
 ## Steps
 
+### 0. Session recovery
+
+Before doing anything else, check whether the previous session ended without `/checkpoint`.
+
+**Determine the project directory and check for a stale marker:**
+
+```bash
+PROJECT_DIR=$(ls -dt ~/.claude/projects/*/ 2>/dev/null | head -1)
+if [ -f "$PROJECT_DIR/session-marker.json" ]; then
+  cat "$PROJECT_DIR/session-marker.json"
+else
+  echo "NO_MARKER"
+fi
+```
+
+**If `NO_MARKER`** — no recovery needed. Skip to step 0d (write new marker).
+
+**If marker exists** — the previous session didn't checkpoint. Recover:
+
+a. Parse the `sessionId` from the marker JSON.
+
+b. Check for the JSONL transcript at `$PROJECT_DIR/<sessionId>.jsonl`:
+
+```bash
+JSONL="$PROJECT_DIR/<sessionId>.jsonl"
+if [ -f "$JSONL" ]; then
+  grep -c '"type":"assistant"' "$JSONL"
+else
+  echo "NO_JSONL"
+fi
+```
+
+c. If the JSONL doesn't exist or has fewer than 5 assistant messages, skip recovery (session too short). Delete the stale marker and proceed to step 0d.
+
+d. Spawn a **haiku** subagent (Task tool, `model: "haiku"`, `subagent_type: "general-purpose"`) with this prompt:
+   - Read the JSONL file at `<path>`
+   - Filter to lines containing `"type":"assistant"` — these are the agent's responses
+   - Take the **last 25 matching lines** (to stay under ~50KB)
+   - From the assistant content, extract: key decisions made, diagnoses reached, proposed fixes, action items discussed with the user
+   - Return a concise summary (10-20 lines max, plain text, no JSON)
+
+e. Append the recovered summary to the project's `MEMORY.md` under a `## Recovered from previous session` heading. If that heading already exists, replace it.
+
+f. Delete the stale marker: `rm -f "$PROJECT_DIR/session-marker.json"`
+
+g. Present to the user: "Previous session didn't checkpoint. Recovered context:" followed by the summary.
+
+**Step 0d — Write new session marker:**
+
+```bash
+# Get the current session's JSONL filename (most recently created)
+CURRENT_JSONL=$(ls -t "$PROJECT_DIR"/*.jsonl 2>/dev/null | head -1)
+SESSION_ID=$(basename "$CURRENT_JSONL" .jsonl)
+echo "{\"sessionId\": \"$SESSION_ID\", \"timestamp\": \"$(date -Iseconds)\"}" > "$PROJECT_DIR/session-marker.json"
+```
+
 ### 1. Detect context
 
 Determine whether this is a dev or research session:
@@ -90,6 +146,40 @@ Integrate results into step 4D:
 - **Knowledge candidates exist** → Mention them briefly (don't block on them).
 
 Do NOT run the full quality gate test suite here — that belongs in the pre-commit workflow, not session resume. Running hundreds of tests on `/continue` wastes context and can crash the session.
+
+### 3.6D. Loop detection
+
+Check whether /continue is repeating the same work across sessions without making progress.
+
+1. Extract the "Next steps" text from the Current Work section of MEMORY.md (already in context from step 2D).
+2. Compute a hash and check the loop detector file:
+   ```bash
+   NEXT_STEPS_HASH=$(echo "<next steps text>" | md5sum | cut -d' ' -f1)
+   PROJECT_DIR=$(ls -dt ~/.claude/projects/*/ 2>/dev/null | head -1)
+   LOOP_FILE="$PROJECT_DIR/loop-detector.json"
+   cat "$LOOP_FILE" 2>/dev/null || echo '{"hash":"","attempts":0}'
+   ```
+3. Compare the stored hash with the current hash:
+   - **Hash matches and `attempts >= 3`**: Loop detected.
+     - If running under **claude-loop**: Print "claude-loop: stuck in loop — same next steps attempted 3+ times without checkpoint. Exiting." and STOP. Do NOT run `/checkpoint`. Do NOT write any sentinel.
+     - If **interactive**: Warn the user:
+       ```text
+       Loop detected: The same next steps have been attempted 3+ times
+       without reaching checkpoint. Sessions are likely crashing before
+       completing the work.
+
+       Options:
+         1. Simplify the next step (break it into smaller pieces)
+         2. Clear the loop counter: rm <loop-file-path>
+         3. Work on something else entirely
+       ```
+       Then STOP — do not auto-start the work.
+   - **Hash matches and `attempts < 3`**: Increment `attempts`, write updated file.
+   - **Hash doesn't match**: Reset to `{"hash":"<new-hash>","attempts":1,"timestamp":"<now>"}`.
+4. Write the updated loop-detector.json:
+   ```bash
+   echo '{"hash":"'"$NEXT_STEPS_HASH"'","attempts":<N>,"timestamp":"'"$(date -Iseconds)"'"}' > "$LOOP_FILE"
+   ```
 
 ### 4D. Propose action
 
