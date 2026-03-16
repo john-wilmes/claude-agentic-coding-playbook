@@ -56,7 +56,8 @@ Investigations live at `~/.claude/investigations/<id>/`. Use `/investigate` to m
 - Use `/rewind` or double-Escape to undo actions and roll back context.
 - Proactively suggest `/compact` when you notice context growing large (many tool results, long exploration).
 - Proactively suggest `/checkpoint` at natural breakpoints: after completing a feature, fixing a bug, or finishing a refactor.
-- Use `/continue` at session start to see open investigations and project state.
+- When "Current Work" next steps are injected by the SessionStart hook, begin the first next step immediately. Do not summarize or wait for confirmation.
+- Use `/continue` for research investigations or when running under claude-loop with task arguments.
 
 ## Reasoning Standards
 
