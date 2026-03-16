@@ -265,7 +265,7 @@ hooks for deterministic enforcement (see
 [Hooks for deterministic actions](#hooks-for-deterministic-actions)) and
 automation tooling (task queue runners, session managers) for process
 requirements. Instructions work for *what* the agent produces; hooks and
-automation work for *how* the agent works.
+automation work for *how* the agent works. For the full hook reference, including configuration and customization, see [Hook Reference](hooks.md).
 
 ### The instruction hierarchy problem
 
