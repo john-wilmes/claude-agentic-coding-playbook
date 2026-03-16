@@ -65,7 +65,6 @@ chmod +x install.sh
   templates/
     project-CLAUDE.md                 #   Template for project-level CLAUDE.md
     hooks/pre-commit                  #   Git pre-commit hook (blocks secrets, large files)
-    investigation/                    #   Templates for investigation files
     knowledge/                        #   Knowledge entry format
 
 <install-root>/                        # e.g. ~/Documents (set with --root)
@@ -93,13 +92,33 @@ The installer **will not overwrite** existing skills or configuration without pr
 
 ### Hooks
 
+**Session lifecycle:**
 - **Session start** -- Injects memory, knowledge entries, and git context. Warns when MEMORY.md or CLAUDE.md exceed size thresholds.
-- **Model router** -- Auto-selects Haiku/Sonnet/Opus for Task tool calls based on prompt signals.
+- **Session end** -- Captures session summary and updates knowledge database on exit.
+- **Pre-compact** -- Saves context state before `/compact` runs, preserving critical information.
+
+**Safety:**
 - **Prompt injection guard** -- Blocks high-confidence injection patterns in Bash commands (zero false positives by design).
+- **Sanitize guard** -- Runtime PII/PHI detection and redaction. Scans tool output (PostToolUse) and blocks writes containing PII (PreToolUse). Opt-in per repo via `.claude/sanitize.yaml`.
+- **Skill guard** -- Validates skill invocations and prevents unauthorized skill execution.
+
+**Quality:**
 - **Post-tool verify** -- Auto-runs project tests after Edit/Write on code files with debouncing.
+- **PR review guard** -- Enforces code review before pushing. Blocks `git push` if changes haven't been reviewed.
 - **Context guard** -- Dual-mode context window monitoring. Warns at 35%/50%, blocks at 60%, failsafe sentinel at 75%.
 - **Stuck detector** -- Detects and breaks agent loops when the same action repeats.
-- **Sanitize guard** -- Runtime PII/PHI detection and redaction. Scans tool output (PostToolUse) and blocks writes containing PII (PreToolUse). Opt-in per repo via `.claude/sanitize.yaml`.
+
+**Resource management:**
+- **Model router** -- Auto-selects Haiku/Sonnet/Opus for Task tool calls based on prompt signals.
+- **Filesize guard** -- Warns when reading or writing large files that waste context.
+- **Bloat guard** -- Detects runaway file creation and flags unexpected project growth.
+- **Markdown size guard** -- Warns when CLAUDE.md or MEMORY.md approach size thresholds.
+
+**Knowledge:**
+- **Knowledge capture** -- Extracts reusable lessons from session activity for the knowledge database.
+- **Knowledge database** -- Retrieves relevant knowledge entries via BM25 search at session start.
+
+Utility modules (`log.js`, `bm25.js`, `pii-detector.js`) are shared libraries used by the hooks above.
 
 ### CLAUDE.md Rules
 
@@ -130,8 +149,14 @@ for t in tests/scripts/*.test.sh; do bash "$t" || exit 1; done
 # Skills tests
 for t in tests/skills/*.test.sh; do bash "$t" || exit 1; done && for t in tests/skills/*.test.js; do node "$t" || exit 1; done
 
+# Fleet tests (Node.js)
+for t in tests/fleet/*.test.js; do node "$t" || exit 1; done
+
+# Investigation tests (Node.js)
+for t in tests/investigate/*.test.js; do node "$t" || exit 1; done
+
 # Or all at once
-for t in tests/hooks/*.test.js; do node "$t" || exit 1; done && for t in tests/scripts/*.test.sh; do bash "$t" || exit 1; done && for t in tests/skills/*.test.sh; do bash "$t" || exit 1; done && for t in tests/skills/*.test.js; do node "$t" || exit 1; done
+for t in tests/hooks/*.test.js; do node "$t" || exit 1; done && for t in tests/fleet/*.test.js; do node "$t" || exit 1; done && for t in tests/scripts/*.test.sh; do bash "$t" || exit 1; done && for t in tests/skills/*.test.sh; do bash "$t" || exit 1; done && for t in tests/skills/*.test.js; do node "$t" || exit 1; done && for t in tests/investigate/*.test.js; do node "$t" || exit 1; done
 ```
 
 ## CLI Scripts
@@ -192,15 +217,7 @@ The wizard will:
 
 ### Architecture
 
-The playbook ships with three profile variants in `profiles/`:
-
-| Profile | CLAUDE.md Focus | Skills | Use Case |
-|---------|----------------|--------|----------|
-| `combined` | Dual workflow (dev + research) | checkpoint, continue, create-project, investigate, learn, playbook, promote | Default install — covers both development and investigation workflows |
-| `dev` | Development workflow only | checkpoint, continue, create-project, learn, playbook, promote | Lighter config for pure development work |
-| `research` | Investigation workflow only | continue, investigate | Structured investigations with evidence discipline and PII/PHI sanitization |
-
-The install script uses the `combined` profile by default. Each profile includes its own `CLAUDE.md`, `skills/`, and (for research) evaluation templates and sanitization scripts.
+The playbook uses a single `combined` profile in `profiles/combined/` that covers both development and research workflows. The install script copies its `CLAUDE.md` and `skills/` to `~/.claude/`.
 
 ## Benchmarks
 
@@ -218,6 +235,11 @@ bash scripts/swe-bench.sh --full
 ```
 
 See [docs/swe-bench-methodology.md](docs/swe-bench-methodology.md) for task selection, scoring, and limitations.
+
+## Roadmap
+
+- **Subagent overflow recovery (claude-loop)** -- When a subagent runs out of turns or context, detect the truncation via a PostToolUse hook on Task, write a state file with remaining work, and have claude-loop inject it as the prompt for a fresh session to finish the job.
+- **Multi-agent coordination testing** -- Dogfood test team workflows (TeamCreate, SendMessage, shared task lists) in real coding sessions to validate coordination patterns and discover emergent issues.
 
 ## Contributing
 
