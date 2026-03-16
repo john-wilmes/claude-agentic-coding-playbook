@@ -1630,7 +1630,7 @@ complementary layers cover different threat surfaces:
 
 ### Layer 1: MCP proxy (per-server wrapping)
 
-[MCP Conceal](https://github.com/nicobailey/mcp-conceal) wraps individual MCP
+[MCP Conceal](https://github.com/gbrigandi/mcp-server-conceal) wraps individual MCP
 servers and redacts PII before it reaches the LLM. Configure it as a proxy in
 front of any MCP server that returns sensitive data:
 

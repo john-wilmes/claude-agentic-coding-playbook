@@ -88,6 +88,9 @@ fi
 if [[ -z "${CLAUDE_CMD}" ]]; then
   warn "Neither 'q' nor 'claude' CLI found in PATH."
   warn "Cannot perform AI-assisted overlap analysis."
+  if "${DRY_RUN}"; then
+    log "Dry run: skipping overlap analysis (no CLI available)."
+  fi
   warn "Manual review recommended: ls ${ENTRIES_DIR}"
   exit 0
 fi
