@@ -14,7 +14,7 @@
 # What this script does:
 #   - Installs prerequisites (git, node)
 #   - Clones the repo (if not already in it)
-#   - Runs the installer for both profiles
+#   - Runs the installer
 #   - Scaffolds a test project with pre-commit hooks
 #   - Runs hook integration tests
 #   - Tests knowledge repo integration
@@ -76,7 +76,7 @@ command -v node &>/dev/null && pass "node available: $(node --version)" || fail 
 section "Step 2: Ensure repo is available"
 
 REPO_DIR=""
-if [ -f "install.sh" ] && [ -d "profiles/dev" ]; then
+if [ -f "install.sh" ] && [ -d "profiles/combined" ]; then
   REPO_DIR="$(pwd)"
   pass "Already in repo directory"
 else
@@ -85,16 +85,16 @@ else
   pass "Cloned repo to $REPO_DIR"
 fi
 
-# ── Step 3: Dev profile install ─────────────────────────────────
+# ── Step 3: Install ─────────────────────────────────────────────
 
-section "Step 3: Install dev profile"
+section "Step 3: Install"
 
 # Use isolated HOME for clean-room testing
 export ORIG_HOME="$HOME"
 export HOME=$(mktemp -d)
 echo "Using isolated HOME=$HOME"
 
-bash "$REPO_DIR/install.sh" --profile dev --force
+bash "$REPO_DIR/install.sh" --force
 
 [ -f "$HOME/.claude/CLAUDE.md" ] && pass "CLAUDE.md installed" || fail "CLAUDE.md missing"
 [ -d "$HOME/.claude/skills/checkpoint" ] && pass "checkpoint skill" || fail "checkpoint skill missing"
@@ -185,30 +185,16 @@ else
   fail "failed to seed knowledge entry"
 fi
 
-bash "$REPO_DIR/install.sh" --profile dev --force --knowledge-repo "$bare"
+bash "$REPO_DIR/install.sh" --force --knowledge-repo "$bare"
 
 [ -d "$HOME/.claude/knowledge/.git" ] && pass "knowledge repo cloned" || fail "knowledge repo not cloned"
 [ -f "$HOME/.claude/knowledge/entries/20260222-test/entry.md" ] && pass "seeded entry present" || fail "seeded entry missing"
 
-# ── Step 6: Cross-profile switching ──────────────────────────────
+# ── Step 6: Idempotency ─────────────────────────────────────────
 
-section "Step 6: Cross-profile switching (dev → research → dev)"
+section "Step 6: Idempotency check"
 
-bash "$REPO_DIR/install.sh" --profile research --force
-[ -d "$HOME/.claude/skills/investigate" ] && pass "investigate skill present" || fail "investigate missing"
-[ ! -d "$HOME/.claude/skills/checkpoint" ] && pass "checkpoint removed on switch" || fail "checkpoint still present"
-grep -q "Question, Collect, Synthesize, Close" "$HOME/.claude/CLAUDE.md" && \
-  pass "CLAUDE.md has research workflow" || fail "CLAUDE.md missing research workflow"
-
-bash "$REPO_DIR/install.sh" --profile dev --force
-[ ! -d "$HOME/.claude/skills/investigate" ] && pass "investigate removed on switch back" || fail "investigate still present"
-[ -d "$HOME/.claude/skills/checkpoint" ] && pass "checkpoint restored" || fail "checkpoint not restored"
-
-# ── Step 7: Idempotency ─────────────────────────────────────────
-
-section "Step 7: Idempotency check"
-
-bash "$REPO_DIR/install.sh" --profile dev --force
+bash "$REPO_DIR/install.sh" --force
 [ -f "$HOME/.claude/CLAUDE.md" ] && pass "CLAUDE.md survives re-install" || fail "CLAUDE.md missing after re-install"
 
 # ── Summary ──────────────────────────────────────────────────────

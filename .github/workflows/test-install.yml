@@ -420,42 +420,6 @@ jobs:
           test -x "$proj/.git/hooks/pre-commit"
           echo "OK: pre-commit hook installed and executable"
 
-      # ── Phase 5b: sanitize.sh smoke test ────────────────────────
-
-      - name: "sanitize.sh: no arguments exits with error"
-
-        run: |
-          script="$HOME/.claude/scripts/sanitize.sh"
-          if "$script" 2>/dev/null; then
-            echo "FAIL: sanitize.sh should exit non-zero with no arguments"
-            exit 1
-          fi
-          echo "OK: sanitize.sh exits non-zero with no arguments"
-
-      - name: "sanitize.sh: missing presidio.yaml degrades gracefully"
-
-        run: |
-          # Use isolated HOME so there's no presidio.yaml
-          export HOME=$(mktemp -d)
-          script_src="$GITHUB_WORKSPACE/profiles/research/scripts/sanitize.sh"
-          tmp_file=$(mktemp)
-          echo "test content" > "$tmp_file"
-          "$script_src" "$tmp_file"
-          echo "OK: sanitize.sh exits 0 when presidio.yaml is missing"
-
-      - name: "sanitize.sh: no Presidio installed degrades gracefully"
-
-        run: |
-          # Config exists but Presidio Python packages are not installed
-          export HOME=$(mktemp -d)
-          mkdir -p "$HOME/.claude/templates/investigation"
-          echo "analyzer: {}" > "$HOME/.claude/templates/investigation/presidio.yaml"
-          script_src="$GITHUB_WORKSPACE/profiles/research/scripts/sanitize.sh"
-          tmp_file=$(mktemp)
-          echo "test content" > "$tmp_file"
-          "$script_src" "$tmp_file"
-          echo "OK: sanitize.sh exits 0 when Presidio is not installed"
-
       # ── Phase 6: Dogfood test ────────────────────────────────────
 
       - name: "Dogfood: full user journey"

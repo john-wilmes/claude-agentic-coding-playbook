@@ -366,51 +366,6 @@ if [ -f "$SCRIPT_DIR/templates/project-CLAUDE.md" ]; then
   install_file "$SCRIPT_DIR/templates/project-CLAUDE.md" "$CLAUDE_DIR/templates/project-CLAUDE.md" "template: project-CLAUDE.md"
 fi
 
-# Investigation templates
-if [ -d "$SCRIPT_DIR/profiles/research/templates" ]; then
-  echo ""
-  echo "--- Installing investigation templates ---"
-  if [ "$DRY_RUN" != true ]; then
-    mkdir -p "$CLAUDE_DIR/templates/investigation/hooks"
-  fi
-  for tmpl_file in "$SCRIPT_DIR/profiles/research/templates"/*; do
-    [ -f "$tmpl_file" ] || continue
-    tmpl_name=$(basename "$tmpl_file")
-    install_file "$tmpl_file" "$CLAUDE_DIR/templates/investigation/$tmpl_name" "investigation template: $tmpl_name"
-  done
-  if [ -d "$SCRIPT_DIR/profiles/research/templates/hooks" ]; then
-    for hook_file in "$SCRIPT_DIR/profiles/research/templates/hooks"/*; do
-      [ -f "$hook_file" ] || continue
-      hook_name=$(basename "$hook_file")
-      install_file "$hook_file" "$CLAUDE_DIR/templates/investigation/hooks/$hook_name" "investigation hook: $hook_name"
-      if [ "$DRY_RUN" != true ] && [ -f "$CLAUDE_DIR/templates/investigation/hooks/$hook_name" ]; then
-        chmod +x "$CLAUDE_DIR/templates/investigation/hooks/$hook_name"
-      fi
-    done
-  fi
-  # Create investigations directory structure
-  if [ "$DRY_RUN" = true ]; then
-    echo "[DRY RUN] MKDIR: $CLAUDE_DIR/investigations/_patterns/"
-  else
-    mkdir -p "$CLAUDE_DIR/investigations/_patterns"
-    echo "CREATED: $CLAUDE_DIR/investigations/_patterns/"
-  fi
-
-  # Install investigation scripts
-  echo ""
-  echo "--- Installing investigation scripts ---"
-  if [ -f "$SCRIPT_DIR/profiles/research/scripts/sanitize.sh" ]; then
-    if [ "$DRY_RUN" = true ]; then
-      echo "[DRY RUN] INSTALL: sanitize.sh -> $CLAUDE_DIR/scripts/sanitize.sh"
-    else
-      mkdir -p "$CLAUDE_DIR/scripts"
-      cp "$SCRIPT_DIR/profiles/research/scripts/sanitize.sh" "$CLAUDE_DIR/scripts/sanitize.sh"
-      chmod +x "$CLAUDE_DIR/scripts/sanitize.sh"
-      echo "INSTALLED: sanitize.sh -> $CLAUDE_DIR/scripts/sanitize.sh"
-    fi
-  fi
-fi
-
 # Create research directory as sibling
 echo ""
 echo "--- Creating research directory ---"

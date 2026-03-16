@@ -464,8 +464,11 @@ test("PreToolUse Bash tool with PII in command blocks", (env) => {
   assert.ok(result.json, `Expected JSON output, got: ${result.stdout}`);
   const out = result.json.hookSpecificOutput || {};
   assert.strictEqual(out.permissionDecision, "deny", "Should block Bash command containing PII");
-  assert.ok(out.permissionDecisionReason.includes("REDACTED"), "Reason should include REDACTED placeholder for Bash commands");
+  assert.ok(out.permissionDecisionReason.includes("BLOCKED"), "Reason should include BLOCKED");
+  assert.ok(out.permissionDecisionReason.includes("Bash command"), "Reason should reference Bash command");
   assert.ok(out.permissionDecisionReason.includes("US_SSN"), "Reason should include detected entity type");
+  assert.ok(out.permissionDecisionReason.includes("Rewrite"), "Reason should instruct user to rewrite the command");
+  assert.ok(!out.permissionDecisionReason.includes("echo"), "Reason must not contain a fake echo replacement command");
 
   try { fs.rmSync(projectDir, { recursive: true, force: true }); } catch {}
 });

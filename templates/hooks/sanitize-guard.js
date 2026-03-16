@@ -180,11 +180,6 @@ process.stdin.on("end", () => {
     }
 
     const summary = buildSummary(detections);
-    // For Bash commands, in-place redaction produces broken shell syntax.
-    // Use a safe placeholder instead of attempting to patch the command.
-    const redacted = toolName === "Bash"
-      ? `echo "[REDACTED — PII detected in command (${summary}). Rewrite the command without PII.]"`
-      : truncate(piiDetector.redact(content, detections));
 
     log.writeLog({
       hook: "sanitize-guard",
@@ -197,14 +192,26 @@ process.stdin.on("end", () => {
       details: `PreToolUse: ${detections.length} detections (${summary}) — blocked`,
     });
 
-    process.stdout.write(JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        permissionDecision: "deny",
-        permissionDecisionReason:
-          `BLOCKED: PII/PHI detected in content (${detections.length} items: ${summary}). Use this redacted version instead:\n${redacted}`,
-      },
-    }));
+    if (toolName === "Bash") {
+      process.stdout.write(JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason:
+            `BLOCKED: PII/PHI detected in Bash command (${detections.length} items: ${summary}). Rewrite the command without sensitive data.`,
+        },
+      }));
+    } else {
+      const redacted = truncate(piiDetector.redact(content, detections));
+      process.stdout.write(JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason:
+            `BLOCKED: PII/PHI detected in content (${detections.length} items: ${summary}). Use this redacted version instead:\n${redacted}`,
+        },
+      }));
+    }
     process.exit(0);
 
   } catch {

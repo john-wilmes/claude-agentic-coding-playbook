@@ -291,6 +291,56 @@ test("Write: existing files do not count toward threshold", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Session-id isolation tests
+// ---------------------------------------------------------------------------
+
+console.log("\nSession-id isolation tests:");
+
+test("Different sessionIds maintain separate state", () => {
+  clearState();
+  const dir = createNonTmpDir();
+  try {
+    // Create 5 new files under session-A — counts should stay per-session
+    for (let i = 1; i <= 5; i++) {
+      const file = path.join(dir, `session-a-file-${i}.txt`);
+      const input = { tool_name: "Write", tool_input: { file_path: file }, session_id: "session-A" };
+      runHook(HOOK, input);
+    }
+    // session-B starts fresh — 1st file should be advisory only, NOT escalated
+    const fileB = path.join(dir, "session-b-file-1.txt");
+    const resultB = runHook(HOOK, { tool_name: "Write", tool_input: { file_path: fileB }, session_id: "session-B" });
+    assert.ok(isWarned(resultB), "Expected warn for new file in session-B");
+    assert.ok(
+      !warnReason(resultB).includes("threshold"),
+      `session-B should not see session-A's file count, got: ${warnReason(resultB)}`
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("Same sessionId accumulates state across calls", () => {
+  clearState();
+  const dir = createNonTmpDir();
+  try {
+    // Create 5 files under the same session — 6th should escalate
+    for (let i = 1; i <= 5; i++) {
+      const file = path.join(dir, `accum-file-${i}.txt`);
+      runHook(HOOK, { tool_name: "Write", tool_input: { file_path: file }, session_id: "session-C" });
+    }
+    const file6 = path.join(dir, "accum-file-6.txt");
+    const result6 = runHook(HOOK, { tool_name: "Write", tool_input: { file_path: file6 }, session_id: "session-C" });
+    assert.ok(isWarned(result6), "Expected warn for 6th file in session-C");
+    assert.ok(
+      warnReason(result6).includes("threshold") || warnReason(result6).includes("6 new files"),
+      `Expected escalation on 6th file in same session, got: ${warnReason(result6)}`
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Non-Write tool tests
 // ---------------------------------------------------------------------------
 

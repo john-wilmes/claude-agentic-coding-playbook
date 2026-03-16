@@ -47,7 +47,7 @@ const ESCALATION_THRESHOLD = 5;
  * @param {string} sessionId - from hookInput.session_id
  */
 function getStateFile(sessionId) {
-  const id = sessionId || process.env.PPID || "default";
+  const id = sessionId || "default";
   return path.join(STATE_DIR, `${id}.json`);
 }
 
@@ -194,7 +194,6 @@ process.stdin.on("end", () => {
   } catch (_err) {
     process.stdout.write("{}");
   }
-  process.exit(0);
 });
 
 // ---------------------------------------------------------------------------
