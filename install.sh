@@ -820,6 +820,44 @@ if [ -f "$SCRIPT_DIR/templates/hooks/stuck-detector.js" ]; then
   fi
 fi
 
+# Subagent recovery hook (PostToolUse Task -- detects truncated subagent output, writes recovery state)
+if [ -f "$SCRIPT_DIR/templates/hooks/subagent-recovery.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/subagent-recovery.js" "$CLAUDE_DIR/hooks/subagent-recovery.js" "subagent recovery: subagent-recovery.js"
+
+  echo ""
+  echo "--- Configuring subagent-recovery in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  SUBAGENT_RECOVERY_CMD="node $CLAUDE_DIR/hooks/subagent-recovery.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add PostToolUse Task hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    if grep -q "subagent-recovery" "$SETTINGS_FILE" 2>/dev/null; then
+      echo "ALREADY CONFIGURED: subagent-recovery hook in settings.json"
+    else
+      node -e "
+        const fs = require('fs');
+        const path = require('path');
+        const settingsPath = path.resolve(process.argv[1]);
+        const hookCmd = process.argv[2];
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (!settings.hooks) settings.hooks = {};
+        if (!settings.hooks.PostToolUse) settings.hooks.PostToolUse = [];
+        settings.hooks.PostToolUse.push({
+          matcher: 'Task',
+          hooks: [{ type: 'command', command: hookCmd, timeout: 5 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      " "$SETTINGS_FILE" "$SUBAGENT_RECOVERY_CMD"
+      echo "CONFIGURED: subagent-recovery hook in settings.json"
+    fi
+  fi
+fi
+
 # PII detector shared module (installed before sanitize-guard which depends on it)
 if [ -f "$SCRIPT_DIR/templates/hooks/pii-detector.js" ]; then
   install_file "$SCRIPT_DIR/templates/hooks/pii-detector.js" "$CLAUDE_DIR/hooks/pii-detector.js" "pii detector module: pii-detector.js"
