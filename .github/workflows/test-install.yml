@@ -494,7 +494,7 @@ jobs:
           echo "OK: code change commit passed hook"
 
           # Verify no hardcoded paths in installed skills
-          if grep -r 'C--Users-johnw' "$HOME/.claude/skills/" 2>/dev/null; then
+          if grep -rP 'C--Users-[^/]+' "$HOME/.claude/skills/" 2>/dev/null; then
             echo "FAIL: hardcoded user-specific path found in skills"
             exit 1
           fi
