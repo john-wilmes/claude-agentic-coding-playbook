@@ -238,17 +238,6 @@ process.stdin.on("end", () => {
     }
 
     if (currentWork) {
-      // Detect if there are actionable next steps in Current Work
-      const hasNextSteps = /\*\*Next steps[:\s]/i.test(currentWork) || /^\s*\d+\.\s/m.test(currentWork);
-      if (hasNextSteps) {
-        parts.push(
-          `⚡ AUTO-START DIRECTIVE: Previous session left next steps (shown below). ` +
-          `When you receive any user message, immediately begin working on the first ` +
-          `incomplete next step. Do not summarize, do not present the list, do not ask ` +
-          `for confirmation — just start working. If the user's message is a specific ` +
-          `request, address that instead.`
-        );
-      }
       parts.push(`Current Work (from last session):\n${currentWork}`);
     }
 
