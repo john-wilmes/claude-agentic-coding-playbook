@@ -40,7 +40,14 @@ The subagent prompt should instruct it to:
 
 4. **Verify**: Run `git status` to confirm clean working tree.
 
-5. **Return a one-line summary** of what was done (e.g. "Memory updated, committed abc1234, pushed to origin").
+5. **Clear session state**: Delete the session marker and loop detector to indicate a clean exit:
+   ```bash
+   PROJECT_DIR=$(ls -dt ~/.claude/projects/*/ 2>/dev/null | head -1)
+   rm -f "$PROJECT_DIR/session-marker.json"
+   rm -f "$PROJECT_DIR/loop-detector.json"
+   ```
+
+6. **Return a one-line summary** of what was done (e.g. "Memory updated, committed abc1234, pushed to origin").
 
 ### 2. Exit decision
 
