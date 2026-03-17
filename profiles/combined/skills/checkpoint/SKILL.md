@@ -26,7 +26,7 @@ Pass it the following context:
 
 The subagent prompt should instruct it to:
 
-1. **Update memory**: Read the project's `MEMORY.md`. Update the "Current Work" section with what was done, current state, and next steps. Replace the previous entry (do not accumulate). Add date stamp. Add any non-obvious discoveries to Lessons Learned. Do not duplicate existing entries.
+1. **Update memory**: Read the project's `MEMORY.md`. Update the "Current Work" section with what was done, current state, and next steps. Replace the previous entry (do not accumulate). Add date stamp. Add any non-obvious discoveries to Lessons Learned. Do not duplicate existing entries. **Clear the `## Recovered from previous session` section entirely if it exists** — its content has been incorporated into Current Work.
 
 2. **Commit and push**: Run `git status`. If there are uncommitted changes, stage relevant files (not build artifacts, logs, or secrets), commit with a descriptive message, and push to remote. If no changes or not a git repo, skip.
 
@@ -40,7 +40,21 @@ The subagent prompt should instruct it to:
 
 4. **Verify**: Run `git status` to confirm clean working tree.
 
-5. **Return a one-line summary** of what was done (e.g. "Memory updated, committed abc1234, pushed to origin").
+5. **Clear session state**: Delete the session marker and loop detector to indicate a clean exit:
+   ```bash
+   # Derive the project dir from cwd — Claude Code encodes the path with slashes as dashes.
+   PROJECT_SLUG=$(pwd | sed 's|/|-|g')
+   PROJECT_DIR=$(echo "$HOME/.claude/projects/${PROJECT_SLUG}" | sed 's|//|/|g')
+   # Fall back to most-recently-modified project dir if the derived path doesn't exist.
+   if [ ! -d "$PROJECT_DIR" ]; then
+     PROJECT_DIR=$(ls -dt ~/.claude/projects/*/ 2>/dev/null | head -1)
+   fi
+   rm -f "$PROJECT_DIR/session-marker.json"
+   rm -f "$PROJECT_DIR/loop-detector.json"
+   rm -rf /tmp/claude-subagent-recovery/
+   ```
+
+6. **Return a one-line summary** of what was done (e.g. "Memory updated, committed abc1234, pushed to origin").
 
 ### 2. Exit decision
 
