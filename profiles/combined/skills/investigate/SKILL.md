@@ -303,7 +303,7 @@ After all Task calls complete:
 
 After Round 1 evidence collection, assess whether gaps remain that require human input.
 
-1. Run the citation checker: `bash ~/.claude/skills/investigate/scripts/check-citations.sh "$INVESTIGATIONS_DIR" "{ID}"`. If `check-citations.sh` is not found at the expected path, skip automated gap detection. Instead, manually review the evidence files and check that each finding cites at least one evidence number.
+1. Run the citation checker: `bash ${CLAUDE_SKILL_DIR}/scripts/check-citations.sh "$INVESTIGATIONS_DIR" "{ID}"`. If `check-citations.sh` is not found at the expected path, skip automated gap detection. Instead, manually review the evidence files and check that each finding cites at least one evidence number.
 2. Read BRIEF.md to recall the hypothesis and observations.
 3. For areas with no evidence or contradictory evidence, classify each gap:
    - **Code-answerable**: The gap is about *what the code does* — can be filled by reading more code. Queue for Round 2 specialists.
