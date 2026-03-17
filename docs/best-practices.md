@@ -2269,7 +2269,7 @@ into the Letta platform, maps cleanly to Claude Code session management:
 
 - **Page-out** = PreCompact hook writing task state, file hashes, and key findings
   to MEMORY.md before compaction discards them
-- **Page-in** = session-start `/continue` reading MEMORY.md and restoring task state
+- **Page-in** = SessionStart hook reading MEMORY.md and restoring task state
 
 The gap in most setups is that page-in is not automatic after auto-compaction. The
 agent resumes with summarized context and no explicit re-read of MEMORY.md, producing

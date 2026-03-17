@@ -98,7 +98,6 @@ bash "$REPO_DIR/install.sh" --force
 
 [ -f "$HOME/.claude/CLAUDE.md" ] && pass "CLAUDE.md installed" || fail "CLAUDE.md missing"
 [ -d "$HOME/.claude/skills/checkpoint" ] && pass "checkpoint skill" || fail "checkpoint skill missing"
-[ -d "$HOME/.claude/skills/continue" ] && pass "continue skill" || fail "continue skill missing"
 [ -d "$HOME/.claude/skills/playbook" ] && pass "playbook skill" || fail "playbook skill missing"
 [ -d "$HOME/.claude/skills/create-project" ] && pass "create-project skill" || fail "create-project skill missing"
 [ -f "$HOME/.claude/templates/hooks/pre-commit" ] && pass "pre-commit template" || fail "pre-commit template missing"

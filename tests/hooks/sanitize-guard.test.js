@@ -447,9 +447,10 @@ test("Empty tool_response object returns {}", (env) => {
   try { fs.rmSync(projectDir, { recursive: true, force: true }); } catch {}
 });
 
-// 16. PreToolUse Bash tool with PII in command → blocks with deny
-// (Bash scanning added to prevent SSNs/emails being echoed or curl'd out)
-test("PreToolUse Bash tool with PII in command blocks", (env) => {
+// 16. PreToolUse Bash tool with PII in command → passes through (not scanned)
+// Bash removed from PreToolUse gate: ephemeral commands cause false positives
+// on grep patterns, test data, regex strings. Only Edit/Write are gated.
+test("PreToolUse Bash tool with PII in command passes through", (env) => {
   const projectDir = createProjectDir();
   createSanitizeConfig(projectDir, { enabled: true });
 
@@ -462,13 +463,7 @@ test("PreToolUse Bash tool with PII in command blocks", (env) => {
 
   const result = runHook(SANITIZE_GUARD, hookInput);
   assert.ok(result.json, `Expected JSON output, got: ${result.stdout}`);
-  const out = result.json.hookSpecificOutput || {};
-  assert.strictEqual(out.permissionDecision, "deny", "Should block Bash command containing PII");
-  assert.ok(out.permissionDecisionReason.includes("BLOCKED"), "Reason should include BLOCKED");
-  assert.ok(out.permissionDecisionReason.includes("Bash command"), "Reason should reference Bash command");
-  assert.ok(out.permissionDecisionReason.includes("US_SSN"), "Reason should include detected entity type");
-  assert.ok(out.permissionDecisionReason.includes("Rewrite"), "Reason should instruct user to rewrite the command");
-  assert.ok(!out.permissionDecisionReason.includes("echo"), "Reason must not contain a fake echo replacement command");
+  assert.deepStrictEqual(result.json, {}, "Bash commands should pass through without PII scanning");
 
   try { fs.rmSync(projectDir, { recursive: true, force: true }); } catch {}
 });
