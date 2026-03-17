@@ -37,7 +37,7 @@ List every playbook feature you want to validate. Assign each a short code for t
 |------|---------|---------------|
 | L1 | Session lifecycle (checkpoint → exit → respawn) | Autonomous exit and respawn works |
 | L2 | Context limit handling (auto-checkpoint at threshold) | Thresholds are calibrated correctly |
-| L3 | Multi-session continuity (memory handoff) | `/continue` picks up cleanly across sessions |
+| L3 | Multi-session continuity (memory handoff) | SessionStart picks up cleanly across sessions |
 | H1 | Hook chain (multiple hooks firing together) | Hooks don't conflict |
 | H2 | Pre-compaction safety net | Emergency checkpoint fires before context is destroyed |
 | Q1 | Quality gate loop (edit → test fail → fix → pass) | Agent iterates on failures instead of skipping them |
@@ -307,9 +307,9 @@ This is a real dogfood campaign run against two production TypeScript projects (
 Each project gets its own agent session running in a loop. A session loop is a wrapper script that:
 1. Launches a Claude Code session in the project directory
 2. Waits for the session to end (via `/checkpoint` writing a sentinel exit file)
-3. Respawns a new session, which picks up via `/continue`
+3. Respawns a new session, which picks up via SessionStart memory injection
 
-The agent reads its task queue on `/continue`, finds the first unchecked task, works through it, appends results, and checkpoints. The loop respawns for the next task. No human intervention is needed during normal execution — review results periodically and investigate any failed features.
+The agent reads its task queue on startup (injected by SessionStart), finds the first unchecked task, works through it, appends results, and checkpoints. The loop respawns for the next task. No human intervention is needed during normal execution — review results periodically and investigate any failed features.
 
 ## Real-World Results: Focused Campaign (v2)
 
@@ -335,7 +335,7 @@ The most valuable outcomes were **unplanned discoveries** — behaviors not cove
 
 1. **Context safeguards fail on multi-file edits.** Instruction-based thresholds ("compact at 60%") are ignored when a single turn edits 14+ files. Each Edit/Read tool call returns file contents, spiking context 20-30% in one turn. **Fix:** System-level PostToolUse hooks that track cumulative tool result size, not instruction-based reminders.
 
-2. **Post-compaction amnesia.** After auto-compaction, agents lose awareness of task queues and go freelance — working on whatever seems interesting rather than the next queued task. Memory files survive but the agent doesn't re-read them without a fresh `/continue`. **Fix:** Session loop (`claude-loop`) that respawns after compaction with `/continue` as the first prompt.
+2. **Post-compaction amnesia.** After auto-compaction, agents lose awareness of task queues and go freelance — working on whatever seems interesting rather than the next queued task. Memory files survive but the agent doesn't re-read them without a fresh session. **Fix:** Session loop (`claude-loop`) that respawns after compaction, relying on SessionStart to reinject memory.
 
 3. **Agents don't self-advance through task queues.** "Work through tasks in order" is insufficient. Agents complete one task and wait for user input. **Fix:** `claude-loop --task-queue` flag that auto-advances, or explicit "after completing this task, read the queue and start the next one" instructions.
 

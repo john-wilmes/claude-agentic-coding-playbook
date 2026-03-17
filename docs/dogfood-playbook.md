@@ -84,19 +84,19 @@ Use `git stash` explicitly before rebase, then `git stash pop` after resolving c
 | 5.1 | Ask Claude | "What knowledge entries were injected into this session?" | Lists the git gotcha entry from step 3.2 |
 | 5.2 | Verify relevance | Create a non-git project (no .git/), start new session | No knowledge entries injected |
 
-## 6. `/continue` Skill (Dev Context)
+## 6. Session Resumption (Dev Context)
 
 | # | Action | Command | Pass Criterion |
 |---|--------|---------|----------------|
-| 6.1 | Run /continue in project | Create a test project dir, `cd` to it, run `/continue` | Reports "no prior session found" with dev suggestions |
-| 6.2 | After some work, exit and re-enter | Exit, restart Claude Code, run `/continue` | Shows context from previous session |
+| 6.1 | Start new session in project | Create a test project dir, `cd` to it, start a session | SessionStart injects memory; reports "no prior session found" if none |
+| 6.2 | After some work, exit and re-enter | Exit, restart Claude Code | SessionStart injects prior session context |
 
-## 7. `/continue` Skill (Research Context)
+## 7. Session Resumption (Research Context)
 
 | # | Action | Command | Pass Criterion |
 |---|--------|---------|----------------|
-| 7.1 | Run /continue in investigations dir | `cd $TEST_HOME/Documents/.claude/investigations && /continue` | Lists open investigations or suggests `/investigate new` |
-| 7.2 | Resume specific investigation | `/continue <id>` | Loads investigation brief, evidence, and status |
+| 7.1 | Start session in investigations dir | `cd $TEST_HOME/Documents/.claude/investigations` and start a session | SessionStart injects context; use `/investigate` to list open investigations |
+| 7.2 | Resume specific investigation | `/investigate <id> status` | Loads investigation brief, evidence, and status |
 
 ## 8. `/playbook` Skill
 
@@ -199,8 +199,8 @@ Tests detection of prompt injection and destructive commands in Bash tool calls.
 | 3. Knowledge setup | [ ] |
 | 4. First session | [ ] |
 | 5. Knowledge injection | [ ] |
-| 6. /continue (dev) | [ ] |
-| 7. /continue (research) | [ ] |
+| 6. Session resumption (dev) | [ ] |
+| 7. Session resumption (research) | [ ] |
 | 8. /playbook | [ ] |
 | 9. /learn | [ ] |
 | 10. /checkpoint | [ ] |

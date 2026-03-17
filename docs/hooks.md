@@ -74,7 +74,7 @@ Auto-commits memory changes to the `~/.claude` git repo when a session closes. I
 
 #### `pre-compact.js` — PreCompact
 
-Saves an emergency snapshot to MEMORY.md before `/compact` runs. Captures the current git branch, modified files, and working state so post-compaction `/continue` has concrete context to resume from. Uses per-session state to prevent duplicate snapshots.
+Saves an emergency snapshot to MEMORY.md before `/compact` runs. Captures the current git branch, modified files, and working state so the next session has concrete context to resume from. Uses per-session state to prevent duplicate snapshots.
 
 - **Configuration:** Works out of the box.
 - **Example trigger:** Running `/compact` when context is large.
@@ -149,7 +149,7 @@ Detects repetition loops by hashing tool name + input. Maintains a sliding windo
 
 - **Configuration:** Works out of the box.
 - **Thresholds:** Warn at 3 consecutive identical actions, block at 5.
-- **Window size:** 5 actions.
+- **Window size:** 20 actions.
 - **Example output:** `{"decision": "warn", "message": "Same action repeated 3 times. Try a different approach."}`
 - **State files:** `/tmp/claude-stuck-detector/`
 

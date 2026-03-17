@@ -120,7 +120,7 @@ process.stdin.on("end", () => {
       hookSpecificOutput: {
         hookEventName: "PreCompact",
         additionalContext:
-          "Pre-compact snapshot saved. Run /continue after compaction.",
+          "Pre-compact snapshot saved. SessionStart will restore memory context on the next session.",
       },
     }));
     process.exit(0);

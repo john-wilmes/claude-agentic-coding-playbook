@@ -144,7 +144,7 @@ process.stdin.on("end", () => {
     // ── PreToolUse path ───────────────────────────────────────────────────────
 
     const toolName = hookInput.tool_name || "";
-    if (toolName !== "Edit" && toolName !== "Write" && toolName !== "Bash") {
+    if (toolName !== "Edit" && toolName !== "Write") {
       process.stdout.write(JSON.stringify({}));
       process.exit(0);
     }
@@ -152,9 +152,7 @@ process.stdin.on("end", () => {
     // Extract write content
     const content = toolName === "Edit"
       ? (hookInput.tool_input && hookInput.tool_input.new_string)
-      : toolName === "Write"
-        ? (hookInput.tool_input && hookInput.tool_input.content)
-        : (hookInput.tool_input && hookInput.tool_input.command);
+      : (hookInput.tool_input && hookInput.tool_input.content);
 
     if (!content) {
       process.stdout.write(JSON.stringify({}));
@@ -192,26 +190,15 @@ process.stdin.on("end", () => {
       details: `PreToolUse: ${detections.length} detections (${summary}) — blocked`,
     });
 
-    if (toolName === "Bash") {
-      process.stdout.write(JSON.stringify({
-        hookSpecificOutput: {
-          hookEventName: "PreToolUse",
-          permissionDecision: "deny",
-          permissionDecisionReason:
-            `BLOCKED: PII/PHI detected in Bash command (${detections.length} items: ${summary}). Rewrite the command without sensitive data.`,
-        },
-      }));
-    } else {
-      const redacted = truncate(piiDetector.redact(content, detections));
-      process.stdout.write(JSON.stringify({
-        hookSpecificOutput: {
-          hookEventName: "PreToolUse",
-          permissionDecision: "deny",
-          permissionDecisionReason:
-            `BLOCKED: PII/PHI detected in content (${detections.length} items: ${summary}). Use this redacted version instead:\n${redacted}`,
-        },
-      }));
-    }
+    const redacted = truncate(piiDetector.redact(content, detections));
+    process.stdout.write(JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason:
+          `BLOCKED: PII/PHI detected in content (${detections.length} items: ${summary}). Use this redacted version instead:\n${redacted}`,
+      },
+    }));
     process.exit(0);
 
   } catch {
