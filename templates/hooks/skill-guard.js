@@ -1,9 +1,15 @@
 #!/usr/bin/env node
 /**
- * skill-guard.js — PreToolUse hook for the Skill tool.
+ * skill-guard.js — PreToolUse hook for all tool invocations.
  *
- * 1. Blocks invocation of unregistered skills (not found in ~/.claude/skills/).
- * 2. Warns on repeat invocations of the same skill within a session.
+ * For Skill tool invocations:
+ *   1. Blocks invocation of unregistered skills (not found in ~/.claude/skills/).
+ *   2. Warns on repeat invocations of the same skill within a session.
+ *   3. Parses allowed-tools from SKILL.md frontmatter and saves active skill state.
+ *
+ * For all other tool invocations:
+ *   4. If an active skill has an allowed-tools list, warns (advisory, not block)
+ *      when the tool is not in the list.
  *
  * Environment variables:
  *   SKILL_GUARD_ALLOWLIST — comma-separated extra skill names to allow
@@ -101,6 +107,59 @@ function getStateFile(sessionId) {
   return path.join(os.tmpdir(), `skill-guard-${sessionId}.json`);
 }
 
+function getActiveSkillFile(sessionId) {
+  return path.join(os.tmpdir(), `skill-active-${sessionId}.json`);
+}
+
+/**
+ * Parse the allowed-tools list from a skill's SKILL.md frontmatter.
+ * Returns an array of tool name patterns (may include wildcards).
+ */
+function parseAllowedTools(home, skillName) {
+  try {
+    const skillDir = path.join(home, ".claude", "skills", skillName);
+    const skillMd = fs.readFileSync(path.join(skillDir, "SKILL.md"), "utf8");
+    const parts = skillMd.split("---");
+    if (parts.length < 3) return [];
+    const frontmatter = parts[1];
+    for (const line of frontmatter.split("\n")) {
+      const match = line.match(/^allowed-tools:\s*(.+)/);
+      if (match) {
+        return match[1].split(",").map((s) => s.trim()).filter(Boolean);
+      }
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+function loadActiveSkill(sessionId) {
+  try {
+    return JSON.parse(fs.readFileSync(getActiveSkillFile(sessionId), "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function saveActiveSkill(sessionId, skillName, allowedTools) {
+  fs.writeFileSync(
+    getActiveSkillFile(sessionId),
+    JSON.stringify({ skill: skillName, allowedTools })
+  );
+}
+
+/**
+ * Check if a tool name matches an allowed-tools pattern.
+ * Supports exact match and trailing wildcard (e.g., "mcp__*").
+ */
+function matchesToolPattern(toolName, pattern) {
+  if (pattern.endsWith("*")) {
+    return toolName.startsWith(pattern.slice(0, -1));
+  }
+  return toolName === pattern;
+}
+
 function loadState(sessionId) {
   try {
     return JSON.parse(fs.readFileSync(getStateFile(sessionId), "utf8"));
@@ -127,13 +186,29 @@ process.stdin.on("end", () => {
     const toolInput = event.tool_input || {};
     const sessionId = event.session_id || "unknown";
 
-    // Only process Skill tool invocations
-    if (toolName !== "Skill") return pass();
+    const home = process.env.HOME || os.homedir();
+
+    // Non-Skill tools: check against active skill's allowed-tools list
+    if (toolName !== "Skill") {
+      const active = loadActiveSkill(sessionId);
+      if (active && active.allowedTools && active.allowedTools.length > 0) {
+        const allowed = active.allowedTools.some((p) =>
+          matchesToolPattern(toolName, p)
+        );
+        if (!allowed) {
+          return warn(
+            `Skill guard: tool "${toolName}" is not in the allowed-tools ` +
+              `list for active skill "${active.skill}". ` +
+              `Allowed: ${active.allowedTools.join(", ")}`
+          );
+        }
+      }
+      return pass();
+    }
 
     const skillName = toolInput.skill || "";
     if (!skillName) return pass();
 
-    const home = process.env.HOME || os.homedir();
     const normalizedName = normalizeSkillName(skillName);
     const allowedSkills = getAllowedSkills(home);
 
@@ -152,6 +227,10 @@ process.stdin.on("end", () => {
     const count = (state.invocations[normalizedName] || 0) + 1;
     state.invocations[normalizedName] = count;
     saveState(sessionId, state);
+
+    // Check 3: Parse allowed-tools and save active skill state
+    const allowedTools = parseAllowedTools(home, normalizedName);
+    saveActiveSkill(sessionId, normalizedName, allowedTools);
 
     if (count > 1) {
       return warn(

@@ -76,6 +76,40 @@ function cleanStateFile(sessionId) {
   try {
     fs.unlinkSync(path.join(os.tmpdir(), `skill-guard-${sessionId}.json`));
   } catch {}
+  try {
+    fs.unlinkSync(path.join(os.tmpdir(), `skill-active-${sessionId}.json`));
+  } catch {}
+}
+
+/**
+ * Helper: create a SKILL.md with allowed-tools frontmatter in a skill directory.
+ */
+function createSkillMd(home, skillName, allowedTools) {
+  const skillDir = path.join(home, ".claude", "skills", skillName);
+  fs.mkdirSync(skillDir, { recursive: true });
+  const content = `---
+allowed-tools: ${allowedTools.join(", ")}
+---
+# ${skillName}
+
+Skill description.
+`;
+  fs.writeFileSync(path.join(skillDir, "SKILL.md"), content);
+}
+
+/**
+ * Helper: run skill-guard with a non-Skill tool event.
+ */
+function runToolGuard(toolName, sessionId, home) {
+  return runHook(
+    HOOK,
+    {
+      tool_name: toolName,
+      tool_input: {},
+      session_id: sessionId,
+    },
+    { HOME: home }
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -335,6 +369,119 @@ test("missing skills dir with SKILL_GUARD_ALLOWLIST still allows listed skills",
       SKILL_GUARD_ALLOWLIST: "allowed-one",
     });
     assert.deepStrictEqual(result.json, {});
+  } finally {
+    cleanup();
+    cleanStateFile(sid);
+  }
+});
+
+// --- Allowed-tools enforcement tests ---
+
+test("Skill invocation saves active skill with allowed-tools", () => {
+  const { home, cleanup } = setupSkills(["deploy"]);
+  const sid = "t-at-1";
+  createSkillMd(home, "deploy", ["Bash", "Read"]);
+  try {
+    const r = runSkillGuard("deploy", sid, home);
+    assert.deepStrictEqual(r.json, {});
+    // Verify active skill file was written
+    const active = JSON.parse(
+      fs.readFileSync(
+        path.join(os.tmpdir(), `skill-active-${sid}.json`),
+        "utf8"
+      )
+    );
+    assert.strictEqual(active.skill, "deploy");
+    assert.deepStrictEqual(active.allowedTools, ["Bash", "Read"]);
+  } finally {
+    cleanup();
+    cleanStateFile(sid);
+  }
+});
+
+test("non-Skill tool allowed by active skill's allowed-tools passes", () => {
+  const { home, cleanup } = setupSkills(["deploy"]);
+  const sid = "t-at-2";
+  createSkillMd(home, "deploy", ["Bash", "Read"]);
+  try {
+    // Activate the skill first
+    runSkillGuard("deploy", sid, home);
+    // Now call an allowed tool
+    const r = runToolGuard("Bash", sid, home);
+    assert.strictEqual(r.status, 0);
+    assert.deepStrictEqual(r.json, {});
+  } finally {
+    cleanup();
+    cleanStateFile(sid);
+  }
+});
+
+test("non-Skill tool NOT in allowed-tools gets advisory warning", () => {
+  const { home, cleanup } = setupSkills(["deploy"]);
+  const sid = "t-at-3";
+  createSkillMd(home, "deploy", ["Bash"]);
+  try {
+    runSkillGuard("deploy", sid, home);
+    const r = runToolGuard("Grep", sid, home);
+    assert.strictEqual(r.status, 0);
+    const ctx =
+      r.json &&
+      r.json.hookSpecificOutput &&
+      r.json.hookSpecificOutput.additionalContext;
+    assert.ok(ctx, "Should produce an advisory warning");
+    assert.ok(ctx.includes("Grep"), "Warning should mention the blocked tool");
+    assert.ok(ctx.includes("deploy"), "Warning should mention the active skill");
+  } finally {
+    cleanup();
+    cleanStateFile(sid);
+  }
+});
+
+test("wildcard pattern in allowed-tools matches tool prefix", () => {
+  const { home, cleanup } = setupSkills(["research"]);
+  const sid = "t-at-4";
+  createSkillMd(home, "research", ["mcp__*", "Read"]);
+  try {
+    runSkillGuard("research", sid, home);
+    // mcp__ tool should match the wildcard
+    const r1 = runToolGuard("mcp__serena__find_symbol", sid, home);
+    assert.deepStrictEqual(r1.json, {}, "Wildcard should allow mcp__ tools");
+    // Non-matching tool should warn
+    const r2 = runToolGuard("Bash", sid, home);
+    const ctx =
+      r2.json &&
+      r2.json.hookSpecificOutput &&
+      r2.json.hookSpecificOutput.additionalContext;
+    assert.ok(ctx, "Bash should not match mcp__* or Read");
+  } finally {
+    cleanup();
+    cleanStateFile(sid);
+  }
+});
+
+test("no active skill means non-Skill tools pass without checks", () => {
+  const { home, cleanup } = setupSkills(["continue"]);
+  const sid = "t-at-5";
+  try {
+    // No skill invoked — call a tool directly
+    const r = runToolGuard("Bash", sid, home);
+    assert.strictEqual(r.status, 0);
+    assert.deepStrictEqual(r.json, {});
+  } finally {
+    cleanup();
+    cleanStateFile(sid);
+  }
+});
+
+test("skill with empty allowed-tools does not restrict tools", () => {
+  const { home, cleanup } = setupSkills(["simple"]);
+  const sid = "t-at-6";
+  createSkillMd(home, "simple", []);
+  try {
+    runSkillGuard("simple", sid, home);
+    const r = runToolGuard("Grep", sid, home);
+    assert.strictEqual(r.status, 0);
+    assert.deepStrictEqual(r.json, {}, "Empty allowed-tools should not restrict");
   } finally {
     cleanup();
     cleanStateFile(sid);
