@@ -176,7 +176,7 @@ get_task_attempts() {
   local line
   while IFS= read -r line; do
     # Must contain [FAIL] marker AND exact task text
-    if [[ "$line" == *"[FAIL]"*"$task"*"(attempts:"* ]]; then
+    if [[ "$line" == *"[FAIL] ${task} (attempts:"* ]]; then
       # Extract attempt count
       if [[ "$line" =~ \(attempts:[[:space:]]*([0-9]+)\) ]]; then
         printf '%s\n' "${BASH_REMATCH[1]}"
@@ -200,14 +200,14 @@ mark_task_done() {
   while IFS= read -r line; do
     if [[ "${marked}" == "false" ]]; then
       # Match unchecked form: - [ ] <task>
-      if [[ "$line" == *"[ ]"*"$task"* ]]; then
+      if [[ "$line" == *"[ ] ${task}" ]]; then
         local prefix="${line%%\[ \]*}"
         printf '%s[x] %s\n' "$prefix" "$task" >> "$tmp"
         marked=true
         continue
       fi
-      # Match FAIL form: - [FAIL] <task>
-      if [[ "$line" == *"[FAIL]"*"$task"* ]]; then
+      # Match FAIL form: - [FAIL] <task> (attempts: N)
+      if [[ "$line" == *"[FAIL] ${task} (attempts:"* ]]; then
         local prefix="${line%%\[FAIL\]*}"
         printf '%s[x] %s\n' "$prefix" "$task" >> "$tmp"
         marked=true
@@ -235,14 +235,14 @@ mark_task_fail() {
   while IFS= read -r line; do
     if [[ "${marked}" == "false" ]]; then
       # Match unchecked form
-      if [[ "$line" == *"[ ]"*"$task"* ]]; then
+      if [[ "$line" == *"[ ] ${task}" ]]; then
         local prefix="${line%%\[ \]*}"
         printf '%s[FAIL] %s (attempts: %s)\n' "$prefix" "$task" "$attempts" >> "$tmp"
         marked=true
         continue
       fi
       # Match existing FAIL form
-      if [[ "$line" == *"[FAIL]"*"$task"* ]]; then
+      if [[ "$line" == *"[FAIL] ${task} (attempts:"* ]]; then
         local prefix="${line%%\[FAIL\]*}"
         printf '%s[FAIL] %s (attempts: %s)\n' "$prefix" "$task" "$attempts" >> "$tmp"
         marked=true
@@ -429,7 +429,7 @@ dry_run_show() {
       local next_task
       if next_task="$(get_next_task "${TASK_QUEUE_FILE}" 2>/dev/null)"; then
         echo "  Next task     : ${next_task}"
-        echo "  claude command: claude -p \"/continue -- Next task: ${next_task}\""
+        echo "  claude command: claude -p \"Next task: ${next_task}\""
       else
         echo "  Next task     : (none — queue is empty or all tasks done)"
         echo "  claude command: (would not run)"
@@ -439,7 +439,7 @@ dry_run_show() {
     fi
   else
     echo "  Task queue    : (none)"
-    echo "  claude command: claude --append-system-prompt \"...\" \"/continue\""
+    echo "  claude command: claude --append-system-prompt \"...\""
   fi
 }
 
