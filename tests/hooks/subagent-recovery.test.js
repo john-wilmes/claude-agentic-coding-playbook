@@ -49,13 +49,19 @@ function runRecovery(input, env = {}) {
   return runHook(HOOK_PATH, input, { CLAUDE_LOOP_PID: "", ...env });
 }
 
-function cleanupState(sessionId) {
-  try { fs.rmSync(path.join(STATE_DIR, `${sessionId}.json`), { force: true }); } catch {}
+// Mirror the hook's getStateKey logic: hash the raw key with SHA-256 to match
+// the path-traversal prevention added in commit 5f0ce0e.
+function stateKey(rawKey) {
+  return crypto.createHash("sha256").update(rawKey).digest("hex").slice(0, 16);
 }
 
-function readState(sessionId) {
+function cleanupState(sessionId) {
+  try { fs.rmSync(path.join(STATE_DIR, `${stateKey(sessionId)}.json`), { force: true }); } catch {}
+}
+
+function readState(rawKey) {
   try {
-    return JSON.parse(fs.readFileSync(path.join(STATE_DIR, `${sessionId}.json`), "utf8"));
+    return JSON.parse(fs.readFileSync(path.join(STATE_DIR, `${stateKey(rawKey)}.json`), "utf8"));
   } catch { return null; }
 }
 

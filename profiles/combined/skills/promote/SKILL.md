@@ -48,16 +48,21 @@ If no lessons section exists, tell the user and offer to accept a freeform lesso
 
 ### 3. Check global scope for duplicates
 
-Read `~/.claude/CLAUDE.md`. Scan it for any existing entry that covers the same topic as the selected lesson. Also search the knowledge database if available:
+Search both stores for an existing entry covering the same topic. Track which store the duplicate came from:
 
-```bash
-node ~/.claude/hooks/knowledge-db.js search "<topic keywords>" 2>/dev/null
-```
+1. Search the knowledge database (if available):
+   ```bash
+   node ~/.claude/hooks/knowledge-db.js search "<topic keywords>" 2>/dev/null
+   ```
+   If a match is found here, set `duplicate_source = "knowledge.db"`.
 
-If a near-duplicate is found, tell the user:
+2. Read `~/.claude/CLAUDE.md` and scan for any existing entry covering the same topic.
+   If a match is found here, set `duplicate_source = "CLAUDE.md"`.
+
+If a near-duplicate is found in either store, tell the user (noting where it was found):
 
 ```text
-A similar lesson already exists in global scope:
+A similar lesson already exists in global scope (<duplicate_source>):
 
   "<existing text>"
 
@@ -71,16 +76,16 @@ Wait for the user's choice before continuing.
 
 ### 4. Promote the lesson
 
-**If `~/.claude/hooks/knowledge-db.js` exists** (preferred path — if it does not exist, use the fallback below):
+Route based on the user's choice and the duplicate's source:
 
-Use the `/learn` skill to create a structured knowledge entry for the lesson. Pass the lesson text as the argument.
+**If the user chose "update" in step 3:**
+- If `duplicate_source = "knowledge.db"`: Use `/learn` with the new lesson text. The `/learn` skill handles updating existing entries in the database.
+- If `duplicate_source = "CLAUDE.md"`: Find the existing entry in `~/.claude/CLAUDE.md` and replace it with the new lesson text.
 
-**Otherwise**, append the lesson to `~/.claude/CLAUDE.md`:
+**If the user chose "add" (or no duplicate was found):**
 
-- Find or create a `## Cross-Project Lessons` section at the end of the file (before any trailing newline).
-- Append the lesson as a bullet point: `- <lesson text>`
-
-If the user chose "update" in step 3, replace the existing entry instead of appending.
+- **If `~/.claude/hooks/knowledge-db.js` exists** (preferred path): Use the `/learn` skill to create a structured knowledge entry. Pass the lesson text as the argument.
+- **Otherwise**, append the lesson to `~/.claude/CLAUDE.md`: Find or create a `## Cross-Project Lessons` section at the end of the file (before any trailing newline). Append the lesson as a bullet point: `- <lesson text>`
 
 ### 5. Confirm
 

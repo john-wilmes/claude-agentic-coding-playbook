@@ -26,7 +26,28 @@ function extractTestCommand(claudeMdContent) {
 }
 
 /**
+ * Validate that a directory path is safe to use as cwd for test execution.
+ * Prevents path traversal and ensures the path is a real directory.
+ * @param {string} dir
+ * @returns {string|null} Resolved absolute path, or null if invalid.
+ */
+function validateCwd(dir) {
+  if (!dir || typeof dir !== "string") return null;
+  const resolved = path.resolve(dir);
+  try {
+    const stat = fs.statSync(resolved);
+    if (!stat.isDirectory()) return null;
+  } catch {
+    return null;
+  }
+  return resolved;
+}
+
+/**
  * Run the test command and return { passed, output }.
+ * Note: The test command is read from the project's CLAUDE.md, which is part
+ * of the repo the user chose to work on. This is a trust boundary — CLAUDE.md
+ * is authored by the repo owner and reviewed by the user.
  * @param {string} testCommand
  * @param {string} cwd
  * @returns {{ passed: boolean, output: string }}
@@ -65,7 +86,11 @@ process.stdin.on("end", () => {
       process.exit(0);
     }
 
-    const cwd = hookInput.cwd || process.cwd();
+    const cwd = validateCwd(hookInput.cwd || process.cwd());
+    if (!cwd) {
+      process.stdout.write(JSON.stringify({}));
+      process.exit(0);
+    }
 
     // Read CLAUDE.md and extract test command
     const claudeMdPath = path.join(cwd, "CLAUDE.md");
