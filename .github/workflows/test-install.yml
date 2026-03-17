@@ -149,7 +149,6 @@ jobs:
 
           # Dev skills
           check "$HOME/.claude/skills/checkpoint/SKILL.md"
-          check "$HOME/.claude/skills/continue/SKILL.md"
           check "$HOME/.claude/skills/playbook/SKILL.md"
           check "$HOME/.claude/skills/create-project/SKILL.md"
           check "$HOME/.claude/skills/learn/SKILL.md"

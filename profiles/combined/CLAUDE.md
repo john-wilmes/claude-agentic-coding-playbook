@@ -56,7 +56,7 @@ Investigations live at `~/.claude/investigations/<id>/`. Use `/investigate` to m
 - Use `/rewind` or double-Escape to undo actions and roll back context.
 - Proactively suggest `/compact` when you notice context growing large (many tool results, long exploration).
 - Proactively suggest `/checkpoint` at natural breakpoints: after completing a feature, fixing a bug, or finishing a refactor.
-- Use `/continue` for research investigations or when running under claude-loop with task arguments.
+- SessionStart automatically injects memory and context at session start. For research investigations, use `/investigate` to manage the lifecycle.
 
 ## Reasoning Standards
 

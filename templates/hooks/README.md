@@ -13,7 +13,7 @@ Claude Code hook scripts that run automatically during sessions. These are insta
 | `post-tool-verify.js` | `PostToolUse` (Edit/Write) | Auto-runs project tests after file edits with debouncing to avoid redundant runs. |
 | `context-guard.js` | `PreToolUse` (all tools) + `PostToolUse` (all tools) | Dual-mode context guard. PostToolUse reads transcript token usage, warns at 35%/50%, advisory at 60%, failsafe sentinel at 75%. PreToolUse is a pure pass-through (returns {}). |
 | `stuck-detector.js` | `PreToolUse` (all tools) | Detects when the agent repeats the same action 3+ times. Warns at 3, blocks at 5. Whitelists test/lint commands. |
-| `pre-compact.js` | `PreCompact` | Saves an emergency snapshot (branch, modified files) to MEMORY.md before compaction so `/continue` can resume. |
+| `pre-compact.js` | `PreCompact` | Saves an emergency snapshot (branch, modified files) to MEMORY.md before compaction so the next session can resume from known state. |
 | `pre-commit` | git pre-commit | Blocks commits containing secrets (API keys, tokens) or files over 5 MB. |
 | `bloat-guard.js` | `PreToolUse` (Write) | Warns when the agent creates new files. Blocks throwaway filename patterns. Escalates after 5+ new files per session. |
 | `filesize-guard.js` | `PreToolUse` (Read) | Blocks oversized and binary file reads before they waste context tokens. |

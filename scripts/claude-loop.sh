@@ -172,14 +172,18 @@ get_next_task() {
 get_task_attempts() {
   local file="$1"
   local task="$2"
+  [[ -n "$task" ]] || { printf '0\n'; return 0; }
   local line
   while IFS= read -r line; do
-    # Match: - [FAIL] <task text> (attempts: N)
-    if [[ "${line}" =~ -[[:space:]]\[FAIL\][[:space:]]+"${task//[/\\[}".*\(attempts:[[:space:]]*([0-9]+)\) ]]; then
-      printf '%s\n' "${BASH_REMATCH[1]}"
-      return 0
+    # Must contain [FAIL] marker AND exact task text
+    if [[ "$line" == *"[FAIL]"*"$task"*"(attempts:"* ]]; then
+      # Extract attempt count
+      if [[ "$line" =~ \(attempts:[[:space:]]*([0-9]+)\) ]]; then
+        printf '%s\n' "${BASH_REMATCH[1]}"
+        return 0
+      fi
     fi
-  done < "${file}"
+  done < "$file"
   printf '0\n'
 }
 
@@ -195,23 +199,25 @@ mark_task_done() {
   local line
   while IFS= read -r line; do
     if [[ "${marked}" == "false" ]]; then
-      # Match unchecked form
-      if [[ "${line}" =~ ^([[:space:]]*-[[:space:]])\[[[:space:]]\]([[:space:]]+"${task//[/\\[}".*) ]]; then
-        printf '%s[x]%s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" >> "${tmp}"
+      # Match unchecked form: - [ ] <task>
+      if [[ "$line" == *"[ ]"*"$task"* ]]; then
+        local prefix="${line%%\[ \]*}"
+        printf '%s[x] %s\n' "$prefix" "$task" >> "$tmp"
         marked=true
         continue
       fi
-      # Match FAIL form (re-trying a previously failed task that now succeeded)
-      if [[ "${line}" =~ ^([[:space:]]*-[[:space:]])\[FAIL\][[:space:]]+"${task//[/\\[}" ]]; then
-        printf '%s[x] %s\n' "${BASH_REMATCH[1]}" "${task}" >> "${tmp}"
+      # Match FAIL form: - [FAIL] <task>
+      if [[ "$line" == *"[FAIL]"*"$task"* ]]; then
+        local prefix="${line%%\[FAIL\]*}"
+        printf '%s[x] %s\n' "$prefix" "$task" >> "$tmp"
         marked=true
         continue
       fi
     fi
-    printf '%s\n' "${line}" >> "${tmp}"
-  done < "${file}"
+    printf '%s\n' "$line" >> "$tmp"
+  done < "$file"
 
-  mv "${tmp}" "${file}"
+  mv "$tmp" "$file"
 }
 
 # mark_task_fail FILE TASK_TEXT ATTEMPTS
@@ -228,21 +234,25 @@ mark_task_fail() {
   local line
   while IFS= read -r line; do
     if [[ "${marked}" == "false" ]]; then
-      if [[ "${line}" =~ ^([[:space:]]*-[[:space:]])\[[[:space:]]\][[:space:]]+"${task//[/\\[}" ]]; then
-        printf '%s[FAIL] %s (attempts: %s)\n' "${BASH_REMATCH[1]}" "${task}" "${attempts}" >> "${tmp}"
+      # Match unchecked form
+      if [[ "$line" == *"[ ]"*"$task"* ]]; then
+        local prefix="${line%%\[ \]*}"
+        printf '%s[FAIL] %s (attempts: %s)\n' "$prefix" "$task" "$attempts" >> "$tmp"
         marked=true
         continue
       fi
-      if [[ "${line}" =~ ^([[:space:]]*-[[:space:]])\[FAIL\][[:space:]]+"${task//[/\\[}" ]]; then
-        printf '%s[FAIL] %s (attempts: %s)\n' "${BASH_REMATCH[1]}" "${task}" "${attempts}" >> "${tmp}"
+      # Match existing FAIL form
+      if [[ "$line" == *"[FAIL]"*"$task"* ]]; then
+        local prefix="${line%%\[FAIL\]*}"
+        printf '%s[FAIL] %s (attempts: %s)\n' "$prefix" "$task" "$attempts" >> "$tmp"
         marked=true
         continue
       fi
     fi
-    printf '%s\n' "${line}" >> "${tmp}"
-  done < "${file}"
+    printf '%s\n' "$line" >> "$tmp"
+  done < "$file"
 
-  mv "${tmp}" "${file}"
+  mv "$tmp" "$file"
 }
 
 # task_is_checked FILE TASK_TEXT
@@ -250,7 +260,7 @@ mark_task_fail() {
 task_is_checked() {
   local file="$1"
   local task="$2"
-  grep -qE "^\s*-\s*\[x\]\s+${task//[/\\[}" "${file}" 2>/dev/null
+  grep -qF "[x] ${task}" "${file}" 2>/dev/null
 }
 
 # ─── Sentinel watcher ─────────────────────────────────────────────────────────
@@ -496,7 +506,7 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
   CURRENT_TASK=""
   # Default: interactive mode (no -p). Session stays open for user interaction.
   # User exits with Ctrl+C; sentinel from /checkpoint triggers loop restart.
-  CLAUDE_CMD=("claude" "--append-system-prompt" "claude-loop started this session. Your first action must be to invoke the /continue skill using the Skill tool." "/continue")
+  CLAUDE_CMD=("claude" "--append-system-prompt" "claude-loop started this session. SessionStart injected your memory and context. Start working on the first Next Step from Current Work immediately. Do not ask for confirmation.")
 
   if [[ -n "${TASK_QUEUE_FILE}" ]]; then
     if [[ -n "${RETRY_TASK}" ]]; then
@@ -508,7 +518,7 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
       break
     fi
     # Task queue mode: fully autonomous, -p exits after response
-    CLAUDE_CMD=("claude" "-p" "/continue -- Next task: ${CURRENT_TASK}")
+    CLAUDE_CMD=("claude" "-p" "Next task: ${CURRENT_TASK}")
   fi
 
   # ── Get attempt count for this task ────────────────────────────────────────

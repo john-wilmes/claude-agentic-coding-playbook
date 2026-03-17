@@ -55,7 +55,6 @@ chmod +x install.sh
   CLAUDE.md                            #   Combined dev + research workflows
   skills/
     checkpoint/SKILL.md               #   /checkpoint - save state, commit, end session
-    continue/SKILL.md                 #   /continue - resume work (auto-detects dev vs research)
     create-project/SKILL.md           #   /create-project - scaffold a new project
     investigate/SKILL.md              #   /investigate - full investigation lifecycle
     learn/SKILL.md                    #   /learn - capture knowledge entries
@@ -81,14 +80,12 @@ The installer **will not overwrite** existing skills or configuration without pr
 
 **Development:**
 - **`/checkpoint`** -- Save all work, update memory with Current Work section, commit, push. Designed for clean session handoffs.
-- **`/continue`** -- Read the Current Work section from memory and present what was done, current state, and next steps. Start every session here.
 - **`/create-project`** -- Scaffold a new project with git, .gitignore, CLAUDE.md, AGENTS.md, GitHub repo. Projects are created as siblings to `.claude/`.
 - **`/playbook`** -- Analyze your CLAUDE.md configuration and suggest improvements. Modes: `global`, `project`, `check`.
 - **`/learn`** -- Capture a non-obvious lesson as a structured knowledge entry for future sessions.
 - **`/promote`** -- Promote a project-level lesson to global scope.
 **Research:**
 - **`/investigate`** -- Full investigation lifecycle with multi-agent evidence collection, synthesis, tagging, and PHI sanitization. Subcommands: `new`, `run`, `collect`, `synthesize`, `close`, `status`, `list`, `search`.
-- **`/continue`** -- Lists open investigations and resumes work. Same skill as above — auto-detects context.
 
 ### Hooks
 
