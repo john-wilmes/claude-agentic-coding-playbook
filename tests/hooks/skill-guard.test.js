@@ -98,6 +98,22 @@ Skill description.
 }
 
 /**
+ * Helper: create a SKILL.md with prereqs frontmatter in a skill directory.
+ */
+function createSkillMdWithPrereqs(home, skillName, prereqs) {
+  const skillDir = path.join(home, ".claude", "skills", skillName);
+  fs.mkdirSync(skillDir, { recursive: true });
+  const content = `---
+prereqs: ${prereqs.join(", ")}
+---
+# ${skillName}
+
+Skill description.
+`;
+  fs.writeFileSync(path.join(skillDir, "SKILL.md"), content);
+}
+
+/**
  * Helper: run skill-guard with a non-Skill tool event.
  */
 function runToolGuard(toolName, sessionId, home) {
@@ -369,6 +385,98 @@ test("missing skills dir with SKILL_GUARD_ALLOWLIST still allows listed skills",
       SKILL_GUARD_ALLOWLIST: "allowed-one",
     });
     assert.deepStrictEqual(result.json, {});
+  } finally {
+    cleanup();
+    cleanStateFile(sid);
+  }
+});
+
+// --- Prereqs tests ---
+
+test("skill with passing prereqs is allowed", () => {
+  const { home, cleanup } = setupSkills(["deploy"]);
+  const sid = "t-prereq-1";
+  createSkillMdWithPrereqs(home, "deploy", ["true"]);
+  try {
+    const result = runSkillGuard("deploy", sid, home);
+    assert.strictEqual(result.status, 0);
+    assert.deepStrictEqual(result.json, {});
+  } finally {
+    cleanup();
+    cleanStateFile(sid);
+  }
+});
+
+test("skill with failing prereq is denied", () => {
+  const { home, cleanup } = setupSkills(["deploy"]);
+  const sid = "t-prereq-2";
+  createSkillMdWithPrereqs(home, "deploy", ["false"]);
+  try {
+    const result = runSkillGuard("deploy", sid, home);
+    assert.strictEqual(result.status, 0);
+    const decision =
+      result.json &&
+      result.json.hookSpecificOutput &&
+      result.json.hookSpecificOutput.permissionDecision;
+    assert.strictEqual(decision, "deny", "Should deny when prereq fails");
+    const reason = result.json.hookSpecificOutput.permissionDecisionReason;
+    assert.ok(reason.includes("prereq failed"), "Should mention prereq failure");
+    assert.ok(reason.includes("false"), "Should mention the failed command");
+  } finally {
+    cleanup();
+    cleanStateFile(sid);
+  }
+});
+
+test("skill with multiple prereqs stops at first failure", () => {
+  const { home, cleanup } = setupSkills(["deploy"]);
+  const sid = "t-prereq-3";
+  createSkillMdWithPrereqs(home, "deploy", ["true", "false", "true"]);
+  try {
+    const result = runSkillGuard("deploy", sid, home);
+    const decision =
+      result.json.hookSpecificOutput.permissionDecision;
+    assert.strictEqual(decision, "deny");
+    const reason = result.json.hookSpecificOutput.permissionDecisionReason;
+    assert.ok(reason.includes("false"), "Should mention the failed command");
+  } finally {
+    cleanup();
+    cleanStateFile(sid);
+  }
+});
+
+test("skill with no prereqs frontmatter passes normally", () => {
+  const { home, cleanup } = setupSkills(["simple"]);
+  const sid = "t-prereq-4";
+  // No SKILL.md with prereqs — just the directory
+  try {
+    const result = runSkillGuard("simple", sid, home);
+    assert.strictEqual(result.status, 0);
+    assert.deepStrictEqual(result.json, {});
+  } finally {
+    cleanup();
+    cleanStateFile(sid);
+  }
+});
+
+test("prereqs run before repeat-invocation tracking", () => {
+  const { home, cleanup } = setupSkills(["gated"]);
+  const sid = "t-prereq-5";
+  createSkillMdWithPrereqs(home, "gated", ["false"]);
+  try {
+    // First call — denied by prereq
+    const r1 = runSkillGuard("gated", sid, home);
+    assert.strictEqual(
+      r1.json.hookSpecificOutput.permissionDecision,
+      "deny"
+    );
+    // Second call — should still be denied by prereq, NOT warn about repeat
+    const r2 = runSkillGuard("gated", sid, home);
+    assert.strictEqual(
+      r2.json.hookSpecificOutput.permissionDecision,
+      "deny",
+      "Should still be denied by prereq on second call"
+    );
   } finally {
     cleanup();
     cleanStateFile(sid);
