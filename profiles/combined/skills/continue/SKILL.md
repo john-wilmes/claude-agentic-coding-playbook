@@ -72,6 +72,18 @@ f. Delete the stale marker: `rm -f "$PROJECT_DIR/session-marker.json"`
 
 g. Present to the user: "Previous session didn't checkpoint. Recovered context:" followed by the summary.
 
+### Step 0s — Recover incomplete subagent tasks
+
+Scan `/tmp/claude-subagent-recovery/` for `.json` files modified within the last 24 hours. For each file found:
+
+1. Read the JSON contents (fields: `taskDescription`, `reason`, `timestamp`, `key`)
+2. Delete the file after reading
+3. Present a summary to the user: which subagent tasks were interrupted and why
+
+If running under `claude-loop` (check `CLAUDE_LOOP_ID` env var), automatically retry each recovered task with reduced scope (suggest breaking into smaller pieces). In interactive mode, present the list and let the user decide which tasks to retry.
+
+If the directory does not exist or contains no recent files, skip silently.
+
 **Step 0d — Write new session marker:**
 
 ```bash
