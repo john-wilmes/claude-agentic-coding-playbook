@@ -205,17 +205,17 @@ test("4. Transcript at 60%: critical advisory via hookSpecificOutput", () => {
   }
 });
 
-// Test 5: Cache tokens counted correctly (input + cache_read + cache_creation + output)
+// Test 5: Cache tokens counted correctly (input + cache_read + cache_creation, NOT output)
 test("5. Cache tokens counted correctly (input + cache_read + cache_creation)", () => {
   const sessionId = newSessionId();
-  // 1 + 60000 + 40000 + 500 (output_tokens from makeAssistantMessage) = 100,501 tokens = 50%+
+  // 1 + 60000 + 40000 = 100,001 tokens = 50%+ (output_tokens not counted)
   const transcript = createFakeTranscript([makeAssistantMessage(1, 60000, 40000)]);
   try {
     const result = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(result.status, 0);
     assert.ok(result.json.hookSpecificOutput, "Should warn at 50%");
     assert.ok(
-      result.json.hookSpecificOutput.additionalContext.includes("100501 actual tokens"),
+      result.json.hookSpecificOutput.additionalContext.includes("100001 actual tokens"),
       `Should show actual token count, got: ${result.json.hookSpecificOutput.additionalContext}`
     );
   } finally {
@@ -343,7 +343,7 @@ test("11. Large transcript (>50KB): tail read still finds usage", () => {
     const result = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(result.status, 0);
     assert.ok(result.json.hookSpecificOutput, "Should find usage in tail and warn critically");
-    assert.ok(result.json.hookSpecificOutput.additionalContext.includes("120500 actual tokens"), "Should show actual tokens");
+    assert.ok(result.json.hookSpecificOutput.additionalContext.includes("120000 actual tokens"), "Should show actual tokens");
   } finally {
     cleanupSession(sessionId);
     try { fs.rmSync(transcript); } catch {}
@@ -471,27 +471,6 @@ test("19. PreToolUse with no state file: allow (safe default)", () => {
   }
 });
 
-
-// Test 21: PostToolUse stores lastUsageRatio in state
-test("21. PostToolUse stores lastUsageRatio in state file", () => {
-  const sessionId = newSessionId();
-  const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
-  // 109500 input + 500 output_tokens = 110,000 total = 55% of 200k
-  const transcript = createFakeTranscript([makeAssistantMessage(109500)]);
-  try {
-    const result = runGuard(sessionId, { transcriptPath: transcript });
-    assert.strictEqual(result.status, 0);
-
-    // Read the state file and check lastUsageRatio
-    const state = JSON.parse(fs.readFileSync(stateFile, "utf8"));
-    assert.ok(state.lastUsageRatio !== undefined, "State should have lastUsageRatio");
-    // 110000 / 200000 = 0.55
-    assert.strictEqual(state.lastUsageRatio, 0.55, `lastUsageRatio should be 0.55, got ${state.lastUsageRatio}`);
-  } finally {
-    cleanupSession(sessionId);
-    try { fs.rmSync(transcript); } catch {}
-  }
-});
 
 
 // Test 27: PostToolUse block at 60% writes context-high flag but NOT sentinel

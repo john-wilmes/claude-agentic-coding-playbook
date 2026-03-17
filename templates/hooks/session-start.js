@@ -170,16 +170,26 @@ process.stdin.on("end", () => {
     const sessionId = hookInput.session_id || "";
     const cwd = hookInput.cwd || process.cwd();
 
-    // Clear stale context-guard state so a fresh session doesn't inherit
-    // the previous session's lastUsageRatio (which can trigger immediate blocks)
-    try {
-      const guardDir = path.join(os.tmpdir(), "claude-context-guard");
-      if (fs.existsSync(guardDir)) {
-        for (const f of fs.readdirSync(guardDir)) {
-          fs.unlinkSync(path.join(guardDir, f));
+    // Clear stale hook state directories so a fresh session starts clean
+    const hookStateDirs = [
+      "claude-context-guard",
+      "claude-stuck-detector",
+      "claude-bloat-guard",
+      "claude-post-tool-verify",
+      "claude-subagent-recovery",
+      "claude-tool-failures",
+      "claude-pre-compact",
+    ];
+    for (const dirName of hookStateDirs) {
+      try {
+        const dir = path.join(os.tmpdir(), dirName);
+        if (fs.existsSync(dir)) {
+          for (const f of fs.readdirSync(dir)) {
+            fs.unlinkSync(path.join(dir, f));
+          }
         }
-      }
-    } catch {}
+      } catch {}
+    }
 
     // Import knowledge entries from JSONL if available
     try {

@@ -44,10 +44,9 @@ function loadState(stateFile) {
       warned: raw.warned || false,
       cumulativeEstimatedTokens: raw.cumulativeEstimatedTokens || 0,
       toolCalls: raw.toolCalls || 0,
-      lastUsageRatio: raw.lastUsageRatio || 0,
     };
   } catch {
-    return { subagentWarned: false, warned: false, cumulativeEstimatedTokens: 0, toolCalls: 0, lastUsageRatio: 0 };
+    return { subagentWarned: false, warned: false, cumulativeEstimatedTokens: 0, toolCalls: 0 };
   }
 }
 
@@ -179,9 +178,6 @@ process.stdin.on("end", () => {
 
     const ctx = getContextUsage(hookInput, state);
     const pct = Math.round(ctx.ratio * 100);
-
-    // Store ratio for PreToolUse to read on next call
-    state.lastUsageRatio = ctx.ratio;
 
     // Per-call size warning: flag individual large tool results
     const responseStr = JSON.stringify(hookInput.tool_response || {});

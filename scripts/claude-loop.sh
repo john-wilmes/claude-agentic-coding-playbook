@@ -270,8 +270,11 @@ _start_sentinel_watcher() {
   (
     # Wait for PID file to appear
     while [[ ! -s "${pid_file}" ]]; do sleep 0.5; done
-    local target_pid
-    target_pid="$(cat "${pid_file}")"
+    local target_pid=""
+    while [[ -z "$target_pid" || ! "$target_pid" =~ ^[0-9]+$ ]]; do
+      target_pid="$(cat "${pid_file}" 2>/dev/null)" || true
+      [[ "$target_pid" =~ ^[0-9]+$ ]] || sleep 0.2
+    done
     # Poll for sentinel; kill claude when found
     while kill -0 "$target_pid" 2>/dev/null; do
       if [[ -f "${SENTINEL_FILE}" ]]; then
