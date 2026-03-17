@@ -38,11 +38,12 @@ Claude Code hooks are Node.js scripts that run at five lifecycle events:
 | **PostToolUse** | After a tool completes | Run tests, check output, warn on issues |
 | **PreCompact** | Before `/compact` runs | Save state that would be lost |
 
-**Communication:** Hooks write JSON to stdout. The three decision types:
+**Communication:** Hooks write JSON to stdout wrapped in a `hookSpecificOutput` envelope:
 
 - **Allow** — silent `{}` (or no output). The action proceeds normally.
-- **Warn** — `{"decision": "warn", "message": "..."}`. Advisory message shown to the agent; action still proceeds.
-- **Deny** — `{"decision": "deny", "message": "..."}`. Blocks the action entirely.
+- **Warn (PreToolUse)** — `{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "warn", "permissionDecisionReason": "..."}}`. Advisory message shown to the agent; action still proceeds.
+- **Deny (PreToolUse)** — `{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "..."}}`. Blocks the action entirely.
+- **Context (PostToolUse/SessionStart)** — `{"hookSpecificOutput": {"additionalContext": "..."}}`. Injects context into the conversation.
 
 **Rules:**
 - Always exit 0. A crashing hook is worse than a missing hook.
@@ -245,7 +246,7 @@ These are shared libraries, not standalone hooks:
 
 **Add your own hook:** Follow the convention:
 1. Write a Node.js script that reads hook input from `process.argv` or stdin.
-2. Output JSON to stdout: `{}` to allow, `{"decision": "warn", "message": "..."}` to advise, `{"decision": "deny", "message": "..."}` to block.
+2. Output JSON to stdout: `{}` to allow, or a `hookSpecificOutput` envelope to warn/deny/inject context (see Communication section above).
 3. Always exit 0. Errors should produce `{}`, not a crash.
 4. Register it in `~/.claude/settings.json` with the appropriate event type and tool matcher.
 
