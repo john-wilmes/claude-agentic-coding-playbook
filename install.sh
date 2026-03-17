@@ -1016,6 +1016,39 @@ if [ -f "$SCRIPT_DIR/templates/hooks/skill-guard.js" ]; then
   fi
 fi
 
+# Task-completed gate hook (TaskCompleted -- quality gate that blocks teammate task completion if tests fail)
+if [ -f "$SCRIPT_DIR/templates/hooks/task-completed-gate.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/task-completed-gate.js" "$CLAUDE_DIR/hooks/task-completed-gate.js" "task completed gate: task-completed-gate.js"
+
+  # Merge TaskCompleted hook entry into settings.json
+  echo ""
+  echo "--- Configuring task-completed-gate in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  TASKGATE_CMD="node $CLAUDE_DIR/hooks/task-completed-gate.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add task-completed-gate hook (TaskCompleted) to $SETTINGS_FILE"
+  else
+    if [ -f "$SETTINGS_FILE" ] && grep -q "task-completed-gate" "$SETTINGS_FILE" 2>/dev/null; then
+      echo "ALREADY CONFIGURED: task-completed-gate hook in settings.json"
+    else
+      node -e "
+        const fs = require('fs');
+        const settingsPath = process.argv[1];
+        const hookCmd = process.argv[2];
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (!settings.hooks) settings.hooks = {};
+        if (!settings.hooks.TaskCompleted) settings.hooks.TaskCompleted = [];
+        settings.hooks.TaskCompleted.push({
+          hooks: [{ type: 'command', command: hookCmd, timeout: 35 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      " "$SETTINGS_FILE" "$TASKGATE_CMD"
+      echo "CONFIGURED: task-completed-gate hook in settings.json (TaskCompleted)"
+    fi
+  fi
+fi
+
 # --- Install CLI scripts (q, qa, claude-loop) ---
 
 echo ""
