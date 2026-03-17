@@ -14,6 +14,7 @@
 //
 // On any error: outputs {} and exits 0 — never crashes.
 
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
@@ -45,7 +46,9 @@ function getStateDir() {
 
 function getStateKey(sessionId) {
   const loopPid = process.env.CLAUDE_LOOP_PID;
-  return loopPid ? `loop-${loopPid}` : sessionId;
+  const raw = loopPid ? `loop-${loopPid}` : sessionId;
+  // Hash the key to prevent path traversal via crafted session IDs
+  return crypto.createHash("sha256").update(raw).digest("hex").slice(0, 16);
 }
 
 function getStateFile(sessionId) {

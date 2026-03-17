@@ -83,13 +83,24 @@ process.stdin.on("end", () => {
         if (process.env.CLAUDE_NO_AUTO_PUSH === "1") {
           logEntry("memory auto-push: skipped (CLAUDE_NO_AUTO_PUSH=1)");
         } else {
+          // Check if any remotes are configured before attempting push
+          let hasRemote = false;
           try {
-            execFileSync("git", ["push"], { ...gitOpts, timeout: 8000 });
-            logEntry("memory auto-push: pushed to remote");
-          } catch (pushErr) {
-            const msg = pushErr.stderr ? pushErr.stderr.toString().trim() : pushErr.message;
-            logEntry(`memory auto-push failed: ${msg}`);
-            pushFailureMsg = msg;
+            const remoteOut = execFileSync("git", ["remote"], gitOpts).toString().trim();
+            hasRemote = remoteOut.length > 0;
+          } catch {}
+
+          if (!hasRemote) {
+            logEntry("memory auto-push: skipped (no remote configured)");
+          } else {
+            try {
+              execFileSync("git", ["push"], { ...gitOpts, timeout: 8000 });
+              logEntry("memory auto-push: pushed to remote");
+            } catch (pushErr) {
+              const msg = pushErr.stderr ? pushErr.stderr.toString().trim() : pushErr.message;
+              logEntry(`memory auto-push failed: ${msg}`);
+              pushFailureMsg = msg;
+            }
           }
         }
       }

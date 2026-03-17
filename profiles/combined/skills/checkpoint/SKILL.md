@@ -42,7 +42,13 @@ The subagent prompt should instruct it to:
 
 5. **Clear session state**: Delete the session marker and loop detector to indicate a clean exit:
    ```bash
-   PROJECT_DIR=$(ls -dt ~/.claude/projects/*/ 2>/dev/null | head -1)
+   # Derive the project dir from cwd — Claude Code encodes the path with slashes as dashes.
+   PROJECT_SLUG=$(pwd | sed 's|/|-|g')
+   PROJECT_DIR=$(echo "$HOME/.claude/projects/${PROJECT_SLUG}" | sed 's|//|/|g')
+   # Fall back to most-recently-modified project dir if the derived path doesn't exist.
+   if [ ! -d "$PROJECT_DIR" ]; then
+     PROJECT_DIR=$(ls -dt ~/.claude/projects/*/ 2>/dev/null | head -1)
+   fi
    rm -f "$PROJECT_DIR/session-marker.json"
    rm -f "$PROJECT_DIR/loop-detector.json"
    ```
