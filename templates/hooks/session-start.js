@@ -95,6 +95,25 @@ function safeParseJson(str, fallback) {
   try { return JSON.parse(str); } catch { return fallback; }
 }
 
+// Parse simple YAML key-value pairs (one level deep, no nested objects/arrays)
+function parseEnvYaml(content) {
+  const result = {};
+  const KEY_RE = /^([A-Z_][A-Z0-9_]*):\s*(.*)$/;
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const m = trimmed.match(KEY_RE);
+    if (!m) continue;
+    let val = m[2].trim();
+    // Strip surrounding quotes
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      val = val.slice(1, -1);
+    }
+    result[m[1]] = val;
+  }
+  return result;
+}
+
 // Read and score knowledge entries via SQLite DB, return top N
 function getRelevantKnowledge(cwd, maxEntries = 5) {
   try {
@@ -202,6 +221,34 @@ process.stdin.on("end", () => {
       // No memory file for this project -- that's fine
     }
 
+    // Load env vars from project or global env.yaml
+    let envVars = {};
+    let envFilePath = "";
+    try {
+      const projectEnvPath = path.join(cwd, ".claude", "env.yaml");
+      const globalEnvPath = path.join(os.homedir(), ".claude", "env.yaml");
+
+      if (fs.existsSync(projectEnvPath)) {
+        envFilePath = projectEnvPath;
+      } else if (fs.existsSync(globalEnvPath)) {
+        envFilePath = globalEnvPath;
+      }
+
+      if (envFilePath) {
+        const content = fs.readFileSync(envFilePath, "utf8");
+        envVars = parseEnvYaml(content);
+
+        // Write to CLAUDE_ENV_FILE if available (Claude Code env injection)
+        const claudeEnvFile = process.env.CLAUDE_ENV_FILE;
+        if (claudeEnvFile && Object.keys(envVars).length > 0) {
+          const exports = Object.entries(envVars)
+            .map(([k, v]) => `export ${k}=${JSON.stringify(v)}`)
+            .join("\n");
+          fs.appendFileSync(claudeEnvFile, exports + "\n");
+        }
+      }
+    } catch {}
+
     // Check combined CLAUDE.md size
     let claudeSizeWarning = "";
     try {
@@ -250,6 +297,11 @@ process.stdin.on("end", () => {
     }
     if (claudeSizeWarning) {
       parts.push(claudeSizeWarning);
+    }
+
+    if (envFilePath && Object.keys(envVars).length > 0) {
+      const varNames = Object.keys(envVars).join(", ");
+      parts.push(`Environment variables loaded from ${envFilePath}: ${varNames}`);
     }
 
     // Inject relevant knowledge entries
@@ -302,5 +354,5 @@ process.stdin.on("end", () => {
 
 // Export for testing
 if (typeof module !== "undefined") {
-  module.exports = { detectProjectContext, parseFrontmatter, scoreEntry, getRelevantKnowledge };
+  module.exports = { detectProjectContext, parseFrontmatter, scoreEntry, getRelevantKnowledge, parseEnvYaml };
 }
