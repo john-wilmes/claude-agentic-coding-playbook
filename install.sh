@@ -858,6 +858,80 @@ if [ -f "$SCRIPT_DIR/templates/hooks/subagent-recovery.js" ]; then
   fi
 fi
 
+# Subagent context hook (SubagentStart -- injects project context and loop warnings into spawned subagents)
+if [ -f "$SCRIPT_DIR/templates/hooks/subagent-context.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/subagent-context.js" "$CLAUDE_DIR/hooks/subagent-context.js" "subagent context: subagent-context.js"
+
+  echo ""
+  echo "--- Configuring subagent-context in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  SUBAGENT_CONTEXT_CMD="node $CLAUDE_DIR/hooks/subagent-context.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add SubagentStart hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    if grep -q "subagent-context" "$SETTINGS_FILE" 2>/dev/null; then
+      echo "ALREADY CONFIGURED: subagent-context hook in settings.json"
+    else
+      node -e "
+        const fs = require('fs');
+        const path = require('path');
+        const settingsPath = path.resolve(process.argv[1]);
+        const hookCmd = process.argv[2];
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (!settings.hooks) settings.hooks = {};
+        if (!settings.hooks.SubagentStart) settings.hooks.SubagentStart = [];
+        settings.hooks.SubagentStart.push({
+          hooks: [{ type: 'command', command: hookCmd, timeout: 5 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      " "$SETTINGS_FILE" "$SUBAGENT_CONTEXT_CMD"
+      echo "CONFIGURED: subagent-context hook in settings.json"
+    fi
+  fi
+fi
+
+# Tool failure logger hook (PostToolUseFailure -- logs tool errors to ~/.claude/logs/tool-failures.jsonl)
+if [ -f "$SCRIPT_DIR/templates/hooks/tool-failure-logger.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/tool-failure-logger.js" "$CLAUDE_DIR/hooks/tool-failure-logger.js" "tool failure logger: tool-failure-logger.js"
+
+  echo ""
+  echo "--- Configuring tool-failure-logger in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  TOOL_FAILURE_CMD="node $CLAUDE_DIR/hooks/tool-failure-logger.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add PostToolUseFailure hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    if grep -q "tool-failure-logger" "$SETTINGS_FILE" 2>/dev/null; then
+      echo "ALREADY CONFIGURED: tool-failure-logger hook in settings.json"
+    else
+      node -e "
+        const fs = require('fs');
+        const path = require('path');
+        const settingsPath = path.resolve(process.argv[1]);
+        const hookCmd = process.argv[2];
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (!settings.hooks) settings.hooks = {};
+        if (!settings.hooks.PostToolUseFailure) settings.hooks.PostToolUseFailure = [];
+        settings.hooks.PostToolUseFailure.push({
+          hooks: [{ type: 'command', command: hookCmd, timeout: 5 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      " "$SETTINGS_FILE" "$TOOL_FAILURE_CMD"
+      echo "CONFIGURED: tool-failure-logger hook in settings.json"
+    fi
+  fi
+fi
+
 # PII detector shared module (installed before sanitize-guard which depends on it)
 if [ -f "$SCRIPT_DIR/templates/hooks/pii-detector.js" ]; then
   install_file "$SCRIPT_DIR/templates/hooks/pii-detector.js" "$CLAUDE_DIR/hooks/pii-detector.js" "pii detector module: pii-detector.js"
