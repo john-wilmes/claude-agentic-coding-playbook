@@ -60,7 +60,7 @@ chmod +x install.sh
     learn/SKILL.md                    #   /learn - capture knowledge entries
     playbook/SKILL.md                 #   /playbook - analyze and improve config
     promote/SKILL.md                  #   /promote - promote lessons to global scope
-  hooks/                               #   19 hooks — safety, quality, resource management (see docs/hooks.md)
+  hooks/                               #   20 hooks — safety, quality, resource management (see docs/hooks.md)
   templates/
     project-CLAUDE.md                 #   Template for project-level CLAUDE.md
     hooks/pre-commit                  #   Git pre-commit hook (blocks secrets, large files)
@@ -116,6 +116,12 @@ CLAUDE.md rules are advisory (~50-90% compliance). Hooks are deterministic (>95%
 **Knowledge:**
 - **Knowledge capture** -- Extracts reusable lessons from session activity for the knowledge database.
 - **Knowledge database** -- Retrieves relevant knowledge entries via BM25 search at session start.
+
+**Subagent and failure handling:**
+- **Subagent context** -- Injects project context and loop warnings into spawned subagents at SubagentStart.
+- **Subagent recovery** -- Detects truncated subagent output after Task tool calls and writes recovery state.
+- **Tool failure logger** -- Logs tool errors to `~/.claude/logs/tool-failures.jsonl` on PostToolUseFailure.
+- **Task completed gate** -- Quality gate on TaskCompleted: blocks teammate task completion if tests fail.
 
 Utility modules (`log.js`, `bm25.js`, `pii-detector.js`) are shared libraries used by the hooks above. See [Hook Reference](docs/hooks.md) for details on every hook.
 
@@ -204,7 +210,7 @@ The wizard will:
 
 ## Documentation
 
-- **[Best Practices Guide](docs/best-practices.md)** -- the full evidence-backed guide with 34 verified citations
+- **[Best Practices Guide](docs/best-practices.md)** -- the full evidence-backed guide with 54 verified citations
 - **[Project CLAUDE.md Template](templates/project-CLAUDE.md)** -- starting point for per-project instructions
 - **[Dogfooding Guide](docs/dogfooding.md)** -- how to design and run a sustained dogfood campaign against real codebases, with a 100-task worked example
 - **[Dogfood Playbook](docs/dogfood-playbook.md)** -- manual interactive testing checklist for verifying the full user experience
