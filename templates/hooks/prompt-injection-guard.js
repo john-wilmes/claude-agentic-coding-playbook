@@ -12,7 +12,7 @@ const INJECTION_PATTERNS = [
   // Reading sensitive credential files and piping/sending them out
   { pattern: /\b(?:cat|head|tail|less|more)\s+(?:\S*\/)?(?:~\/)?(?:\.ssh\/|\.aws\/credentials|\.gnupg\/)/, reason: "Potential credential exfiltration: reading sensitive credential file" },
   { pattern: /\b(?:cat|head|tail|less|more)\s+(?:\/etc\/shadow|\/etc\/passwd)/, reason: "Potential credential exfiltration: reading system credential file" },
-  { pattern: /\b(?:cat|head|tail|less|more)\s+\S*\.env\b/, reason: "Potential credential exfiltration: reading .env file" },
+  { pattern: /\b(?:cat|head|tail|less|more)\s+(?:\S*\/)?\.env(?:\.(?!example\b|sample\b|template\b)[A-Za-z0-9_-]+)?(?=$|\s|[|;&])/, reason: "Potential credential exfiltration: reading .env file" },
   // Dumping full environment to network tools
   { pattern: /\b(?:env|printenv)\b.*\|\s*\b(?:curl|wget|nc|ncat|netcat)\b/, reason: "Potential credential exfiltration: piping environment to network tool" },
   // One-liner file reads in scripting languages used to exfiltrate

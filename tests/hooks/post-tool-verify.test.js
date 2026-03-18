@@ -171,6 +171,16 @@ test("8g. file in parent dir -> true (should skip)", (env) => {
   assert.strictEqual(isOutOfProject("/home/user/other/file.js", "/home/user/project"), true);
 });
 
+test("8h. relative path resolved against cwd -> false (should NOT skip)", (env) => {
+  const isOutOfProject = extractFunction(POST_TOOL_VERIFY, "isOutOfProject");
+  assert.strictEqual(isOutOfProject("src/app.ts", "/home/user/project"), false);
+});
+
+test("8i. ./relative path resolved against cwd -> false (should NOT skip)", (env) => {
+  const isOutOfProject = extractFunction(POST_TOOL_VERIFY, "isOutOfProject");
+  assert.strictEqual(isOutOfProject("./src/app.ts", "/home/user/project"), false);
+});
+
 // ─── Integration tests via runHook ───────────────────────────────────────────
 
 console.log("\nintegration (runHook):");

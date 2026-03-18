@@ -50,8 +50,8 @@ function shouldSkipFile(filePath) {
  */
 function isOutOfProject(filePath, cwd) {
   if (!filePath || !cwd) return false;
-  const resolved = path.resolve(filePath);
   const resolvedCwd = path.resolve(cwd);
+  const resolved = path.resolve(resolvedCwd, filePath);
   return !resolved.startsWith(resolvedCwd + path.sep) && resolved !== resolvedCwd;
 }
 

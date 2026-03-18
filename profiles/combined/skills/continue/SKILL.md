@@ -54,7 +54,8 @@ listed under "Current Work". These are your task list.
 
 - If `$ARGUMENTS` was provided, begin that specific task.
 - If next steps exist in memory, begin the first incomplete step.
-- If neither, run `git status` and tell the user the repo is clean with no pending work.
+- In dev context, if neither, run `git status` and tell the user the repo is clean with no pending work.
+- In research context, if neither, say no pending investigation steps were found and ask which question to resume.
 
 For dev context: follow the Development Workflow (Explore, Plan, Code, Verify, Commit).
 For research context: follow the Research Workflow (Question, Collect, Synthesize, Close).
