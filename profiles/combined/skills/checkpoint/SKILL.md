@@ -56,9 +56,26 @@ The subagent prompt should instruct it to:
 
 6. **Return a one-line summary** of what was done (e.g. "Memory updated, committed abc1234, pushed to origin").
 
-### 2. Exit decision
+### 2. Devil's advocate check
 
-After the subagent returns, print exactly:
+After the subagent returns, run:
+
+```bash
+INSTALL_ROOT="$(bash ~/.claude/scripts/skills/find-install-root.sh)"
+bash "${INSTALL_ROOT}/scripts/skills/da-check.sh"
+```
+
+If the output is `DA_NEEDED`, print:
+
+```text
+Note: This branch is 5+ commits ahead with docs/config changes. Consider running a devil's advocate review before merging.
+```
+
+If `DA_NOT_NEEDED` or the script fails, continue silently.
+
+### 3. Exit decision
+
+After the DA check, print exactly:
 ```
 CHECKPOINT COMPLETE
 ```
