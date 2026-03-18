@@ -154,7 +154,7 @@ test("5. MEMORY.md at 200 lines → overflow created, truncated to 150", (env, c
     { home: env.home, cwd },
   );
   assert.strictEqual(result.status, 0);
-  const ctx = result.json.additionalContext;
+  const ctx = result.json.hookSpecificOutput && result.json.hookSpecificOutput.additionalContext;
   assert.ok(ctx, "should return additionalContext");
   assert.ok(ctx.includes("exceeded 150 lines"), "message mentions limit");
   assert.ok(ctx.includes("was 200"), "message mentions original count");
@@ -216,7 +216,7 @@ test("7. Same-day collision: pre-existing overflow → counter suffix -2", (env,
     { tool_name: "Write", tool_input: { file_path: memPath } },
     { home: env.home, cwd },
   );
-  assert.ok(result.json.additionalContext, "should return additionalContext");
+  assert.ok(result.json.hookSpecificOutput && result.json.hookSpecificOutput.additionalContext, "should return additionalContext");
 
   const overflows = fs.readdirSync(memDir).filter(f => f.startsWith("overflow-"));
   assert.strictEqual(overflows.length, 2);
@@ -266,7 +266,7 @@ test("10. CLAUDE.md advisory fires when combined > 700 lines", (env, cwd) => {
     { tool_name: "Edit", tool_input: { file_path: path.join(cwd, "CLAUDE.md") } },
     { home: env.home, cwd },
   );
-  const ctx = result.json.additionalContext;
+  const ctx = result.json.hookSpecificOutput && result.json.hookSpecificOutput.additionalContext;
   assert.ok(ctx, "should return additionalContext");
   assert.ok(ctx.includes("800 lines"), "mentions combined count");
   assert.ok(ctx.includes("700"), "mentions threshold");
