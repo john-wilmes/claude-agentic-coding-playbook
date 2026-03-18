@@ -167,8 +167,8 @@ Tests PII/PHI detection and redaction. Requires a `.claude/sanitize.yaml` config
 |---|--------|---------|----------------|
 | 15.1 | Enable sanitization | Create `.claude/sanitize.yaml` in test project: | File created |
 |       |                     | `sanitization:` | |
-|       |                     | `  enabled: true` | |
-|       |                     | `  entities: [US_SSN, EMAIL]` | |
+|       |                     | `enabled: true` | |
+|       |                     | `entities: [US_SSN, EMAIL]` | |
 | 15.2 | Write file with PII | Ask Claude to write a file containing `SSN: 123-45-6789` | Blocked with "PII/PHI detected", redacted version shown |
 | 15.3 | Read file with PII | Manually create a file with PII, then ask Claude to read it | additionalContext shows redacted version with `[SSN]` placeholder |
 | 15.4 | Bash command with PII | Ask Claude to run `echo "email: user@example.com"` | Blocked with PII detection warning |

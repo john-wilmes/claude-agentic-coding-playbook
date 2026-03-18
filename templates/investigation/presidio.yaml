@@ -1,0 +1,29 @@
+# Presidio configuration for investigation sanitization
+# Used by sanitize.sh to redact PII/PHI from investigation files
+
+entities:
+  - PERSON
+  - PHONE_NUMBER
+  - EMAIL_ADDRESS
+  - US_SSN
+  - CREDIT_CARD
+  - IP_ADDRESS
+  - LOCATION
+  - DATE_TIME
+  - NRP
+  - MEDICAL_LICENSE
+  - URL
+
+# Custom placeholders per entity type
+placeholders:
+  PERSON: "[PERSON]"
+  PHONE_NUMBER: "[PHONE]"
+  EMAIL_ADDRESS: "[EMAIL]"
+  US_SSN: "[SSN]"
+  CREDIT_CARD: "[CC]"
+  IP_ADDRESS: "[IP]"
+  LOCATION: "[LOCATION]"
+  DATE_TIME: "[DATE]"
+  NRP: "[NRP]"
+  MEDICAL_LICENSE: "[MRN]"
+  URL: "[URL]"

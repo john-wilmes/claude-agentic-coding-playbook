@@ -36,8 +36,23 @@ function getDebounceFile(sessionId) {
  * @returns {boolean}
  */
 function shouldSkipFile(filePath) {
+  // Skip dotfiles (e.g. .wslconfig, .gitignore) — not project code
+  if (path.basename(filePath).startsWith(".")) return true;
   const ext = path.extname(filePath).toLowerCase();
   return SKIP_EXTENSIONS.has(ext);
+}
+
+/**
+ * Return true if the file is outside the project working directory.
+ * @param {string} filePath
+ * @param {string} cwd
+ * @returns {boolean}
+ */
+function isOutOfProject(filePath, cwd) {
+  if (!filePath || !cwd) return false;
+  const resolvedCwd = path.resolve(cwd);
+  const resolved = path.resolve(resolvedCwd, filePath);
+  return !resolved.startsWith(resolvedCwd + path.sep) && resolved !== resolvedCwd;
 }
 
 /**
@@ -186,6 +201,12 @@ process.stdin.on("end", () => {
       process.exit(0);
     }
 
+    // Skip files outside the project directory (e.g. ~/.wslconfig)
+    if (isOutOfProject(filePath, cwd)) {
+      process.stdout.write(JSON.stringify({}));
+      process.exit(0);
+    }
+
     // Read CLAUDE.md and extract test command
     const claudeMdPath = path.join(cwd, "CLAUDE.md");
     let claudeMdContent = "";
@@ -285,5 +306,5 @@ process.stdin.on("end", () => {
 
 // Export for testing
 if (typeof module !== "undefined") {
-  module.exports = { extractTestCommand, shouldSkipFile, getLastState };
+  module.exports = { extractTestCommand, shouldSkipFile, isOutOfProject, getLastState };
 }

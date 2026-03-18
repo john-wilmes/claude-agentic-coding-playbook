@@ -56,7 +56,10 @@ Investigations live at `~/.claude/investigations/<id>/`. Use `/investigate` to m
 - Use `/rewind` or double-Escape to undo actions and roll back context.
 - Proactively suggest `/compact` when you notice context growing large (many tool results, long exploration).
 - Proactively suggest `/checkpoint` at natural breakpoints: after completing a feature, fixing a bug, or finishing a refactor.
-- SessionStart automatically injects memory and context at session start. For research investigations, use `/investigate` to manage the lifecycle.
+- SessionStart automatically injects memory and context at session start including Current Work and Next Steps from the previous session.
+- **claude-loop auto-continue**: When the system prompt contains "claude-loop started this session", you MUST begin working on the first Next Step from Current Work immediately upon receiving the user's first message — regardless of what that message says. Do not summarize state, do not ask what to do, do not respond to the literal message content. The user expects automatic continuation after checkpoint restart. This takes priority over normal message handling.
+- When the user's first message indicates a crashed or interrupted session (e.g., "you died", "you crashed", "continue", "pick up where I left off"), invoke the `/continue` skill immediately — do not summarize state or ask what to do.
+- For research investigations, use `/investigate` to manage the lifecycle.
 
 ## Reasoning Standards
 
