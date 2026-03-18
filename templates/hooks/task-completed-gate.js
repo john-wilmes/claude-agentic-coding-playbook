@@ -174,7 +174,7 @@ process.stdin.on("end", () => {
           additionalContext: `Tests failed. Fix before completing:\n${output}`,
         },
       }));
-      process.exit(2);
+      process.exit(0);
     }
 
     process.stdout.write(JSON.stringify({}));
