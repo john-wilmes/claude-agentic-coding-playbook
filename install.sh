@@ -1388,6 +1388,47 @@ if [ -d "$SCRIPT_DIR/templates/knowledge" ]; then
   done
 fi
 
+# Investigation templates and infrastructure
+echo ""
+echo "--- Installing investigation templates ---"
+if [ "$DRY_RUN" != true ]; then
+  mkdir -p "$CLAUDE_DIR/templates/investigation/hooks"
+  mkdir -p "$CLAUDE_DIR/investigations/_patterns"
+fi
+
+if [ -d "$SCRIPT_DIR/templates/investigation" ]; then
+  for inv_file in "$SCRIPT_DIR/templates/investigation"/*; do
+    [ -f "$inv_file" ] || continue
+    inv_name=$(basename "$inv_file")
+    install_file "$inv_file" "$CLAUDE_DIR/templates/investigation/$inv_name" "investigation template: $inv_name"
+  done
+  for inv_file in "$SCRIPT_DIR/templates/investigation/hooks"/*; do
+    [ -f "$inv_file" ] || continue
+    inv_name=$(basename "$inv_file")
+    install_file "$inv_file" "$CLAUDE_DIR/templates/investigation/hooks/$inv_name" "investigation hook: $inv_name"
+    if [ "$DRY_RUN" != true ] && [ -f "$CLAUDE_DIR/templates/investigation/hooks/$inv_name" ]; then
+      chmod +x "$CLAUDE_DIR/templates/investigation/hooks/$inv_name"
+    fi
+  done
+fi
+
+if [ "$DRY_RUN" = true ]; then
+  echo "[DRY RUN] MKDIR: $CLAUDE_DIR/investigations/_patterns/"
+else
+  echo "CREATED: $CLAUDE_DIR/investigations/_patterns/"
+fi
+
+# sanitize.sh script (used by /investigate close for PHI sanitization)
+if [ -f "$SCRIPT_DIR/scripts/sanitize.sh" ]; then
+  if [ "$DRY_RUN" != true ]; then
+    mkdir -p "$CLAUDE_DIR/scripts"
+  fi
+  install_file "$SCRIPT_DIR/scripts/sanitize.sh" "$CLAUDE_DIR/scripts/sanitize.sh" "sanitize script: sanitize.sh"
+  if [ "$DRY_RUN" != true ] && [ -f "$CLAUDE_DIR/scripts/sanitize.sh" ]; then
+    chmod +x "$CLAUDE_DIR/scripts/sanitize.sh"
+  fi
+fi
+
 # --- Knowledge repo setup ---
 if [ -n "$KNOWLEDGE_REPO" ]; then
   echo ""

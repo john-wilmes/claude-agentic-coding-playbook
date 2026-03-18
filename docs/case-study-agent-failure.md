@@ -113,7 +113,7 @@ When pushed further:
 
 The user asked for the full system prompt. Claude dumped it — ~500 lines of
 instructions encouraging thoroughness, caution, and confirmation-seeking.
-_(The system prompt was captured during the session but is not included in this repository.)_
+*(The system prompt was captured during the session but is not included in this repository.)*
 
 ### On the economic incentive
 
@@ -344,7 +344,7 @@ cost hundreds of tokens and arrive wrapped in explanation.
 ### 4. System prompt captured
 
 Full Claude Code built-in system prompt captured during the session for
-reference and analysis. _(Not included in this repository.)_
+reference and analysis. *(Not included in this repository.)*
 
 ---
 
