@@ -92,9 +92,16 @@ function createMemoryFile(home, cwd, content) {
  * @returns {{ status, stdout, stderr, json }}
  */
 function runHook(hookPath, stdinJson = {}, env = {}) {
+  // Strip claude-loop env vars to prevent leakage from the parent session.
+  // Tests that need these vars pass them explicitly via the env parameter.
+  const baseEnv = { ...process.env };
+  delete baseEnv.CLAUDE_LOOP;
+  delete baseEnv.CLAUDE_LOOP_PID;
+  delete baseEnv.CLAUDE_LOOP_SENTINEL;
+
   const result = spawnSync("node", [hookPath], {
     input: JSON.stringify(stdinJson),
-    env: { ...process.env, CLAUDE_HOOK_SOURCE: "test", ...env },
+    env: { ...baseEnv, CLAUDE_HOOK_SOURCE: "test", ...env },
     timeout: 10000,
     encoding: "utf8",
   });
@@ -123,9 +130,14 @@ function runHook(hookPath, stdinJson = {}, env = {}) {
  * @returns {{ status, stdout, stderr, json }}
  */
 function runHookRaw(hookPath, rawStdin = "", env = {}) {
+  const baseEnv = { ...process.env };
+  delete baseEnv.CLAUDE_LOOP;
+  delete baseEnv.CLAUDE_LOOP_PID;
+  delete baseEnv.CLAUDE_LOOP_SENTINEL;
+
   const result = spawnSync("node", [hookPath], {
     input: rawStdin,
-    env: { ...process.env, CLAUDE_HOOK_SOURCE: "test", ...env },
+    env: { ...baseEnv, CLAUDE_HOOK_SOURCE: "test", ...env },
     timeout: 10000,
     encoding: "utf8",
   });
