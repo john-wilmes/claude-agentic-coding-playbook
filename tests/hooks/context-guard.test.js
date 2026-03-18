@@ -205,17 +205,17 @@ test("4. Transcript at 60%: critical advisory via hookSpecificOutput", () => {
   }
 });
 
-// Test 5: Cache tokens counted correctly (input + cache_read + cache_creation, NOT output)
+// Test 5: Cache tokens counted correctly (input + cache_read + cache_creation + output)
 test("5. Cache tokens counted correctly (input + cache_read + cache_creation)", () => {
   const sessionId = newSessionId();
-  // 1 + 60000 + 40000 = 100,001 tokens = 50%+ (output_tokens not counted)
+  // 1 + 60000 + 40000 + 500 (output) = 100,501 tokens = 50%+
   const transcript = createFakeTranscript([makeAssistantMessage(1, 60000, 40000)]);
   try {
     const result = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(result.status, 0);
     assert.ok(result.json.hookSpecificOutput, "Should warn at 50%");
     assert.ok(
-      result.json.hookSpecificOutput.additionalContext.includes("100001 actual tokens"),
+      result.json.hookSpecificOutput.additionalContext.includes("100501 actual tokens"),
       `Should show actual token count, got: ${result.json.hookSpecificOutput.additionalContext}`
     );
   } finally {
@@ -343,7 +343,7 @@ test("11. Large transcript (>50KB): tail read still finds usage", () => {
     const result = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(result.status, 0);
     assert.ok(result.json.hookSpecificOutput, "Should find usage in tail and warn critically");
-    assert.ok(result.json.hookSpecificOutput.additionalContext.includes("120000 actual tokens"), "Should show actual tokens");
+    assert.ok(result.json.hookSpecificOutput.additionalContext.includes("120500 actual tokens"), "Should show actual tokens");
   } finally {
     cleanupSession(sessionId);
     try { fs.rmSync(transcript); } catch {}

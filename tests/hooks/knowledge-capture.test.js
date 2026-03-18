@@ -48,7 +48,7 @@ function newSessionId() {
  * os.homedir() is re-evaluated with the patched HOME.
  *
  * @param {string} home - Temp HOME directory
- * @returns {{ stageCandidate, readStagedCandidates, clearStagedCandidates, pruneStagedFiles, STAGED_DIR, DB_PATH }}
+ * @returns {{ stageCandidate, readStagedCandidates, clearStagedCandidates, pruneStagedFiles, getStagedDir, DB_PATH }}
  */
 function loadModule(home) {
   const origHome = process.env.HOME;
@@ -294,7 +294,7 @@ test("8. pruneStagedFiles deletes old rows, keeps recent ones", () => {
       );
     } else {
       // JSONL fallback path: write files with manipulated mtimes
-      const stagedDir = mod.STAGED_DIR;
+      const stagedDir = mod.getStagedDir();
       fs.mkdirSync(stagedDir, { recursive: true });
 
       const oldFile = path.join(stagedDir, `${oldSession}.jsonl`);

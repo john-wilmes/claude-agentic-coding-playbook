@@ -117,7 +117,8 @@ function getContextUsage(hookInput, state) {
     // Verified against real transcripts — total context = all three summed.
     const totalTokens = (usage.input_tokens || 0) +
                         (usage.cache_read_input_tokens || 0) +
-                        (usage.cache_creation_input_tokens || 0);
+                        (usage.cache_creation_input_tokens || 0) +
+                        (usage.output_tokens || 0);
     return {
       ratio: totalTokens / CONTEXT_WINDOW,
       tokens: totalTokens,

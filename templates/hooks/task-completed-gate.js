@@ -2,7 +2,8 @@
 //
 // Only applies to teammate agents (hookInput.agent_id must be present).
 // Reads CLAUDE.md from cwd, extracts test command, runs it with a 30s timeout.
-// If tests fail, exits 2 with feedback JSON to block the completion.
+// If tests fail, exits 0 with feedback JSON (hookSpecificOutput.additionalContext)
+// to block the completion.
 // If tests pass, no CLAUDE.md, or no test command, exits 0 with {}.
 //
 // On any error: outputs {} and exits 0 — never blocks unexpectedly.
@@ -26,6 +27,44 @@ function extractTestCommand(claudeMdContent) {
 }
 
 /**
+ * Validate that a test command does not contain known dangerous patterns.
+ *
+ * Defense-in-depth: CLAUDE.md is project configuration equivalent to
+ * Makefile/package.json scripts — it is reviewed as part of the codebase and
+ * inherently trusted by the user who checked it out. Shell interpretation of
+ * the command is intentional (commands like `for t in tests/*.js; do …` require
+ * it). This function rejects a narrow set of unambiguously malicious patterns
+ * (network exfiltration, disk destruction, encoded payloads) without preventing
+ * legitimate test commands.
+ *
+ * @param {string} cmd
+ * @returns {{ valid: boolean, reason?: string }}
+ */
+function validateTestCommand(cmd) {
+  if (!cmd || typeof cmd !== "string") {
+    return { valid: false, reason: "empty command" };
+  }
+
+  const dangerous = [
+    // Network exfiltration via common tools
+    { pattern: /\b(curl|wget|nc|ncat)\b.*[|>]/, label: "network exfiltration" },
+    // Disk destruction
+    { pattern: /\brm\s+-rf\s+\//, label: "destructive rm -rf /" },
+    // Encoded payload execution
+    { pattern: /\beval\b/, label: "eval execution" },
+    { pattern: /\bbase64\s+-d\b/, label: "base64 decode execution" },
+  ];
+
+  for (const { pattern, label } of dangerous) {
+    if (pattern.test(cmd)) {
+      return { valid: false, reason: `dangerous pattern detected: ${label}` };
+    }
+  }
+
+  return { valid: true };
+}
+
+/**
  * Validate that a directory path is safe to use as cwd for test execution.
  * Prevents path traversal and ensures the path is a real directory.
  * @param {string} dir
@@ -45,19 +84,27 @@ function validateCwd(dir) {
 
 /**
  * Run the test command and return { passed, output }.
- * Note: The test command is read from the project's CLAUDE.md, which is part
- * of the repo the user chose to work on. This is a trust boundary — CLAUDE.md
- * is authored by the repo owner and reviewed by the user.
+ *
+ * Trust model: The test command is extracted from the project's CLAUDE.md,
+ * which is project configuration equivalent to a Makefile or package.json
+ * script — it is authored by the repo owner and reviewed by the user as part
+ * of the codebase. Shell interpretation is intentional. validateTestCommand()
+ * provides defense-in-depth against a narrow set of obviously malicious
+ * patterns before this call.
+ *
  * @param {string} testCommand
  * @param {string} cwd
  * @returns {{ passed: boolean, output: string }}
  */
 function runTests(testCommand, cwd) {
   try {
+    // CLAUDE.md is project config (equivalent to Makefile/package.json scripts)
+    // reviewed as part of the codebase — shell: true is intentional here.
     execSync(testCommand, {
       cwd,
       timeout: TEST_TIMEOUT_MS,
       stdio: ["ignore", "pipe", "pipe"],
+      shell: true,
     });
     return { passed: true, output: "" };
   } catch (err) {
@@ -106,6 +153,16 @@ process.stdin.on("end", () => {
     const testCommand = extractTestCommand(claudeMdContent);
     if (!testCommand) {
       process.stdout.write(JSON.stringify({}));
+      process.exit(0);
+    }
+
+    const validation = validateTestCommand(testCommand);
+    if (!validation.valid) {
+      process.stdout.write(JSON.stringify({
+        hookSpecificOutput: {
+          additionalContext: `Test command rejected: ${validation.reason}`,
+        },
+      }));
       process.exit(0);
     }
 

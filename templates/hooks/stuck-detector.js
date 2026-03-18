@@ -66,8 +66,17 @@ function getStateFile(sessionId) {
   return path.join(getStateDir(), `${getStateKey(sessionId)}.json`);
 }
 
+const STATE_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
+
 function loadState(stateFile) {
   try {
+    const mtime = fs.statSync(stateFile).mtimeMs;
+    if (Date.now() - mtime > STATE_TTL_MS) {
+      // State file is stale (PID recycled or leftover from a previous run).
+      // Delete it and start fresh rather than inheriting a stale action window.
+      try { fs.unlinkSync(stateFile); } catch {}
+      return { window: [], wasStuck: false, stuckTool: "" };
+    }
     return JSON.parse(fs.readFileSync(stateFile, "utf8"));
   } catch {
     return { window: [], wasStuck: false, stuckTool: "" };

@@ -127,6 +127,31 @@ function updateDebounce(cwd, sessionId, passed, failOutput) {
   } catch {}
 }
 
+/**
+ * Return true if cmd starts with a known safe test runner prefix.
+ * The prefix must be followed by a space or be the entire string (word boundary).
+ * @param {string} cmd
+ * @returns {boolean}
+ */
+function isAllowedTestCommand(cmd) {
+  if (!cmd || typeof cmd !== "string") return false;
+  const trimmed = cmd.trim();
+  if (!trimmed) return false;
+
+  const ALLOWED_PREFIXES = [
+    "npm", "npx", "node", "jest", "mocha",
+    "pytest", "python", "cargo", "go", "make",
+    "bash", "sh", "for ",
+    "ruby", "bundle", "dotnet", "gradle", "mvn", "ant",
+  ];
+
+  return ALLOWED_PREFIXES.some((prefix) => {
+    if (!trimmed.startsWith(prefix)) return false;
+    // Word boundary: prefix must be entire string or followed by a space
+    return trimmed.length === prefix.length || trimmed[prefix.length] === " ";
+  });
+}
+
 // Read hook input from stdin
 let input = "";
 process.stdin.resume();
@@ -186,6 +211,16 @@ process.stdin.on("end", () => {
 
     // Capture previous state before overwriting it
     const previousState = getLastState(cwd);
+
+    // Validate test command against allowlist before executing
+    if (!isAllowedTestCommand(testCommand)) {
+      process.stdout.write(JSON.stringify({
+        hookSpecificOutput: {
+          additionalContext: `⚠ post-tool-verify: blocked untrusted test command "${testCommand.trim().split(/\s+/)[0]}". Only standard test runners are allowed.`
+        }
+      }));
+      process.exit(0);
+    }
 
     // Run tests
     const start = Date.now();
