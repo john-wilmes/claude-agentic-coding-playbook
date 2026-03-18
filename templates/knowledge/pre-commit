@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# Pre-commit hook for knowledge repositories.
+# Validates entry format and checks for sensitive content.
+set -euo pipefail
+
+errors=0
+
+while IFS= read -r file; do
+  # Only validate entry.md files
+  case "$file" in
+    entries/*/entry.md) ;;
+    *) continue ;;
+  esac
+
+  # Check frontmatter exists
+  if ! head -1 "$file" | grep -q '^---$'; then
+    echo "ERROR: $file missing YAML frontmatter"
+    errors=$((errors + 1))
+    continue
+  fi
+
+  # Extract frontmatter
+  fm=$(sed -n '/^---$/,/^---$/p' "$file" | sed '1d;$d')
+
+  # Check required fields
+  for field in id created author tool category confidence; do
+    if ! echo "$fm" | grep -q "^${field}:"; then
+      echo "ERROR: $file missing required field: $field"
+      errors=$((errors + 1))
+    fi
+  done
+
+  # Validate category value
+  category_val=$(echo "$fm" | grep "^category:" | sed 's/^category:[[:space:]]*//')
+  case "$category_val" in
+    gotcha|pattern|reference|debug) ;;
+    *)
+      echo "ERROR: $file invalid value for category: $category_val (must be gotcha, pattern, reference, or debug)"
+      errors=$((errors + 1))
+      ;;
+  esac
+
+  # Validate confidence value
+  confidence_val=$(echo "$fm" | grep "^confidence:" | sed 's/^confidence:[[:space:]]*//')
+  case "$confidence_val" in
+    high|medium|low) ;;
+    *)
+      echo "ERROR: $file invalid value for confidence: $confidence_val (must be high, medium, or low)"
+      errors=$((errors + 1))
+      ;;
+  esac
+
+  # Check for AWS keys
+  if grep -qE 'AKIA[0-9A-Z]{16}' "$file"; then
+    echo "BLOCKED: $file contains AWS access key pattern"
+    errors=$((errors + 1))
+  fi
+
+  # Check for generic secrets
+  if grep -qiE '(password|secret|token|api_key|apikey)\s*[=:]\s*["'"'"']?[A-Za-z0-9+/]{8,}' "$file"; then
+    echo "BLOCKED: $file may contain credentials"
+    errors=$((errors + 1))
+  fi
+done < <(git diff --cached --name-only --diff-filter=ACM)
+
+if [ $errors -gt 0 ]; then
+  echo ""
+  echo "$errors error(s) found. Fix before committing."
+  exit 1
+fi

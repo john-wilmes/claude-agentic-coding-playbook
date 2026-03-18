@@ -1,0 +1,218 @@
+{
+  "github": {
+    "description": "GitHub issues, PRs, code search, actions",
+    "config": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "-e", "GITHUB_PERSONAL_ACCESS_TOKEN", "ghcr.io/github/github-mcp-server"],
+      "disabled": false
+    },
+    "env_required": ["GITHUB_PERSONAL_ACCESS_TOKEN"],
+    "notes": "Requires GITHUB_PERSONAL_ACCESS_TOKEN env var. Always enabled."
+  },
+  "datadog": {
+    "description": "Logs, metrics, traces, monitors",
+    "config": {
+      "command": "npx",
+      "args": ["-y", "@winor30/mcp-server-datadog"],
+      "disabled": true
+    },
+    "env_required": ["DATADOG_API_KEY", "DATADOG_APP_KEY"],
+    "notes": "Official remote MCP also available at docs.datadoghq.com"
+  },
+  "snowflake": {
+    "description": "Data warehouse queries and schema inspection",
+    "config": {
+      "command": "uvx",
+      "args": ["snowflake-labs-mcp"],
+      "disabled": true
+    },
+    "env_required": ["SNOWFLAKE_ACCOUNT", "SNOWFLAKE_USER", "SNOWFLAKE_PASSWORD"],
+    "notes": "Requires Snowflake account credentials"
+  },
+  "postgres": {
+    "description": "PostgreSQL database queries (restricted mode)",
+    "config": {
+      "command": "uvx",
+      "args": ["postgres-mcp", "--access-mode=restricted"],
+      "disabled": true
+    },
+    "env_required": ["DATABASE_URL"],
+    "notes": "Restricted mode prevents DDL and destructive operations"
+  },
+  "sentry": {
+    "description": "Error tracking, issue management",
+    "config": {
+      "type": "http",
+      "url": "https://mcp.sentry.dev/mcp",
+      "disabled": true
+    },
+    "env_required": [],
+    "notes": "OAuth flow on first use"
+  },
+  "pagerduty": {
+    "description": "Incident management and on-call schedules",
+    "config": {
+      "command": "uvx",
+      "args": ["pagerduty-mcp"],
+      "disabled": true
+    },
+    "env_required": ["PAGERDUTY_API_KEY"],
+    "notes": "Read-only by default — no --enable-write-tools flag"
+  },
+  "atlassian": {
+    "description": "Jira issues, Confluence pages",
+    "config": {
+      "type": "http",
+      "url": "https://mcp.atlassian.com/v1/mcp",
+      "disabled": true
+    },
+    "env_required": [],
+    "notes": "OAuth flow on first use"
+  },
+  "linear": {
+    "description": "Linear issues, projects, cycles",
+    "config": {
+      "type": "http",
+      "url": "https://mcp.linear.app/mcp",
+      "disabled": true
+    },
+    "env_required": [],
+    "notes": "OAuth flow on first use"
+  },
+  "slack": {
+    "description": "Slack channels, messages, search",
+    "config": {
+      "type": "http",
+      "url": "https://mcp.slack.com/mcp",
+      "disabled": true
+    },
+    "env_required": [],
+    "notes": "OAuth flow on first use"
+  },
+  "cloudwatch": {
+    "description": "AWS CloudWatch logs, metrics, alarms",
+    "config": {
+      "command": "uvx",
+      "args": ["awslabs.cloudwatch-mcp-server"],
+      "disabled": true
+    },
+    "env_required": ["AWS_REGION"],
+    "notes": "Uses AWS credential chain (env vars, ~/.aws/credentials, IAM role)"
+  },
+  "aws-api": {
+    "description": "General AWS API access",
+    "config": {
+      "command": "uvx",
+      "args": ["awslabs.aws-api-mcp-server"],
+      "disabled": true
+    },
+    "env_required": ["AWS_REGION"],
+    "notes": "Uses AWS credential chain (env vars, ~/.aws/credentials, IAM role)"
+  },
+  "kubernetes": {
+    "description": "Kubernetes cluster inspection (read-only)",
+    "config": {
+      "command": "npx",
+      "args": ["-y", "kubernetes-mcp-server", "--read-only"],
+      "disabled": true
+    },
+    "env_required": [],
+    "notes": "Uses current kubeconfig context. Read-only mode prevents mutations."
+  },
+  "grafana": {
+    "description": "Grafana dashboards, data sources, alerts",
+    "config": {
+      "command": "uvx",
+      "args": ["mcp-grafana"],
+      "disabled": true
+    },
+    "env_required": ["GRAFANA_URL", "GRAFANA_API_KEY"],
+    "notes": "Requires Grafana instance URL and API key"
+  },
+  "elasticsearch": {
+    "description": "Elasticsearch/OpenSearch queries and index management",
+    "config": {
+      "command": "uvx",
+      "args": ["elasticsearch-mcp-server"],
+      "disabled": true
+    },
+    "env_required": ["ELASTICSEARCH_URL"],
+    "notes": "Supports basic auth via ELASTICSEARCH_USERNAME and ELASTICSEARCH_PASSWORD"
+  },
+  "serena": {
+    "description": "LSP-powered semantic code navigation",
+    "config": {
+      "command": "uvx",
+      "args": [
+        "--from", "git+https://github.com/oraios/serena",
+        "serena", "start-mcp-server",
+        "--context", "claude-code",
+        "--project-from-cwd"
+      ],
+      "disabled": false
+    },
+    "env_required": [],
+    "notes": "LSP symbol navigation. --context claude-code disables tools that duplicate built-ins. Enabled by default — vital for agent code navigation."
+  },
+  "fleet-index": {
+    "description": "Multi-repo fleet index — search, manifests, dependency topology",
+    "config": {
+      "command": "node",
+      "args": ["~/.claude/mcp/fleet-index-server.js"],
+      "disabled": false
+    },
+    "env_required": [],
+    "notes": "Reads pre-built manifests from ~/.claude/fleet/. Run 'repo-fleet-index --build' first. Always enabled when fleet is indexed."
+  },
+  "zendesk": {
+    "description": "Zendesk tickets, users, organizations",
+    "config": {
+      "command": "npx",
+      "args": ["-y", "zd-mcp-server"],
+      "disabled": true
+    },
+    "env_required": ["ZENDESK_EMAIL", "ZENDESK_API_TOKEN", "ZENDESK_SUBDOMAIN"],
+    "notes": "Requires Zendesk agent email, API token, and subdomain"
+  },
+  "clickup": {
+    "description": "ClickUp tasks, spaces, lists (Public Beta)",
+    "config": {
+      "type": "http",
+      "url": "https://mcp.clickup.com/mcp",
+      "disabled": true
+    },
+    "env_required": [],
+    "notes": "OAuth flow on first use. Official ClickUp MCP (Public Beta)."
+  },
+  "mongodb": {
+    "description": "MongoDB queries and collection inspection",
+    "config": {
+      "command": "npx",
+      "args": ["-y", "mongodb-mcp-server", "--readOnly"],
+      "disabled": true
+    },
+    "env_required": ["MDB_MCP_CONNECTION_STRING"],
+    "notes": "Read-only mode prevents mutations. Requires MongoDB connection string."
+  },
+  "presidio": {
+    "description": "On-demand PII/PHI detection and anonymization",
+    "config": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "cmalpass/mcp-presidio"],
+      "disabled": true
+    },
+    "env_required": [],
+    "notes": "Detects PII/PHI entities on demand. See best-practices.md section 13 for full sanitization architecture."
+  },
+  "mma": {
+    "description": "Multi-Model Analyzer — cross-repo dependency graphs, blast radius, architecture, symbol search, diagnostics, metrics",
+    "config": {
+      "command": "node",
+      "args": ["apps/cli/dist/index.js", "serve", "--db", "data/mma.db"],
+      "cwd": "~/Documents/multi-model-analyzer",
+      "disabled": false
+    },
+    "env_required": [],
+    "notes": "9 tools: query, search, get_callers, get_callees, get_dependencies, get_architecture, get_diagnostics, get_metrics, get_blast_radius. Requires: npm install in MMA workspace, then 'mma index' to create DB. DB populated by daily 'mma index' run."
+  }
+}

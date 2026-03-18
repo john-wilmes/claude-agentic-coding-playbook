@@ -1,0 +1,612 @@
+name: Test Install Script
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  lint-markdown:
+    runs-on: ubuntu-latest
+    name: Markdown lint
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install markdownlint-cli2
+        run: npm install -g markdownlint-cli2
+      - name: Lint markdown files
+        run: markdownlint-cli2 "**/*.md"
+
+  linkcheck:
+    runs-on: ubuntu-latest
+    name: Citation linkcheck
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check citation URLs
+        run: |
+          set -euo pipefail
+
+          # Allow-list: domains that reject HEAD requests or are flaky
+          ALLOW_LIST="arxiv.org doi.org fortune.com substack.com localhost"
+
+          is_allowed() {
+            local url="$1"
+            for domain in $ALLOW_LIST; do
+              if echo "$url" | grep -q "$domain"; then
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          fail_file=$(mktemp)
+          echo "0" > "$fail_file"
+
+          # Extract URLs from citations section
+          grep -oP 'https?://[^\s>)]+' docs/best-practices.md | sort -u | while read -r url; do
+            if is_allowed "$url"; then
+              echo "SKIP (allow-listed): $url"
+              continue
+            fi
+
+            status=$(curl --head --silent --fail --max-time 10 --write-out '%{http_code}' --output /dev/null "$url" 2>/dev/null || true)
+            if [ -z "$status" ] || [ "$status" = "000" ] || [ "$status" -ge 400 ] 2>/dev/null; then
+              # Retry with GET (some servers reject HEAD)
+              status=$(curl --silent --fail --max-time 10 --write-out '%{http_code}' --output /dev/null "$url" 2>/dev/null || true)
+            fi
+
+            if [ -z "$status" ] || [ "$status" = "000" ] || [ "$status" -ge 400 ] 2>/dev/null; then
+              echo "FAIL ($status): $url"
+              echo "1" > "$fail_file"
+            else
+              echo "OK ($status): $url"
+            fi
+          done
+
+          if [ "$(cat "$fail_file")" = "1" ]; then
+            echo "::error::One or more citation URLs are broken"
+            exit 1
+          fi
+
+  test-install:
+    runs-on: ubuntu-latest
+    name: ubuntu / combined
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Phase 1: Dry-run ──────────────────────────────────────────
+
+      - name: "Dry-run install"
+        run: |
+          output=$(bash install.sh --dry-run 2>&1)
+          echo "$output"
+          echo "$output" | grep -q '\[DRY RUN\] INSTALL'
+
+      - name: "Verify dry-run created no files"
+        run: |
+          if [ -f "$HOME/.claude/CLAUDE.md" ]; then
+            echo "FAIL: dry-run should not create files"
+            exit 1
+          fi
+          echo "OK: no files created during dry-run"
+
+      # ── Phase 2: Real install ─────────────────────────────────────
+
+      - name: "Install"
+        run: bash install.sh --force
+
+      # ── Phase 2b: Verify installed files ──────────────────────────
+
+      - name: "Verify common files"
+        run: |
+          failed=0
+          check() {
+            if [ ! -e "$1" ]; then
+              echo "MISSING: $1"
+              failed=1
+            else
+              echo "OK: $1"
+            fi
+          }
+
+          check "$HOME/.claude/CLAUDE.md"
+          check "$HOME/.claude/templates/project-CLAUDE.md"
+          check "$HOME/.claude/templates/hooks/pre-commit"
+
+          exit $failed
+
+      - name: "Verify CLAUDE.md content"
+        run: |
+          file="$HOME/.claude/CLAUDE.md"
+          grep -q "Explore, Plan, Code, Verify, Commit" "$file"
+          echo "OK: dev workflow string found"
+          grep -q "Question, Collect, Synthesize, Close" "$file"
+          echo "OK: research workflow string found"
+
+      - name: "Verify pre-commit hook is executable"
+        run: |
+          hook="$HOME/.claude/templates/hooks/pre-commit"
+          if [ ! -x "$hook" ]; then
+            echo "FAIL: $hook is not executable"
+            ls -l "$hook"
+            exit 1
+          fi
+          echo "OK: pre-commit hook is executable"
+
+      - name: "Verify all skills installed"
+        run: |
+          failed=0
+          check() {
+            if [ ! -e "$1" ]; then
+              echo "MISSING: $1"
+              failed=1
+            else
+              echo "OK: $1"
+            fi
+          }
+
+          # Dev skills
+          check "$HOME/.claude/skills/checkpoint/SKILL.md"
+          check "$HOME/.claude/skills/playbook/SKILL.md"
+          check "$HOME/.claude/skills/create-project/SKILL.md"
+          check "$HOME/.claude/skills/learn/SKILL.md"
+          check "$HOME/.claude/skills/promote/SKILL.md"
+
+          # Research skills
+          check "$HOME/.claude/skills/investigate/SKILL.md"
+          check "$HOME/.claude/investigations/_patterns/"
+          check "$HOME/.claude/templates/investigation/brief.md"
+
+          exit $failed
+
+      # ── Phase 2b2: Session hooks and knowledge templates ─────────
+
+      - name: "Verify session hooks installed"
+        run: |
+          failed=0
+          check() {
+            if [ ! -e "$1" ]; then
+              echo "MISSING: $1"
+              failed=1
+            else
+              echo "OK: $1"
+            fi
+          }
+
+          check "$HOME/.claude/hooks/session-start.js"
+          check "$HOME/.claude/hooks/session-end.js"
+
+          exit $failed
+
+      - name: "Verify model-router hook installed"
+        run: |
+          failed=0
+          check() {
+            if [ ! -e "$1" ]; then
+              echo "MISSING: $1"
+              failed=1
+            else
+              echo "OK: $1"
+            fi
+          }
+
+          check "$HOME/.claude/hooks/model-router.js"
+
+          # Verify settings.json has PreToolUse hook
+          if grep -q "model-router" "$HOME/.claude/settings.json" 2>/dev/null; then
+            echo "OK: model-router configured in settings.json"
+          else
+            echo "MISSING: model-router entry in settings.json"
+            failed=1
+          fi
+
+          exit $failed
+
+      - name: "Verify session-start.js has knowledge injection"
+        run: |
+          file="$HOME/.claude/hooks/session-start.js"
+          grep -q 'getRelevantKnowledge' "$file"
+          echo "OK: session-start.js has knowledge injection function"
+          grep -q 'Lessons Learned' "$file"
+          echo "OK: session-start.js extracts Lessons Learned"
+
+      - name: "Verify knowledge templates"
+        run: |
+          failed=0
+          check() {
+            if [ ! -e "$1" ]; then
+              echo "MISSING: $1"
+              failed=1
+            else
+              echo "OK: $1"
+            fi
+          }
+
+          check "$HOME/.claude/templates/knowledge/entry-template.md"
+          check "$HOME/.claude/templates/knowledge/validate-entries.yml"
+          check "$HOME/.claude/templates/knowledge/pre-commit"
+          check "$HOME/.claude/templates/knowledge/README.md"
+
+          exit $failed
+
+      # ── Phase 2c: Research profile template verification ─────────
+
+      - name: "Verify research profile templates"
+        run: |
+          failed=0
+          check() {
+            if [ ! -e "$1" ]; then
+              echo "MISSING: $1"
+              failed=1
+            else
+              echo "OK: $1"
+            fi
+          }
+
+          check "$HOME/.claude/templates/investigation/evidence.md"
+          check "$HOME/.claude/templates/investigation/findings.md"
+          check "$HOME/.claude/templates/investigation/status.md"
+          check "$HOME/.claude/templates/investigation/presidio.yaml"
+          check "$HOME/.claude/templates/investigation/hooks/pre-commit-sanitize"
+          check "$HOME/.claude/scripts/sanitize.sh"
+
+          exit $failed
+
+      - name: "Verify sanitize.sh is executable"
+        run: |
+          script="$HOME/.claude/scripts/sanitize.sh"
+          if [ ! -x "$script" ]; then
+            echo "FAIL: $script is not executable"
+            ls -l "$script"
+            exit 1
+          fi
+          echo "OK: sanitize.sh is executable"
+
+      # ── Phase 3: Idempotency ─────────────────────────────────────
+
+      - name: "Re-install (idempotency check)"
+        run: bash install.sh --force
+
+      - name: "Verify files still intact after re-install"
+        run: |
+          test -f "$HOME/.claude/CLAUDE.md" && echo "OK: CLAUDE.md"
+          test -f "$HOME/.claude/templates/project-CLAUDE.md" && echo "OK: project-CLAUDE.md"
+          test -f "$HOME/.claude/templates/hooks/pre-commit" && echo "OK: pre-commit"
+
+      # ── Phase 4: Pre-commit hook integration ────────────────────
+
+      - name: "Pre-commit hook: clean commit passes"
+        run: |
+          repo=$(mktemp -d)
+          git init "$repo"
+          git -C "$repo" config user.email "ci@test"
+          git -C "$repo" config user.name "CI"
+          cp "$HOME/.claude/templates/hooks/pre-commit" "$repo/.git/hooks/pre-commit"
+          echo "hello world" > "$repo/clean.txt"
+          git -C "$repo" add clean.txt
+          git -C "$repo" commit -m "clean commit"
+          echo "OK: clean commit succeeded"
+
+      - name: "Pre-commit hook: blocks AWS keys"
+        run: |
+          repo=$(mktemp -d)
+          git init "$repo"
+          git -C "$repo" config user.email "ci@test"
+          git -C "$repo" config user.name "CI"
+          cp "$HOME/.claude/templates/hooks/pre-commit" "$repo/.git/hooks/pre-commit"
+          echo "aws_key = AKIAIOSFODNN7EXAMPLE" > "$repo/creds.txt"
+          git -C "$repo" add creds.txt
+          if git -C "$repo" commit -m "bad commit" 2>&1; then
+            echo "FAIL: hook should have blocked AWS key"
+            exit 1
+          fi
+          echo "OK: AWS key blocked"
+
+      - name: "Pre-commit hook: blocks .env files"
+        run: |
+          repo=$(mktemp -d)
+          git init "$repo"
+          git -C "$repo" config user.email "ci@test"
+          git -C "$repo" config user.name "CI"
+          cp "$HOME/.claude/templates/hooks/pre-commit" "$repo/.git/hooks/pre-commit"
+          echo "SECRET=foo" > "$repo/.env"
+          git -C "$repo" add .env
+          if git -C "$repo" commit -m "bad commit" 2>&1; then
+            echo "FAIL: hook should have blocked .env"
+            exit 1
+          fi
+          echo "OK: .env file blocked"
+
+      - name: "Pre-commit hook: blocks large files"
+        run: |
+          repo=$(mktemp -d)
+          git init "$repo"
+          git -C "$repo" config user.email "ci@test"
+          git -C "$repo" config user.name "CI"
+          cp "$HOME/.claude/templates/hooks/pre-commit" "$repo/.git/hooks/pre-commit"
+          dd if=/dev/zero of="$repo/big.bin" bs=1M count=6 2>/dev/null
+          git -C "$repo" add big.bin
+          if git -C "$repo" commit -m "bad commit" 2>&1; then
+            echo "FAIL: hook should have blocked 6MB file"
+            exit 1
+          fi
+          echo "OK: large file blocked"
+
+      # ── Phase 4b: Generic secret pattern ─────────────────────────
+
+      - name: "Pre-commit hook: blocks generic secrets"
+        run: |
+          repo=$(mktemp -d)
+          git init "$repo"
+          git -C "$repo" config user.email "ci@test"
+          git -C "$repo" config user.name "CI"
+          cp "$HOME/.claude/templates/hooks/pre-commit" "$repo/.git/hooks/pre-commit"
+          echo "password=supersecretvalue123" > "$repo/config.txt"
+          git -C "$repo" add config.txt
+          if git -C "$repo" commit -m "bad commit" 2>&1; then
+            echo "FAIL: hook should have blocked generic secret"
+            exit 1
+          fi
+          echo "OK: generic secret (password=...) blocked"
+
+      - name: "Pre-commit hook: allows short values (no false positive)"
+        run: |
+          repo=$(mktemp -d)
+          git init "$repo"
+          git -C "$repo" config user.email "ci@test"
+          git -C "$repo" config user.name "CI"
+          cp "$HOME/.claude/templates/hooks/pre-commit" "$repo/.git/hooks/pre-commit"
+          echo "token=short7" > "$repo/config.txt"
+          git -C "$repo" add config.txt
+          git -C "$repo" commit -m "clean commit"
+          echo "OK: short value (under 8 chars) not blocked"
+
+      # ── Phase 4c: .env variant patterns ──────────────────────────
+
+      - name: "Pre-commit hook: blocks .env.local"
+        run: |
+          repo=$(mktemp -d)
+          git init "$repo"
+          git -C "$repo" config user.email "ci@test"
+          git -C "$repo" config user.name "CI"
+          cp "$HOME/.claude/templates/hooks/pre-commit" "$repo/.git/hooks/pre-commit"
+          echo "SECRET=foo" > "$repo/.env.local"
+          git -C "$repo" add .env.local
+          if git -C "$repo" commit -m "bad commit" 2>&1; then
+            echo "FAIL: hook should have blocked .env.local"
+            exit 1
+          fi
+          echo "OK: .env.local blocked"
+
+      - name: "Pre-commit hook: blocks secrets.env"
+        run: |
+          repo=$(mktemp -d)
+          git init "$repo"
+          git -C "$repo" config user.email "ci@test"
+          git -C "$repo" config user.name "CI"
+          cp "$HOME/.claude/templates/hooks/pre-commit" "$repo/.git/hooks/pre-commit"
+          echo "SECRET=foo" > "$repo/secrets.env"
+          git -C "$repo" add secrets.env
+          if git -C "$repo" commit -m "bad commit" 2>&1; then
+            echo "FAIL: hook should have blocked secrets.env"
+            exit 1
+          fi
+          echo "OK: secrets.env blocked"
+
+      # ── Phase 5: Project scaffolding ─────────────────────────────
+
+      - name: "Scaffold a new project from templates"
+        run: |
+          proj=$(mktemp -d)
+          git init "$proj"
+
+          # Copy project CLAUDE.md (what /playbook project does)
+          cp "$HOME/.claude/templates/project-CLAUDE.md" "$proj/CLAUDE.md"
+
+          # Verify expected sections exist
+          grep -q "## Quality Gates" "$proj/CLAUDE.md"
+          grep -q "## Code Review" "$proj/CLAUDE.md"
+          grep -q "## Testing Strategy" "$proj/CLAUDE.md"
+          grep -q "## Project Conventions" "$proj/CLAUDE.md"
+          echo "OK: project CLAUDE.md has all expected sections"
+
+          # Install pre-commit hook (what /playbook project does)
+          mkdir -p "$proj/.git/hooks"
+          cp "$HOME/.claude/templates/hooks/pre-commit" "$proj/.git/hooks/pre-commit"
+          chmod +x "$proj/.git/hooks/pre-commit"
+          test -x "$proj/.git/hooks/pre-commit"
+          echo "OK: pre-commit hook installed and executable"
+
+      # ── Phase 6: Dogfood test ────────────────────────────────────
+
+      - name: "Dogfood: full user journey"
+        run: |
+          set -euo pipefail
+
+          # Use isolated HOME so nothing touches the real system
+          export HOME=$(mktemp -d)
+          echo "Using isolated HOME=$HOME"
+
+          # Install fresh
+          bash install.sh --force
+
+          # Create a sample project
+          proj=$(mktemp -d)
+          git init "$proj"
+          git -C "$proj" config user.email "ci@test"
+          git -C "$proj" config user.name "CI"
+
+          # Scaffold project (simulates /playbook project)
+          cp "$HOME/.claude/templates/project-CLAUDE.md" "$proj/CLAUDE.md"
+          mkdir -p "$proj/.git/hooks"
+          cp "$HOME/.claude/templates/hooks/pre-commit" "$proj/.git/hooks/pre-commit"
+          chmod +x "$proj/.git/hooks/pre-commit"
+
+          # Initial commit
+          echo "# Test Project" > "$proj/README.md"
+          git -C "$proj" add README.md CLAUDE.md
+          git -C "$proj" commit -m "initial commit"
+          echo "OK: initial commit succeeded"
+
+          # Make a code change and commit (hook should pass)
+          echo 'console.log("hello")' > "$proj/index.js"
+          git -C "$proj" add index.js
+          git -C "$proj" commit -m "add index.js"
+          echo "OK: code change commit passed hook"
+
+          # Verify no hardcoded paths in installed skills
+          if grep -rP 'C--Users-[^/]+' "$HOME/.claude/skills/" 2>/dev/null; then
+            echo "FAIL: hardcoded user-specific path found in skills"
+            exit 1
+          fi
+          echo "OK: no hardcoded paths in skills"
+
+          # Verify YAML frontmatter of skills is parseable
+          for skill in "$HOME/.claude/skills"/*/SKILL.md; do
+            [ -f "$skill" ] || continue
+            # Check opening ---
+            head -1 "$skill" | grep -q '^---$' || {
+              echo "FAIL: $skill missing opening ---"
+              exit 1
+            }
+            # Check closing --- exists within first 10 lines
+            head -10 "$skill" | tail -n +2 | grep -q '^---$' || {
+              echo "FAIL: $skill missing closing ---"
+              exit 1
+            }
+            # Check allowed-tools is present
+            head -10 "$skill" | grep -q '^allowed-tools:' || {
+              echo "FAIL: $skill missing allowed-tools"
+              exit 1
+            }
+            echo "OK: $skill frontmatter valid"
+          done
+
+      - name: "Scaffold an investigation (research profile)"
+
+        run: |
+          inv_dir="$HOME/.claude/investigations/TEST-001"
+          mkdir -p "$inv_dir/EVIDENCE"
+
+          # Copy brief template (what /investigate new does)
+          cp "$HOME/.claude/templates/investigation/brief.md" "$inv_dir/BRIEF.md"
+
+          # Verify brief template structure
+          grep -q "## Question" "$inv_dir/BRIEF.md"
+          grep -q "## Scope" "$inv_dir/BRIEF.md"
+          grep -q "## Context" "$inv_dir/BRIEF.md"
+          echo "OK: investigation brief has expected sections"
+
+          # Simulate collecting evidence (numbered files)
+          echo "Source: test" > "$inv_dir/EVIDENCE/001-initial-finding.md"
+          echo "Source: test" > "$inv_dir/EVIDENCE/002-follow-up.md"
+          test -f "$inv_dir/EVIDENCE/001-initial-finding.md"
+          test -f "$inv_dir/EVIDENCE/002-follow-up.md"
+          echo "OK: evidence files created with sequential numbering"
+
+          # Verify investigation lives under _patterns parent
+          test -d "$HOME/.claude/investigations/_patterns"
+          echo "OK: _patterns directory exists for cross-investigation patterns"
+
+      # ── Phase 7: Knowledge repo integration ─────────────────────
+
+      - name: "Knowledge repo: install with --knowledge-repo"
+        run: |
+          set -euo pipefail
+
+          # Use isolated HOME
+          export HOME=$(mktemp -d)
+          echo "Using isolated HOME=$HOME"
+
+          # Create a bare git repo as a dummy knowledge source
+          bare_repo=$(mktemp -d)
+          git init --bare "$bare_repo"
+
+          # Seed it with a sample entry
+          work=$(mktemp -d)
+          git clone "$bare_repo" "$work"
+          git -C "$work" config user.email "ci@test"
+          git -C "$work" config user.name "CI"
+          mkdir -p "$work/entries/20260222-test-entry"
+          cat > "$work/entries/20260222-test-entry/entry.md" << 'ENTRY'
+          ---
+          id: "20260222-test-entry"
+          tool: "git"
+          category: "gotcha"
+          tags: ["test"]
+          confidence: "high"
+          ---
+          # Test Entry
+          This is a test knowledge entry for CI.
+          ENTRY
+          git -C "$work" add .
+          git -C "$work" commit -m "seed entry"
+          git -C "$work" push
+
+          # Run install with --knowledge-repo pointing to local bare repo
+          bash install.sh --force --knowledge-repo "$bare_repo"
+
+          # Verify knowledge directory exists and has entries
+          test -d "$HOME/.claude/knowledge/.git" && echo "OK: knowledge repo cloned (.git exists)"
+          test -d "$HOME/.claude/knowledge/entries" && echo "OK: entries directory exists"
+          test -f "$HOME/.claude/knowledge/entries/20260222-test-entry/entry.md" && echo "OK: seeded entry present"
+
+      - name: "Pre-install validation: missing node detected"
+        run: |
+          # Hide node by prepending a directory with a fake node that exits 127
+          hide_dir=$(mktemp -d)
+          cat > "$hide_dir/node" << 'FAKE'
+          #!/bin/sh
+          exit 127
+          FAKE
+          # Remove the fake — we just need node absent, not faked
+          rm "$hide_dir/node"
+
+          # Create a minimal PATH with only basic tools (no node)
+          export PATH="$hide_dir:/usr/bin:/bin"
+          output=$(bash install.sh --dry-run 2>&1 || true)
+          echo "$output"
+          if echo "$output" | grep -q "not found on PATH"; then
+            echo "OK: install.sh detects missing node"
+          else
+            echo "FAIL: expected 'not found on PATH' error"
+            exit 1
+          fi
+
+      # ── Phase 8: Session hooks syntax validation ─────────────────
+
+      - name: "Session hooks: JavaScript syntax valid"
+        run: |
+          node --check "$HOME/.claude/hooks/session-start.js"
+          echo "OK: session-start.js parses correctly"
+          node --check "$HOME/.claude/hooks/session-end.js"
+          echo "OK: session-end.js parses correctly"
+
+  test-suites:
+    runs-on: ubuntu-latest
+    name: All test suites
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Hook tests
+        run: for t in tests/hooks/*.test.js; do node "$t" || exit 1; done
+      - name: Fleet tests
+        run: for t in tests/fleet/*.test.js; do node "$t" || exit 1; done
+      - name: Script tests
+        run: for t in tests/scripts/*.test.sh; do bash "$t" || exit 1; done
+      - name: Skill tests (bash)
+        run: for t in tests/skills/*.test.sh; do bash "$t" || exit 1; done
+      - name: Skill tests (node)
+        run: for t in tests/skills/*.test.js; do node "$t" || exit 1; done
+
+  test-investigate:
+    runs-on: ubuntu-latest
+    name: Investigation scorer tests
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run investigation scorer tests
+        run: node tests/investigate/score.test.js

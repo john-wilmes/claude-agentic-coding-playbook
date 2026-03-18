@@ -1,0 +1,4 @@
+# markdownlint-cli2 configuration
+# Rule config lives in .markdownlint.yml; this file handles ignores.
+
+ignores: []

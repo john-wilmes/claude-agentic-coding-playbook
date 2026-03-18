@@ -1,0 +1,31 @@
+{
+  "repos": [
+    "owner/frontend",
+    "owner/backend",
+    "owner/shared-libs"
+  ],
+  "docs": [
+    {
+      "name": "internal-docs",
+      "url": "https://docs.yourcompany.com/mcp",
+      "description": "Internal engineering documentation"
+    }
+  ],
+  "sanitization": {
+    "mcp_proxy": {
+      "description": "Wrap sensitive MCP servers with MCP Conceal to redact PII before it reaches the agent",
+      "example": "npx -y mcp-conceal -- npx -y zd-mcp-server",
+      "docs": "https://github.com/nicobailey/mcp-conceal"
+    },
+    "llm_proxy": {
+      "description": "Route all LLM traffic through LiteLLM+Presidio for blanket PII scanning",
+      "env": "ANTHROPIC_BASE_URL=http://localhost:4000",
+      "docs": "https://docs.litellm.ai/docs/proxy/guardrails/presidio"
+    },
+    "on_demand": {
+      "description": "Enable the presidio MCP server for agent-initiated PII/PHI detection",
+      "enable": "Set presidio.disabled to false in ~/.claude/settings.json",
+      "docs": "https://github.com/cmalpass/mcp-presidio"
+    }
+  }
+}

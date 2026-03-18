@@ -1,0 +1,107 @@
+name: Validate Knowledge Entries
+on:
+  pull_request:
+    paths: ['entries/**']
+  push:
+    branches: [main]
+    paths: ['entries/**']
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate YAML frontmatter
+        run: |
+          errors=0
+          for entry in entries/*/entry.md; do
+            [ -f "$entry" ] || continue
+
+            # Check frontmatter exists
+            if ! head -1 "$entry" | grep -q '^---$'; then
+              echo "ERROR: $entry missing YAML frontmatter"
+              errors=$((errors + 1))
+              continue
+            fi
+
+            # Extract frontmatter
+            fm=$(sed -n '/^---$/,/^---$/p' "$entry" | sed '1d;$d')
+
+            # Check required fields
+            for field in id created author tool category confidence; do
+              if ! echo "$fm" | grep -q "^${field}:"; then
+                echo "ERROR: $entry missing required field: $field"
+                errors=$((errors + 1))
+              fi
+            done
+
+            # Validate category
+            cat_val=$(echo "$fm" | grep '^category:' | sed 's/^category:\s*//' | tr -d '"'"'"' ')
+            case "$cat_val" in
+              gotcha|pattern|workaround|config|security|performance) ;;
+              *) echo "ERROR: $entry invalid category: $cat_val"; errors=$((errors + 1)) ;;
+            esac
+
+            # Validate confidence
+            conf_val=$(echo "$fm" | grep '^confidence:' | sed 's/^confidence:\s*//' | tr -d '"'"'"' ')
+            case "$conf_val" in
+              high|medium|low) ;;
+              *) echo "ERROR: $entry invalid confidence: $conf_val"; errors=$((errors + 1)) ;;
+            esac
+          done
+
+          echo "Validated $(find entries -name 'entry.md' | wc -l) entries, $errors errors"
+          [ $errors -eq 0 ]
+
+      - name: Sensitivity scan
+        run: |
+          errors=0
+          for entry in entries/*/entry.md; do
+            [ -f "$entry" ] || continue
+
+            # Check for API key patterns
+            if grep -qE 'AKIA[0-9A-Z]{16}' "$entry"; then
+              echo "BLOCKED: $entry contains AWS access key pattern"
+              errors=$((errors + 1))
+            fi
+
+            # Check for generic secret patterns
+            if grep -qiE '(password|secret|token|api_key|apikey)\s*[=:]\s*["'"'"']?[A-Za-z0-9+/]{8,}' "$entry"; then
+              echo "BLOCKED: $entry may contain credentials"
+              errors=$((errors + 1))
+            fi
+
+            # Check for email addresses
+            if grep -qE '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}' "$entry"; then
+              echo "WARNING: $entry contains email address"
+              # Don't fail on emails, just warn
+            fi
+
+            # Check for absolute paths with usernames
+            if grep -qE '/(home|Users)/[a-zA-Z0-9_-]+/' "$entry"; then
+              echo "WARNING: $entry contains absolute user path"
+            fi
+          done
+
+          [ $errors -eq 0 ]
+
+      - name: Check for duplicates
+        run: |
+          # Extract tool+first-line-of-context as signature
+          declare -A signatures
+          dupes=0
+          for entry in entries/*/entry.md; do
+            [ -f "$entry" ] || continue
+            tool=$(sed -n '/^---$/,/^---$/p' "$entry" | grep '^tool:' | sed 's/^tool:\s*//' | tr -d '"'"'"' ')
+            context_line=$(sed -n '/^## Context$/,/^## /p' "$entry" | sed '1d;/^## /d' | head -1 | tr -d '[:space:]')
+            sig="${tool}:${context_line}"
+            if [ -n "${signatures[$sig]:-}" ]; then
+              echo "POSSIBLE DUPLICATE: $entry matches ${signatures[$sig]}"
+              dupes=$((dupes + 1))
+            else
+              signatures[$sig]="$entry"
+            fi
+          done
+          echo "Found $dupes possible duplicates"
+          # Don't fail on duplicates, just report

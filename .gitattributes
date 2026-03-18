@@ -1,0 +1,4 @@
+*.sh text eol=lf
+profiles/*/templates/hooks/* text eol=lf
+templates/hooks/* text eol=lf
+templates/knowledge/* text eol=lf
