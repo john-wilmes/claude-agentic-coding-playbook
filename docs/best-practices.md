@@ -2109,14 +2109,9 @@ chmod +x install.sh
 ./install.sh
 ```
 
-### Profile descriptions
+### Profile
 
-The install script supports multiple profiles:
-
-| Profile | Description |
-|---|---|
-| `dev` | Full development setup: CLAUDE.md, skills, templates, security config |
-| `research` | Structured investigation workflow: evidence collection, tagging, PHI sanitization |
+The install script uses a single `combined` profile (`profiles/combined/`) that covers both development and research workflows. It installs the combined CLAUDE.md, all skills, templates, hooks, and security config in one step.
 
 ### Wizard mode for existing users
 
