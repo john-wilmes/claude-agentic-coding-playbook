@@ -165,7 +165,7 @@ Standalone tools installed to `~/.local/bin/`:
 | Script | Description |
 |--------|-------------|
 | `q` | Lightweight CLI for direct Anthropic API Q&A. Uses Haiku by default for fast, cheap answers. |
-| `qa` | Multi-turn conversational wrapper around `q` with session history. |
+| `qa` | File-capable agentic CLI using the Anthropic API with tool use (bash + text editor). No hooks or MCP. |
 | `claude-loop` | Auto-restart wrapper for Claude Code sessions. Supports `--task-queue` for batch execution. |
 
 ## Log Analysis
