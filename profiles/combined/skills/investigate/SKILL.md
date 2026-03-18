@@ -335,7 +335,7 @@ Read all evidence files. Write FINDINGS.md:
 After writing FINDINGS.md, run the citation checker script:
 
 ```bash
-bash scripts/check-citations.sh "$INVESTIGATIONS_DIR" "{ID}"
+bash ~/.claude/skills/investigate/scripts/check-citations.sh "$INVESTIGATIONS_DIR" "{ID}"
 ```
 
 If `check-citations.sh` is not found at the expected path, skip automated self-assessment. Instead, manually review the evidence files and check that each finding cites at least one evidence number.

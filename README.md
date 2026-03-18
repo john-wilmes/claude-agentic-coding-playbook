@@ -79,7 +79,7 @@ The installer **will not overwrite** existing skills or configuration without pr
 ### Skills
 
 **Development:**
-- **`/checkpoint`** -- Save all work, update memory with Current Work section, commit, push. Designed for clean session handoffs.
+- **`/checkpoint`** -- Save all work, update memory with Current Work section, commit, push, and run a devil's advocate check. Designed for clean session handoffs.
 - **`/create-project`** -- Scaffold a new project with git, .gitignore, CLAUDE.md, AGENTS.md, GitHub repo. Projects are created as siblings to `.claude/`.
 - **`/playbook`** -- Analyze your CLAUDE.md configuration and suggest improvements. Modes: `global`, `project`, `check`.
 - **`/learn`** -- Capture a non-obvious lesson as a structured knowledge entry for future sessions.

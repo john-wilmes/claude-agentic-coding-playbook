@@ -584,10 +584,6 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
     echo "claude-loop: signal received but sentinel found — will restart."
   fi
 
-  # Reset signal state for next iteration
-  SIGNAL_RECEIVED=false
-  SIGNAL_COUNT=0
-
   SESSION_COUNT="$(( SESSION_COUNT + 1 ))"
 
   # ── Check for sentinel ────────────────────────────────────────────────────
@@ -661,6 +657,10 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
     echo "claude-loop: claude exited without sentinel (exit ${EXIT_CODE}), stopping."
     LOOP_RUNNING=false
   fi
+
+  # Reset signal state for next iteration (after task-queue and restart-decision logic)
+  SIGNAL_RECEIVED=false
+  SIGNAL_COUNT=0
 
 done
 
