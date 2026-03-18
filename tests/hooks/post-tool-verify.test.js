@@ -137,6 +137,40 @@ test("8. config.yaml -> true (should skip)", (env) => {
   assert.strictEqual(shouldSkipFile("config.yaml"), true);
 });
 
+test("8b. .wslconfig -> true (dotfile, should skip)", (env) => {
+  const shouldSkipFile = extractFunction(POST_TOOL_VERIFY, "shouldSkipFile");
+  assert.strictEqual(shouldSkipFile("/mnt/c/Users/john/.wslconfig"), true);
+});
+
+test("8c. .gitignore -> true (dotfile, should skip)", (env) => {
+  const shouldSkipFile = extractFunction(POST_TOOL_VERIFY, "shouldSkipFile");
+  assert.strictEqual(shouldSkipFile(".gitignore"), true);
+});
+
+test("8d. .env.local -> true (dotfile, should skip)", (env) => {
+  const shouldSkipFile = extractFunction(POST_TOOL_VERIFY, "shouldSkipFile");
+  assert.strictEqual(shouldSkipFile("/home/user/project/.env.local"), true);
+});
+
+// ─── Unit tests: isOutOfProject ───────────────────────────────────────────────
+
+console.log("\nisOutOfProject:");
+
+test("8e. file inside cwd -> false (should NOT skip)", (env) => {
+  const isOutOfProject = extractFunction(POST_TOOL_VERIFY, "isOutOfProject");
+  assert.strictEqual(isOutOfProject("/home/user/project/src/app.ts", "/home/user/project"), false);
+});
+
+test("8f. file outside cwd -> true (should skip)", (env) => {
+  const isOutOfProject = extractFunction(POST_TOOL_VERIFY, "isOutOfProject");
+  assert.strictEqual(isOutOfProject("/mnt/c/Users/john/.wslconfig", "/home/user/project"), true);
+});
+
+test("8g. file in parent dir -> true (should skip)", (env) => {
+  const isOutOfProject = extractFunction(POST_TOOL_VERIFY, "isOutOfProject");
+  assert.strictEqual(isOutOfProject("/home/user/other/file.js", "/home/user/project"), true);
+});
+
 // ─── Integration tests via runHook ───────────────────────────────────────────
 
 console.log("\nintegration (runHook):");
@@ -227,6 +261,50 @@ test("12. Read tool -> hook skips entirely (no additionalContext)", (env) => {
     assert.strictEqual(result.json.decision, undefined, "PostToolUse should not use decision field");
   } finally {
     try { fs.rmSync(projDir, { recursive: true, force: true }); } catch {}
+  }
+});
+
+test("12b. Write on dotfile (.wslconfig) -> hook skips (no test run)", (env) => {
+  const projDir = createTempProject("## Quality Gates\n\nTest: `node -e 'process.exit(0)'`\n");
+
+  try {
+    const result = runHook(POST_TOOL_VERIFY, {
+      tool_name: "Write",
+      tool_input: { file_path: path.join(projDir, ".wslconfig") },
+      session_id: "test-session-12b",
+      cwd: projDir,
+    }, { HOME: env.home, USERPROFILE: env.home });
+
+    assert.strictEqual(result.status, 0);
+    assert.ok(result.json, "Should output valid JSON");
+    const ctx = result.json.hookSpecificOutput && result.json.hookSpecificOutput.additionalContext;
+    assert.ok(!ctx, `Dotfile should not trigger tests, got: ${ctx}`);
+  } finally {
+    try { fs.rmSync(projDir, { recursive: true, force: true }); } catch {}
+  }
+});
+
+test("12c. Edit on file outside cwd -> hook skips (no test run)", (env) => {
+  const projDir = createTempProject("## Quality Gates\n\nTest: `node -e 'process.exit(0)'`\n");
+  const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "verify-outside-"));
+  const outsideFile = path.join(outsideDir, "app.ts");
+  fs.writeFileSync(outsideFile, "export const x = 1;\n");
+
+  try {
+    const result = runHook(POST_TOOL_VERIFY, {
+      tool_name: "Edit",
+      tool_input: { file_path: outsideFile },
+      session_id: "test-session-12c",
+      cwd: projDir,
+    }, { HOME: env.home, USERPROFILE: env.home });
+
+    assert.strictEqual(result.status, 0);
+    assert.ok(result.json, "Should output valid JSON");
+    const ctx = result.json.hookSpecificOutput && result.json.hookSpecificOutput.additionalContext;
+    assert.ok(!ctx, `File outside cwd should not trigger tests, got: ${ctx}`);
+  } finally {
+    try { fs.rmSync(projDir, { recursive: true, force: true }); } catch {}
+    try { fs.rmSync(outsideDir, { recursive: true, force: true }); } catch {}
   }
 });
 

@@ -56,7 +56,8 @@ Investigations live at `~/.claude/investigations/<id>/`. Use `/investigate` to m
 - Use `/rewind` or double-Escape to undo actions and roll back context.
 - Proactively suggest `/compact` when you notice context growing large (many tool results, long exploration).
 - Proactively suggest `/checkpoint` at natural breakpoints: after completing a feature, fixing a bug, or finishing a refactor.
-- SessionStart automatically injects memory and context at session start. Use `/continue` to pick up where the last session left off — it reads the injected context and starts working immediately.
+- SessionStart automatically injects memory and context at session start including Current Work and Next Steps from the previous session.
+- When the user's first message indicates a crashed or interrupted session (e.g., "you died", "you crashed", "continue", "pick up where I left off"), invoke the `/continue` skill immediately — do not summarize state or ask what to do.
 - For research investigations, use `/investigate` to manage the lifecycle.
 
 ## Reasoning Standards
