@@ -13,7 +13,9 @@ const os = require("os");
 
 // ─── Fallback paths (backward compat) ────────────────────────────────────────
 
-const STAGED_DIR = path.join(os.homedir(), ".claude", "knowledge", "staged");
+function getStagedDir() {
+  return path.join(os.homedir(), ".claude", "knowledge", "staged");
+}
 
 // ─── DB setup (try knowledge-db; fall back to JSONL) ─────────────────────────
 
@@ -41,7 +43,7 @@ function _getDb() {
 
 function ensureStagedDir() {
   try {
-    fs.mkdirSync(STAGED_DIR, { recursive: true });
+    fs.mkdirSync(getStagedDir(), { recursive: true });
     return true;
   } catch {
     return false;
@@ -62,13 +64,13 @@ function _jsonlStageCandidate(candidate) {
     source_project: candidate.source_project || "",
     cwd: candidate.cwd || "",
   };
-  const filePath = path.join(STAGED_DIR, `${candidate.session_id}.jsonl`);
+  const filePath = path.join(getStagedDir(), `${candidate.session_id}.jsonl`);
   fs.appendFileSync(filePath, JSON.stringify(record) + "\n", "utf8");
 }
 
 function _jsonlReadStagedCandidates(sessionId) {
   try {
-    const filePath = path.join(STAGED_DIR, `${sessionId}.jsonl`);
+    const filePath = path.join(getStagedDir(), `${sessionId}.jsonl`);
     const raw = fs.readFileSync(filePath, "utf8");
     const results = [];
     for (const line of raw.split("\n")) {
@@ -87,16 +89,16 @@ function _jsonlReadStagedCandidates(sessionId) {
 }
 
 function _jsonlClearStagedCandidates(sessionId) {
-  const filePath = path.join(STAGED_DIR, `${sessionId}.jsonl`);
+  const filePath = path.join(getStagedDir(), `${sessionId}.jsonl`);
   fs.rmSync(filePath, { force: true });
 }
 
 function _jsonlPruneStagedFiles(maxAgeDays) {
   const cutoffMs = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
-  const entries = fs.readdirSync(STAGED_DIR, { withFileTypes: true });
+  const entries = fs.readdirSync(getStagedDir(), { withFileTypes: true });
   for (const entry of entries) {
     if (!entry.isFile() || !entry.name.endsWith(".jsonl")) continue;
-    const filePath = path.join(STAGED_DIR, entry.name);
+    const filePath = path.join(getStagedDir(), entry.name);
     try {
       const stat = fs.statSync(filePath);
       if (stat.mtimeMs < cutoffMs) {
@@ -196,7 +198,7 @@ function pruneStagedFiles(maxAgeDays) {
 }
 
 module.exports = {
-  STAGED_DIR,
+  getStagedDir,
   get DB_PATH() { return knowledgeDb ? path.join(os.homedir(), ".claude", "knowledge", "knowledge.db") : null; },
   stageCandidate,
   readStagedCandidates,

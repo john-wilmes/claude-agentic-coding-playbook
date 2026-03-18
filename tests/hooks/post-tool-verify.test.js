@@ -142,7 +142,7 @@ test("8. config.yaml -> true (should skip)", (env) => {
 console.log("\nintegration (runHook):");
 
 test("9. Edit on .ts file in project with test command -> hook runs (additionalContext present)", (env) => {
-  const projDir = createTempProject("## Quality Gates\n\nTest: `echo PASS`\n");
+  const projDir = createTempProject("## Quality Gates\n\nTest: `node -e 'process.exit(0)'`\n");
   fs.writeFileSync(path.join(projDir, "app.ts"), "export const x = 1;\n");
 
   try {
@@ -167,7 +167,7 @@ test("9. Edit on .ts file in project with test command -> hook runs (additionalC
 });
 
 test("10. Edit on .md file -> hook skips (no additionalContext about tests)", (env) => {
-  const projDir = createTempProject("## Quality Gates\n\nTest: `echo PASS`\n");
+  const projDir = createTempProject("## Quality Gates\n\nTest: `node -e 'process.exit(0)'`\n");
 
   try {
     const result = runHook(POST_TOOL_VERIFY, {
@@ -188,7 +188,7 @@ test("10. Edit on .md file -> hook skips (no additionalContext about tests)", (e
 });
 
 test("11. Write tool on .js file -> hook runs (additionalContext present)", (env) => {
-  const projDir = createTempProject("## Quality Gates\n\nTest: `echo PASS`\n");
+  const projDir = createTempProject("## Quality Gates\n\nTest: `node -e 'process.exit(0)'`\n");
   fs.writeFileSync(path.join(projDir, "util.js"), "module.exports = {};\n");
 
   try {
@@ -209,7 +209,7 @@ test("11. Write tool on .js file -> hook runs (additionalContext present)", (env
 });
 
 test("12. Read tool -> hook skips entirely (no additionalContext)", (env) => {
-  const projDir = createTempProject("## Quality Gates\n\nTest: `echo PASS`\n");
+  const projDir = createTempProject("## Quality Gates\n\nTest: `node -e 'process.exit(0)'`\n");
 
   try {
     const result = runHook(POST_TOOL_VERIFY, {
@@ -255,7 +255,7 @@ test("13. No CLAUDE.md in project -> hook skips gracefully", (env) => {
 console.log("\nknowledge capture (runHook):");
 
 test("14. fail→pass transition stages a knowledge candidate", (env) => {
-  const projDir = createTempProject("## Quality Gates\n\nTest: `echo PASS`\n");
+  const projDir = createTempProject("## Quality Gates\n\nTest: `node -e 'process.exit(0)'`\n");
   const stagedDir = createStagedDir(env.home);
 
   // Pre-populate debounce state with lastPassed=false so the hook sees a fail→pass transition.
@@ -306,7 +306,7 @@ test("14. fail→pass transition stages a knowledge candidate", (env) => {
 });
 
 test("15. pass→pass does not stage a candidate", (env) => {
-  const projDir = createTempProject("## Quality Gates\n\nTest: `echo PASS`\n");
+  const projDir = createTempProject("## Quality Gates\n\nTest: `node -e 'process.exit(0)'`\n");
   const stagedDir = createStagedDir(env.home);
 
   // Pre-populate debounce state with lastPassed=true
@@ -349,7 +349,7 @@ test("15. pass→pass does not stage a candidate", (env) => {
 console.log("\ndebounce and timeout (runHook):");
 
 test("16. Debounce: second Edit within 10s skips test run (returns {})", (env) => {
-  const projDir = createTempProject("## Quality Gates\n\nTest: `echo PASS`\n");
+  const projDir = createTempProject("## Quality Gates\n\nTest: `node -e 'process.exit(0)'`\n");
   fs.writeFileSync(path.join(projDir, "app.ts"), "export const x = 1;\n");
 
   // The hook uses per-session debounce files in /tmp/claude-post-tool-verify/<sessionId>.json.
@@ -382,7 +382,7 @@ test("16. Debounce: second Edit within 10s skips test run (returns {})", (env) =
 });
 
 test("17. Debounce: Edit after debounce window expires runs tests again", (env) => {
-  const projDir = createTempProject("## Quality Gates\n\nTest: `echo PASS`\n");
+  const projDir = createTempProject("## Quality Gates\n\nTest: `node -e 'process.exit(0)'`\n");
   fs.writeFileSync(path.join(projDir, "app.ts"), "export const x = 1;\n");
 
   // Write a per-session debounce entry with a timestamp older than DEBOUNCE_MS (10s)
@@ -424,7 +424,7 @@ test("18. Timeout: test command that exceeds TEST_TIMEOUT_MS is treated as failu
   // to verify failure handling — and a separate check for the timeout code path using
   // a very short sleep that would exceed a hypothetically tiny timeout.
   // Here we verify the failure path: a failing test command produces "Tests failed" output.
-  const projDir = createTempProject("## Quality Gates\n\nTest: `exit 1`\n");
+  const projDir = createTempProject("## Quality Gates\n\nTest: `node -e 'process.exit(1)'`\n");
   fs.writeFileSync(path.join(projDir, "app.ts"), "export const x = 1;\n");
 
   try {
