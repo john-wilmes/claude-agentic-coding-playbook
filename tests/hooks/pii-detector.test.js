@@ -397,14 +397,43 @@ test("27. loadConfig with missing sanitization key returns null", () => {
 });
 
 // 28. detectPII with invalid custom pattern regex does not crash
-test("28. detectPII with invalid custom pattern regex does not crash", () => {
-  const customPatterns = [{ name: "BAD", regex: "[invalid(", placeholder: "[BAD]" }];
+test("28. detectPII with invalid custom pattern regex does not crash", () => {  const customPatterns = [{ name: "BAD", regex: "[invalid(", placeholder: "[BAD]" }];
   const text = "Some text here.";
   let result;
   assert.doesNotThrow(() => {
     result = detectPII(text, null, customPatterns);
   }, "Should not throw on invalid regex");
   assert.ok(Array.isArray(result), "Should return an array");
+});
+
+// 29. Version strings do NOT trigger phone detection
+test("29. Version strings do not trigger phone detection", () => {
+  const shouldNotMatch = [
+    "node:18.5.0",
+    "version 1.2.3",
+    "v2.34.567.8901",
+    "v1.800.555.1234",
+    "2.0.0-1234",
+    "1.2.3.4567",
+  ];
+  for (const text of shouldNotMatch) {
+    const phones = detectPII(text).filter(d => d.entity === "PHONE_US");
+    assert.strictEqual(phones.length, 0, `Should not detect phone in version string: ${text}`);
+  }
+});
+
+// 30. Legitimate toll-free and international numbers still detected in prose
+test("30. Toll-free and international phone numbers detected in prose", () => {
+  const shouldMatch = [
+    ["call 1-800-555-1234",  "1-800-555-1234"],
+    ["dial +1-555-123-4567", "+1-555-123-4567"],
+    ["+1 (555) 123-4567",    "+1 (555) 123-4567"],
+  ];
+  for (const [text, expectedMatch] of shouldMatch) {
+    const phones = detectPII(text).filter(d => d.entity === "PHONE_US");
+    assert.ok(phones.length >= 1, `Should detect phone in: ${text}`);
+    assert.strictEqual(phones[0].match, expectedMatch, `Match should be ${expectedMatch}`);
+  }
 });
 
 // ─── Summary ──────────────────────────────────────────────────────────────────

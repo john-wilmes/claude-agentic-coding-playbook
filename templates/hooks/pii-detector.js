@@ -57,8 +57,16 @@ const PATTERNS = {
     // \b before the area code only applies when it starts with a digit (no parens).
     // The alternation handles both "(555) 867-5309" and "555-867-5309".
     // Dot removed from separators to avoid matching version strings like "2.0.0-1234".
-    regex: /(?<!\d)(?:\+?1[-\s]?)?(?:\(\d{3}\)[-\s]?|\b\d{3}[-\s])\d{3}[-\s]?\d{4}\b/g,
+    // Negative lookbehind (?<![.\d]) rejects matches like "v1.800.555.1234" where
+    // the area code is preceded by a dot (version-string context).
+    regex: /(?<![.\d])(?:\+?1[-\s])?(?:\(\d{3}\)[-\s]?|\d{3}[-\s])\d{3}[-\s]\d{4}\b/g,
     placeholder: "[PHONE]",
+    validate(match) {
+      // Reject if the match looks like a version segment: all separators are dots
+      // (already excluded by regex) or if it's a pure digit run with no separators.
+      // Additional guard: require at least one hyphen, space, or paren in the match.
+      return /[-\s()]/.test(match);
+    },
   },
   CREDIT_CARD: {
     // Requires separator pattern (spaces or hyphens between groups) like real card numbers.
