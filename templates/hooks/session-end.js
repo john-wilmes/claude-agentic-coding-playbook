@@ -120,9 +120,12 @@ process.stdin.on("end", () => {
           additionalContext: `WARNING: memory auto-push failed: ${pushFailureMsg}`,
         },
       }));
+    } else {
+      process.stdout.write("{}");
     }
   } catch (err) {
     logEntry(`error: ${err.message}`);
+    process.stdout.write("{}");
   }
 
   process.exit(0);

@@ -131,7 +131,7 @@ test("11. Hook outputs {} when CLAUDE.md has no test command", () => {
   }
 });
 
-test("12. Hook exits 2 with feedback when tests fail", () => {
+test("12. Hook exits 0 with feedback when tests fail", () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "gate-test-fail-"));
   try {
     fs.writeFileSync(
@@ -143,7 +143,7 @@ test("12. Hook exits 2 with feedback when tests fail", () => {
       agent_id: "agent-abc",
       cwd: tmpDir,
     });
-    assert.strictEqual(result.status, 2, "Should exit 2 when tests fail");
+    assert.strictEqual(result.status, 0, "Should exit 0 when tests fail (exit 0 always)");
     assert.ok(result.json, "Should output valid JSON");
     assert.ok(result.json.hookSpecificOutput, "Should have hookSpecificOutput");
     assert.ok(
