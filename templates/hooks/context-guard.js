@@ -58,7 +58,7 @@ function saveState(stateFile, state) {
 
 /**
  * Read the most recent assistant message's usage from the transcript JSONL.
- * Reads only the last 512KB to handle large transcripts efficiently.
+ * Reads only the last 512KB (512 * 1024 bytes) to handle large transcripts efficiently.
  *
  * NOTE: The transcript JSONL schema is undocumented and may change between
  * Claude Code versions. This function gracefully returns null on any parse
