@@ -176,10 +176,11 @@ ensure_command() {
 missing=0
 ensure_command git || missing=1
 ensure_command node || missing=1
+ensure_command python3 || missing=1
 
 if [ "$missing" -eq 1 ]; then
   echo ""
-  echo "Required: git, node (v18+). Could not auto-install. Install manually and re-run."
+  echo "Required: git, node (v18+), python3 (required by claude-loop and q scripts). Could not auto-install. Install manually and re-run."
   exit 1
 fi
 
