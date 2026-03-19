@@ -784,6 +784,43 @@ if [ -f "$SCRIPT_DIR/templates/hooks/pre-compact.js" ]; then
   fi
 fi
 
+# Post-compact context injection hook (PostCompact -- re-injects memory context after compaction)
+if [ -f "$SCRIPT_DIR/templates/hooks/post-compact.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/post-compact.js" "$CLAUDE_DIR/hooks/post-compact.js" "post-compact hook: post-compact.js"
+
+  echo ""
+  echo "--- Configuring post-compact in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  POSTCOMPACT_CMD="node $CLAUDE_DIR/hooks/post-compact.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add PostCompact hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    if grep -q "post-compact" "$SETTINGS_FILE" 2>/dev/null; then
+      echo "ALREADY CONFIGURED: post-compact hook in settings.json"
+    else
+      node -e "
+        const fs = require('fs');
+        const path = require('path');
+        const settingsPath = path.resolve(process.argv[1]);
+        const hookCmd = process.argv[2];
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (!settings.hooks) settings.hooks = {};
+        if (!settings.hooks.PostCompact) settings.hooks.PostCompact = [];
+        settings.hooks.PostCompact.push({
+          hooks: [{ type: 'command', command: hookCmd, timeout: 5 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      " "$SETTINGS_FILE" "$POSTCOMPACT_CMD"
+      echo "CONFIGURED: post-compact hook in settings.json"
+    fi
+  fi
+fi
+
 # Stuck detector hook (PreToolUse -- blocks/warns when agent repeats the same action in a row)
 if [ -f "$SCRIPT_DIR/templates/hooks/stuck-detector.js" ]; then
   install_file "$SCRIPT_DIR/templates/hooks/stuck-detector.js" "$CLAUDE_DIR/hooks/stuck-detector.js" "stuck detector: stuck-detector.js"
@@ -1120,6 +1157,38 @@ if [ -f "$SCRIPT_DIR/templates/hooks/task-completed-gate.js" ]; then
         fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
       " "$SETTINGS_FILE" "$TASKGATE_CMD"
       echo "CONFIGURED: task-completed-gate hook in settings.json (TaskCompleted)"
+    fi
+  fi
+fi
+
+# Teammate idle nudge hook (TeammateIdle -- nudges idle teammates to check TaskList)
+if [ -f "$SCRIPT_DIR/templates/hooks/teammate-idle.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/teammate-idle.js" "$CLAUDE_DIR/hooks/teammate-idle.js" "teammate idle hook: teammate-idle.js"
+
+  echo ""
+  echo "--- Configuring teammate-idle in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  TEAMIDLE_CMD="node $CLAUDE_DIR/hooks/teammate-idle.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add TeammateIdle hook to $SETTINGS_FILE"
+  else
+    if [ -f "$SETTINGS_FILE" ] && grep -q "teammate-idle" "$SETTINGS_FILE" 2>/dev/null; then
+      echo "ALREADY CONFIGURED: teammate-idle hook in settings.json"
+    else
+      node -e "
+        const fs = require('fs');
+        const settingsPath = process.argv[1];
+        const hookCmd = process.argv[2];
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (!settings.hooks) settings.hooks = {};
+        if (!settings.hooks.TeammateIdle) settings.hooks.TeammateIdle = [];
+        settings.hooks.TeammateIdle.push({
+          hooks: [{ type: 'command', command: hookCmd, timeout: 3 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      " "$SETTINGS_FILE" "$TEAMIDLE_CMD"
+      echo "CONFIGURED: teammate-idle hook in settings.json (TeammateIdle)"
     fi
   fi
 fi

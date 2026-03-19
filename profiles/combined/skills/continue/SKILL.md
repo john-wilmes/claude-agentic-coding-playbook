@@ -17,6 +17,12 @@ SessionStart did the heavy lifting — this skill is the trigger to act on it.
 
 ## Steps
 
+### Install Root Discovery
+
+```bash
+INSTALL_ROOT=$(bash ~/.claude/scripts/skills/find-install-root.sh)
+```
+
 ### 1. Determine context
 
 If `$ARGUMENTS` is provided, use it as the task focus — skip to step 4.
@@ -29,13 +35,13 @@ Otherwise, check the working directory:
 
 Run:
 ```bash
-ls ~/.claude/inbox/ 2>/dev/null | head -5
+ls ${INSTALL_ROOT}/.claude/inbox/ 2>/dev/null | head -5
 ```
 
 If inbox has files, read each one (they are short text messages from other agents or
 claude-loop). Summarize any actionable items. Delete messages after reading:
 ```bash
-rm ~/.claude/inbox/<filename>
+rm ${INSTALL_ROOT}/.claude/inbox/<filename>
 ```
 
 If no inbox directory or no files, skip silently.

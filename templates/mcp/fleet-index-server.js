@@ -33,6 +33,11 @@ const DIGEST_FILE   = process.env.FLEET_DIGEST_FILE
 
 let fleetIndex = null;
 
+// ─── Client info (captured during initialize) ────────────────────────────────
+
+let clientCapabilities = null;
+let clientInfo = null;
+
 function loadFleetIndex() {
   if (fleetIndex) return fleetIndex;
 
@@ -351,10 +356,12 @@ function dispatch(req) {
   try {
     switch (method) {
       case "initialize":
+        clientCapabilities = params.capabilities || null;
+        clientInfo = params.clientInfo || null;
         reply(id, {
-          protocolVersion: "2024-11-05",
-          capabilities:    { tools: {} },
-          serverInfo:      { name: "fleet-index", version: "1.0.0" },
+          protocolVersion: "2025-03-26",
+          capabilities:    { tools: {}, resources: {} },
+          serverInfo:      { name: "fleet-index", version: "1.1.0" },
         });
         break;
 
@@ -392,6 +399,62 @@ function dispatch(req) {
         reply(id, {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         });
+        break;
+      }
+
+      case "resources/list": {
+        const resources = [];
+        // Always include digest
+        resources.push({
+          uri: "fleet://digest",
+          name: "Fleet Digest",
+          description: "One-line-per-repo summary of all indexed repos",
+          mimeType: "text/plain",
+        });
+        // Add one resource per manifest
+        const manifests = readManifests();
+        for (const m of manifests) {
+          if (m.repo) {
+            resources.push({
+              uri: `fleet://manifest/${m.repo}`,
+              name: `Manifest: ${m.repo}`,
+              description: m.description || `Fleet manifest for ${m.repo}`,
+              mimeType: "application/json",
+            });
+          }
+        }
+        reply(id, { resources });
+        break;
+      }
+
+      case "resources/read": {
+        const uri = params.uri || "";
+        if (uri === "fleet://digest") {
+          const digest = toolGetDigest();
+          if (typeof digest === "string") {
+            reply(id, {
+              contents: [{ uri, mimeType: "text/plain", text: digest }],
+            });
+          } else {
+            replyError(id, -32602, digest.error || "Failed to read digest");
+          }
+        } else if (uri.startsWith("fleet://manifest/")) {
+          const repo = uri.slice("fleet://manifest/".length);
+          const manifest = toolGetManifest({ repo });
+          if (manifest && !manifest.error) {
+            reply(id, {
+              contents: [{
+                uri,
+                mimeType: "application/json",
+                text: JSON.stringify(manifest, null, 2),
+              }],
+            });
+          } else {
+            replyError(id, -32602, manifest?.error || `Unknown manifest: ${repo}`);
+          }
+        } else {
+          replyError(id, -32602, `Unknown resource URI: ${uri}`);
+        }
         break;
       }
 

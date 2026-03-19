@@ -13,13 +13,19 @@ Promote a lesson from this project's memory to global scope so it applies to all
 
 ## Steps
 
+### Install Root Discovery
+
+```bash
+INSTALL_ROOT=$(bash ~/.claude/scripts/skills/find-install-root.sh)
+```
+
 ### 1. Find project lessons
 
 Read the project's `MEMORY.md` file. It is located in the Claude Code auto-created project memory directory. To find it:
 
 ```bash
 # The path is derived from the working directory
-ls ~/.claude/projects/*/memory/MEMORY.md 2>/dev/null
+ls ${INSTALL_ROOT}/.claude/projects/*/memory/MEMORY.md 2>/dev/null
 ```
 
 Pick the one that corresponds to the current project (match the encoded project path in the directory name).
@@ -52,11 +58,11 @@ Search both stores for an existing entry covering the same topic. Track which st
 
 1. Search the knowledge database (if available):
    ```bash
-   node ~/.claude/hooks/knowledge-db.js search "<topic keywords>" 2>/dev/null
+   node ${INSTALL_ROOT}/.claude/hooks/knowledge-db.js search "<topic keywords>" 2>/dev/null
    ```
    If a match is found here, set `duplicate_source = "knowledge.db"`.
 
-2. Read `~/.claude/CLAUDE.md` and scan for any existing entry covering the same topic.
+2. Read `${INSTALL_ROOT}/.claude/CLAUDE.md` and scan for any existing entry covering the same topic.
    If a match is found here, set `duplicate_source = "CLAUDE.md"`.
 
 If a near-duplicate is found in either store, tell the user (noting where it was found):
@@ -84,8 +90,8 @@ Route based on the user's choice and the duplicate's source:
 
 **If the user chose "add" (or no duplicate was found):**
 
-- **If `~/.claude/hooks/knowledge-db.js` exists** (preferred path): Use the `/learn` skill to create a structured knowledge entry. Pass the lesson text as the argument.
-- **Otherwise**, append the lesson to `~/.claude/CLAUDE.md`: Find or create a `## Cross-Project Lessons` section at the end of the file (before any trailing newline). Append the lesson as a bullet point: `- <lesson text>`
+- **If `${INSTALL_ROOT}/.claude/hooks/knowledge-db.js` exists** (preferred path): Use the `/learn` skill to create a structured knowledge entry. Pass the lesson text as the argument.
+- **Otherwise**, append the lesson to `${INSTALL_ROOT}/.claude/CLAUDE.md`: Find or create a `## Cross-Project Lessons` section at the end of the file (before any trailing newline). Append the lesson as a bullet point: `- <lesson text>`
 
 ### 5. Confirm
 

@@ -13,11 +13,17 @@ Capture a lesson as a structured knowledge entry that persists across sessions a
 
 ## Steps
 
+### Install Root Discovery
+
+```bash
+INSTALL_ROOT=$(bash ~/.claude/scripts/skills/find-install-root.sh)
+```
+
 ### 0. Check prerequisites
 
 Check if knowledge-db.js is available:
 ```bash
-ls ~/.claude/hooks/knowledge-db.js 2>/dev/null
+ls ${INSTALL_ROOT}/.claude/hooks/knowledge-db.js 2>/dev/null
 ```
 
 If not found, fall back to writing the lesson directly to the project memory file (`lessons-learned.md` in the project memory directory). Skip steps that reference `knowledge-db.js` and instead append the structured entry to the memory file using the Edit tool.
@@ -70,7 +76,7 @@ ENTRY_ID="${TIMESTAMP}-${SLUG}"
 Insert the entry into the knowledge database:
 
 ```bash
-node ~/.claude/hooks/knowledge-db.js insert "$(cat <<EOF
+node ${INSTALL_ROOT}/.claude/hooks/knowledge-db.js insert "$(cat <<EOF
 {
   "id": "${ENTRY_ID}",
   "created": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
@@ -99,13 +105,13 @@ Frame content as **informational description**, not imperative instructions. Wri
 If the knowledge base should be shared with a team, export entries to JSONL:
 
 ```bash
-node ~/.claude/hooks/knowledge-db.js export ~/.claude/knowledge/entries.jsonl
+node ${INSTALL_ROOT}/.claude/hooks/knowledge-db.js export ${INSTALL_ROOT}/.claude/knowledge/entries.jsonl
 ```
 
 If `~/.claude/knowledge` is a git repo, commit and push the JSONL:
 
 ```bash
-cd ~/.claude/knowledge
+cd ${INSTALL_ROOT}/.claude/knowledge
 git add entries.jsonl
 git commit -m "learn: ${SLUG}"
 if git remote get-url origin &>/dev/null; then
