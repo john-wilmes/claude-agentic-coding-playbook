@@ -214,6 +214,7 @@ function saveState(sessionId, state) {
 // ---------------------------------------------------------------------------
 
 let input = "";
+process.stdin.resume();
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (chunk) => (input += chunk));
 process.stdin.on("end", () => {
