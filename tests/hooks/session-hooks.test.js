@@ -439,6 +439,279 @@ test("21. session-end only stages its OWN project MEMORY.md, not other projects'
   );
 });
 
+// ─── session-end.js git auto-commit tests ───────────────────────────────────
+
+console.log("\nsession-end.js git auto-commit:");
+
+/**
+ * Helper: set up a real git repo inside env.claudeDir with committer identity.
+ * Returns spawnSync options pre-configured for that repo.
+ */
+function initGitRepo(env) {
+  const gitEnv = {
+    HOME: env.home,
+    USERPROFILE: env.home,
+    GIT_AUTHOR_NAME: "Test",
+    GIT_COMMITTER_NAME: "Test",
+    GIT_AUTHOR_EMAIL: "t@t.com",
+    GIT_COMMITTER_EMAIL: "t@t.com",
+  };
+  const gitIn = {
+    cwd: env.claudeDir,
+    encoding: "utf8",
+    env: { ...process.env, ...gitEnv },
+  };
+  spawnSync("git", ["init"], gitIn);
+  spawnSync("git", ["config", "user.email", "t@t.com"], gitIn);
+  spawnSync("git", ["config", "user.name", "Test"], gitIn);
+  return { gitIn, gitEnv };
+}
+
+/**
+ * Encode a cwd string using the same algorithm as session-end.js.
+ */
+function encodeCwd(cwd) {
+  return cwd.replace(/:/g, "-").replace(/[\\/]/g, "-").replace(/^-/, "");
+}
+
+/**
+ * Create a MEMORY.md at the encoded path inside env.claudeDir and return its
+ * relative path (as git would report it).
+ */
+function createMemoryInClaudeDir(env, cwd, content = "# Memory\n\nWorking on tests.\n") {
+  const enc = encodeCwd(cwd);
+  const memDir = path.join(env.claudeDir, "projects", enc, "memory");
+  fs.mkdirSync(memDir, { recursive: true });
+  const memPath = path.join(memDir, "MEMORY.md");
+  fs.writeFileSync(memPath, content);
+  return { memPath, relPath: `projects/${enc}/memory/MEMORY.md` };
+}
+
+test("22. Git init: initializes ~/.claude as a git repo when it isn't one", (env) => {
+  // Ensure ~/.claude exists but has NO .git directory
+  // (createTempHome already created the dir; just confirm no .git)
+  const gitDir = path.join(env.claudeDir, ".git");
+  assert.ok(!fs.existsSync(gitDir), "Pre-condition: no .git in claudeDir");
+
+  const projDir = createProjectDir();
+  const result = runHook(SESSION_END, {
+    session_id: "init-test-1234",
+    cwd: projDir,
+  }, {
+    HOME: env.home,
+    USERPROFILE: env.home,
+    GIT_AUTHOR_NAME: "Test",
+    GIT_COMMITTER_NAME: "Test",
+    GIT_AUTHOR_EMAIL: "t@t.com",
+    GIT_COMMITTER_EMAIL: "t@t.com",
+  });
+
+  assert.strictEqual(result.status, 0, `Exit code should be 0, got ${result.status}`);
+  assert.ok(fs.existsSync(gitDir), "~/.claude should now be a git repo (has .git directory)");
+});
+
+test("23. Git init: outputs {} after initializing repo (no crash)", (env) => {
+  const projDir = createProjectDir();
+  const result = runHook(SESSION_END, {
+    session_id: "init-output-test",
+    cwd: projDir,
+  }, {
+    HOME: env.home,
+    USERPROFILE: env.home,
+    GIT_AUTHOR_NAME: "Test",
+    GIT_COMMITTER_NAME: "Test",
+    GIT_AUTHOR_EMAIL: "t@t.com",
+    GIT_COMMITTER_EMAIL: "t@t.com",
+  });
+
+  assert.ok(result.json !== null, "Should output valid JSON");
+  // No push failure on a freshly-inited repo with no remote
+  assert.ok(
+    !result.json.hookSpecificOutput,
+    "Should output plain {} (no push failure) when repo has no remote"
+  );
+});
+
+test("24. Git add: stages the correct memory path for the given cwd", (env) => {
+  const { gitIn, gitEnv } = initGitRepo(env);
+  const projDir = createProjectDir();
+  const { relPath } = createMemoryInClaudeDir(env, projDir);
+
+  runHook(SESSION_END, {
+    session_id: "stage-test-1234",
+    cwd: projDir,
+  }, { HOME: env.home, USERPROFILE: env.home, ...gitEnv });
+
+  // After hook, git status --porcelain should show the file as committed (empty output)
+  // i.e. the file was staged AND committed, so working tree is clean for that file
+  const statusOut = spawnSync("git", ["status", "--porcelain", "--", relPath], gitIn);
+  const status = (statusOut.stdout || "").trim();
+
+  assert.strictEqual(status, "", `Expected ${relPath} to be committed (clean); got: "${status}"`);
+});
+
+test("25. Git commit: creates a commit with the expected message format", (env) => {
+  const { gitIn, gitEnv } = initGitRepo(env);
+  const projDir = createProjectDir();
+  const sessionId = "aabb1122ccdd3344";
+  createMemoryInClaudeDir(env, projDir);
+
+  runHook(SESSION_END, {
+    session_id: sessionId,
+    cwd: projDir,
+  }, { HOME: env.home, USERPROFILE: env.home, ...gitEnv });
+
+  const logOut = spawnSync("git", ["log", "--oneline", "-1"], gitIn);
+  const logLine = (logOut.stdout || "").trim();
+
+  // Expected format: "auto: <basename(cwd)> session <first-8-chars-of-session-id>"
+  const agentName = path.basename(projDir);
+  const shortId = sessionId.slice(0, 8);
+  assert.ok(
+    logLine.includes(`auto: ${agentName} session ${shortId}`),
+    `Commit message should match "auto: ${agentName} session ${shortId}". Got: "${logLine}"`
+  );
+});
+
+test("26. No commit when MEMORY.md does not exist (no staged changes)", (env) => {
+  const { gitIn, gitEnv } = initGitRepo(env);
+  const projDir = createProjectDir();
+  // Do NOT create a MEMORY.md — nothing to stage
+
+  runHook(SESSION_END, {
+    session_id: "no-commit-test",
+    cwd: projDir,
+  }, { HOME: env.home, USERPROFILE: env.home, ...gitEnv });
+
+  const logOut = spawnSync("git", ["log", "--oneline"], gitIn);
+  const logLines = (logOut.stdout || "").trim();
+
+  assert.strictEqual(logLines, "", `Should be no commits when nothing staged. Got: "${logLines}"`);
+});
+
+test("27. No commit when MEMORY.md is unchanged (already committed)", (env) => {
+  const { gitIn, gitEnv } = initGitRepo(env);
+  const projDir = createProjectDir();
+  const { memPath, relPath } = createMemoryInClaudeDir(env, projDir, "# Memory\n\nOriginal.\n");
+
+  // Commit the file directly so git already tracks it as clean
+  spawnSync("git", ["add", "--", relPath], gitIn);
+  spawnSync("git", ["commit", "-m", "initial"], gitIn);
+
+  // Run hook — file unchanged, so no new commit should be created
+  runHook(SESSION_END, {
+    session_id: "no-change-test",
+    cwd: projDir,
+  }, { HOME: env.home, USERPROFILE: env.home, ...gitEnv });
+
+  const logOut = spawnSync("git", ["log", "--oneline"], gitIn);
+  const logLines = (logOut.stdout || "").trim().split("\n");
+
+  assert.strictEqual(logLines.length, 1, `Should still be only 1 commit. Got: ${logLines.length}`);
+  assert.ok(logLines[0].includes("initial"), "Only commit should be the 'initial' one");
+});
+
+test("28. Push skipped when no remote configured (exits 0, outputs {})", (env) => {
+  const { gitEnv } = initGitRepo(env);
+  const projDir = createProjectDir();
+  createMemoryInClaudeDir(env, projDir);
+
+  const result = runHook(SESSION_END, {
+    session_id: "no-remote-test",
+    cwd: projDir,
+  }, { HOME: env.home, USERPROFILE: env.home, ...gitEnv });
+
+  assert.strictEqual(result.status, 0, "Should exit 0 with no remote");
+  // No remote → no push attempt → no push failure warning
+  assert.ok(
+    !result.json.hookSpecificOutput,
+    "Should output plain {} when push is skipped (no remote)"
+  );
+});
+
+test("29. CLAUDE_NO_AUTO_PUSH=1 skips push even when remote is configured", (env) => {
+  const { gitIn, gitEnv } = initGitRepo(env);
+  const projDir = createProjectDir();
+  createMemoryInClaudeDir(env, projDir);
+
+  // Add a fake remote so push would otherwise be attempted
+  spawnSync("git", ["remote", "add", "origin", "https://example.com/fake.git"], gitIn);
+
+  const result = runHook(SESSION_END, {
+    session_id: "no-push-test",
+    cwd: projDir,
+  }, {
+    HOME: env.home,
+    USERPROFILE: env.home,
+    CLAUDE_NO_AUTO_PUSH: "1",
+    ...gitEnv,
+  });
+
+  assert.strictEqual(result.status, 0, "Should exit 0 with CLAUDE_NO_AUTO_PUSH=1");
+  // Push was skipped → no push-failure warning in output
+  assert.ok(
+    !result.json.hookSpecificOutput,
+    "Should output plain {} when push is intentionally skipped"
+  );
+});
+
+test("30. Push failure: hook exits 0 and emits hookSpecificOutput warning", (env) => {
+  const { gitIn, gitEnv } = initGitRepo(env);
+  const projDir = createProjectDir();
+  createMemoryInClaudeDir(env, projDir);
+
+  // Add an unreachable remote so push will fail
+  spawnSync("git", ["remote", "add", "origin", "https://192.0.2.1/nonexistent.git"], gitIn);
+
+  const result = runHook(SESSION_END, {
+    session_id: "push-fail-test",
+    cwd: projDir,
+  }, { HOME: env.home, USERPROFILE: env.home, ...gitEnv });
+
+  assert.strictEqual(result.status, 0, "Should exit 0 even when push fails");
+  assert.ok(result.json.hookSpecificOutput, "Should emit hookSpecificOutput on push failure");
+  assert.strictEqual(
+    result.json.hookSpecificOutput.hookEventName,
+    "SessionEnd",
+    "hookEventName should be SessionEnd"
+  );
+  assert.ok(
+    typeof result.json.hookSpecificOutput.additionalContext === "string" &&
+      result.json.hookSpecificOutput.additionalContext.includes("auto-push failed"),
+    `additionalContext should mention auto-push failed. Got: ${JSON.stringify(result.json.hookSpecificOutput.additionalContext)}`
+  );
+}, 15000);
+
+test("31. Malformed JSON input: exits 0, outputs {}", (env) => {
+  const { runHookRaw } = require("./test-helpers");
+  const result = runHookRaw(SESSION_END, "NOT JSON AT ALL", {
+    HOME: env.home,
+    USERPROFILE: env.home,
+  });
+
+  assert.strictEqual(result.status, 0, "Should exit 0 on malformed input");
+  assert.ok(result.json !== null, "Should output valid JSON");
+  assert.deepStrictEqual(result.json, {}, "Should output exactly {}");
+});
+
+test("32. Output is valid JSON in all cases (already-committed memory)", (env) => {
+  const { gitIn, gitEnv } = initGitRepo(env);
+  const projDir = createProjectDir();
+  const { relPath } = createMemoryInClaudeDir(env, projDir, "# Memory\n\nExisting.\n");
+
+  // Pre-commit so there are no staged changes
+  spawnSync("git", ["add", "--", relPath], gitIn);
+  spawnSync("git", ["commit", "-m", "existing"], gitIn);
+
+  const result = runHook(SESSION_END, {
+    session_id: "valid-json-test",
+    cwd: projDir,
+  }, { HOME: env.home, USERPROFILE: env.home, ...gitEnv });
+
+  assert.strictEqual(result.status, 0, "Should exit 0");
+  assert.ok(result.json !== null, "stdout must be parseable JSON");
+});
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
 console.log(`\n${"─".repeat(60)}`);

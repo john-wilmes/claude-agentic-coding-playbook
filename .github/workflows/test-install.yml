@@ -600,6 +600,8 @@ jobs:
         run: for t in tests/scripts/*.test.sh; do bash "$t" || exit 1; done
       - name: Skill tests (bash)
         run: for t in tests/skills/*.test.sh; do bash "$t" || exit 1; done
+      - name: Script tests (node)
+        run: for t in tests/scripts/*.test.js; do node "$t" || exit 1; done
       - name: Skill tests (node)
         run: for t in tests/skills/*.test.js; do node "$t" || exit 1; done
 
