@@ -14,7 +14,7 @@ set -euo pipefail
 
 # ─── Defaults ────────────────────────────────────────────────────────────────
 
-DEFAULT_MODEL="claude-haiku-4-5"
+DEFAULT_MODEL="claude-haiku-4-5"  # Pinned model ID — review periodically for newer versions
 DEFAULT_SYSTEM="Do exactly what the user asks. Be terse."
 MAX_TOKENS=4096
 LOG_FILE="${HOME}/.claude/logs/q.jsonl"

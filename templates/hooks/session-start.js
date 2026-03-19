@@ -41,7 +41,9 @@ function detectProjectContext(cwd) {
   return { tools: [...context.tools], tags: [...context.tags], projectName: context.projectName };
 }
 
-// Parse YAML frontmatter from an entry file
+// Legacy: parse YAML frontmatter from an entry file.
+// No longer used in production (production scoring uses knowledgeDb.queryRelevant()).
+// Retained because session-start.test.js and session-hooks.test.js test this function directly.
 function parseFrontmatter(content) {
   const match = content.match(/^---\n([\s\S]*?)\n---/);
   if (!match) return null;
@@ -62,7 +64,9 @@ function parseFrontmatter(content) {
   return fm;
 }
 
-// Score a knowledge entry for relevance to the current project
+// Legacy: score a knowledge entry for relevance to the current project.
+// No longer used in production (production scoring uses knowledgeDb.queryRelevant()).
+// Retained because session-start.test.js and session-hooks.test.js test this function directly.
 function scoreEntry(frontmatter, projectContext) {
   let score = 0;
   const tool = (frontmatter.tool || "").toLowerCase();

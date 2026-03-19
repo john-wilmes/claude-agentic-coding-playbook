@@ -102,31 +102,31 @@ bash install.sh --dry-run
 
 ### Running Tests
 
-Unit tests for hooks and investigation scoring can be run directly with Node:
+Run the full test suite using the same commands as CI:
 
 ```bash
 # Hook tests (Node.js)
-node tests/hooks/bm25.test.js
-node tests/hooks/context-guard.test.js
-node tests/hooks/knowledge-capture.test.js
-node tests/hooks/knowledge-db.test.js
-node tests/hooks/log.test.js
-node tests/hooks/model-router.test.js
-node tests/hooks/pii-detector.test.js
-node tests/hooks/post-tool-verify.test.js
-node tests/hooks/prompt-injection-guard.test.js
-node tests/hooks/pr-review-guard.test.js
-node tests/hooks/sanitize-guard.test.js
-node tests/hooks/session-hooks.test.js
-node tests/hooks/session-start.test.js
-node tests/hooks/stuck-detector.test.js
+for t in tests/hooks/*.test.js; do node "$t" || exit 1; done
+
+# Fleet tests (Node.js)
+for t in tests/fleet/*.test.js; do node "$t" || exit 1; done
 
 # Script tests (Bash)
+for t in tests/scripts/*.test.sh; do bash "$t" || exit 1; done
+
+# Skill tests (Bash and Node.js)
+for t in tests/skills/*.test.sh; do bash "$t" || exit 1; done
+for t in tests/skills/*.test.js; do node "$t" || exit 1; done
+
+# Investigation tests (Node.js)
+for t in tests/investigate/*.test.js; do node "$t" || exit 1; done
+```
+
+Individual test files can also be run directly, for example:
+
+```bash
+node tests/hooks/context-guard.test.js
 bash tests/scripts/claude-loop.test.sh
-bash tests/scripts/knowledge-consolidate.test.sh
-bash tests/scripts/mcp-registry.test.sh
-bash tests/scripts/qa.test.sh
-bash tests/scripts/q.test.sh
 ```
 
 **Note:** The E2E dogfood tests (`scripts/dogfood-e2e.sh`, `scripts/ec2-dogfood.sh`) require the `claude` CLI to be installed and must be run outside of Claude Code.
