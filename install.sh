@@ -1306,24 +1306,16 @@ fi
 
 # Install RTK.md context file
 if [ -f "$SCRIPT_DIR/templates/rtk/RTK.md" ]; then
-  if [ "$DRY_RUN" = true ]; then
-    echo "[DRY RUN] Would install templates/rtk/RTK.md -> $CLAUDE_DIR/RTK.md"
-  else
-    cp "$SCRIPT_DIR/templates/rtk/RTK.md" "$CLAUDE_DIR/RTK.md"
-    echo "INSTALLED: templates/rtk/RTK.md -> $CLAUDE_DIR/RTK.md"
-  fi
+  install_file "$SCRIPT_DIR/templates/rtk/RTK.md" "$CLAUDE_DIR/RTK.md" "RTK.md context file"
 else
   echo "SKIPPED: templates/rtk/RTK.md (not found)"
 fi
 
 # Install rtk-rewrite.sh hook and register in settings.json
 if [ -f "$SCRIPT_DIR/templates/hooks/rtk-rewrite.sh" ]; then
-  if [ "$DRY_RUN" = true ]; then
-    echo "[DRY RUN] Would install templates/hooks/rtk-rewrite.sh -> $CLAUDE_DIR/hooks/rtk-rewrite.sh"
-  else
-    cp "$SCRIPT_DIR/templates/hooks/rtk-rewrite.sh" "$CLAUDE_DIR/hooks/rtk-rewrite.sh"
+  install_file "$SCRIPT_DIR/templates/hooks/rtk-rewrite.sh" "$CLAUDE_DIR/hooks/rtk-rewrite.sh" "rtk-rewrite hook"
+  if [ "$DRY_RUN" != true ] && [ -f "$CLAUDE_DIR/hooks/rtk-rewrite.sh" ]; then
     chmod +x "$CLAUDE_DIR/hooks/rtk-rewrite.sh"
-    echo "INSTALLED: templates/hooks/rtk-rewrite.sh -> $CLAUDE_DIR/hooks/rtk-rewrite.sh"
   fi
 
   echo ""
@@ -1396,7 +1388,12 @@ else
     echo "{}" > "$SETTINGS_FILE"
   fi
 
-  if grep -q "icm hook" "$SETTINGS_FILE" 2>/dev/null; then
+  if node -e "
+    const s = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
+    const hooks = s.hooks || {};
+    const hasIcm = (hooks.PreToolUse || []).some(e => e.hooks && e.hooks.some(h => h.command && h.command.includes('icm hook')));
+    process.exit(hasIcm ? 0 : 1);
+  " "$SETTINGS_FILE" 2>/dev/null; then
     echo "ALREADY CONFIGURED: icm hooks in settings.json"
   else
     node -e "
