@@ -1282,6 +1282,178 @@ if [[ ":$PATH:" != *":$LOCAL_BIN:"* ]]; then
   echo "    export PATH=\"\$HOME/.local/bin:\$PATH\""
 fi
 
+# --- Install rtk (Token Optimizer) ---
+
+echo ""
+echo "--- Installing rtk (token optimizer) ---"
+
+if command -v rtk &>/dev/null; then
+  echo "ALREADY INSTALLED: rtk ($(command -v rtk))"
+else
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would install rtk via curl"
+  else
+    echo "Installing rtk..."
+    curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
+    export PATH="$HOME/.local/bin:$PATH"
+    if command -v rtk &>/dev/null; then
+      echo "INSTALLED: rtk"
+    else
+      echo "WARNING: rtk install script ran but rtk not found on PATH; ensure $HOME/.local/bin is in PATH"
+    fi
+  fi
+fi
+
+# Install RTK.md context file
+if [ -f "$SCRIPT_DIR/templates/rtk/RTK.md" ]; then
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would install templates/rtk/RTK.md -> $CLAUDE_DIR/RTK.md"
+  else
+    cp "$SCRIPT_DIR/templates/rtk/RTK.md" "$CLAUDE_DIR/RTK.md"
+    echo "INSTALLED: templates/rtk/RTK.md -> $CLAUDE_DIR/RTK.md"
+  fi
+else
+  echo "SKIPPED: templates/rtk/RTK.md (not found)"
+fi
+
+# Install rtk-rewrite.sh hook and register in settings.json
+if [ -f "$SCRIPT_DIR/templates/hooks/rtk-rewrite.sh" ]; then
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would install templates/hooks/rtk-rewrite.sh -> $CLAUDE_DIR/hooks/rtk-rewrite.sh"
+  else
+    cp "$SCRIPT_DIR/templates/hooks/rtk-rewrite.sh" "$CLAUDE_DIR/hooks/rtk-rewrite.sh"
+    chmod +x "$CLAUDE_DIR/hooks/rtk-rewrite.sh"
+    echo "INSTALLED: templates/hooks/rtk-rewrite.sh -> $CLAUDE_DIR/hooks/rtk-rewrite.sh"
+  fi
+
+  echo ""
+  echo "--- Configuring rtk-rewrite in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  RTK_REWRITE_CMD="$CLAUDE_DIR/hooks/rtk-rewrite.sh"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add rtk-rewrite PreToolUse Bash hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    if grep -q "rtk-rewrite" "$SETTINGS_FILE" 2>/dev/null; then
+      echo "ALREADY CONFIGURED: rtk-rewrite hook in settings.json"
+    else
+      node -e "
+        const fs = require('fs');
+        const settingsPath = process.argv[1];
+        const hookCmd = process.argv[2];
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (!settings.hooks) settings.hooks = {};
+        if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+        settings.hooks.PreToolUse.push({
+          matcher: 'Bash',
+          hooks: [{ type: 'command', command: hookCmd }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      " "$SETTINGS_FILE" "$RTK_REWRITE_CMD"
+      echo "CONFIGURED: rtk-rewrite hook in settings.json (PreToolUse Bash)"
+    fi
+  fi
+else
+  echo "SKIPPED: templates/hooks/rtk-rewrite.sh (not found)"
+fi
+
+# --- Install icm (Persistent Agent Memory) ---
+
+echo ""
+echo "--- Installing icm (persistent agent memory) ---"
+
+if command -v icm &>/dev/null; then
+  echo "ALREADY INSTALLED: icm ($(command -v icm))"
+else
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would install icm via curl"
+  else
+    echo "Installing icm..."
+    curl -fsSL https://raw.githubusercontent.com/rtk-ai/icm/main/install.sh | sh
+    export PATH="$HOME/.local/bin:$PATH"
+    if command -v icm &>/dev/null; then
+      echo "INSTALLED: icm"
+    else
+      echo "WARNING: icm install script ran but icm not found on PATH; ensure $HOME/.local/bin is in PATH"
+    fi
+  fi
+fi
+
+# Register icm hooks and MCP server in settings.json
+echo ""
+echo "--- Configuring icm hooks and MCP server in settings.json ---"
+SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+
+if [ "$DRY_RUN" = true ]; then
+  echo "[DRY RUN] Would add icm hooks (PreToolUse Bash, PostToolUse, PreCompact, UserPromptSubmit) to $SETTINGS_FILE"
+  echo "[DRY RUN] Would register icm MCP server in $SETTINGS_FILE"
+else
+  if [ ! -f "$SETTINGS_FILE" ]; then
+    echo "{}" > "$SETTINGS_FILE"
+  fi
+
+  if grep -q "icm hook" "$SETTINGS_FILE" 2>/dev/null; then
+    echo "ALREADY CONFIGURED: icm hooks in settings.json"
+  else
+    node -e "
+      const fs = require('fs');
+      const settingsPath = process.argv[1];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.hooks) settings.hooks = {};
+
+      // PreToolUse Bash: auto-allow icm commands
+      if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+      settings.hooks.PreToolUse.push({
+        matcher: 'Bash',
+        hooks: [{ type: 'command', command: 'icm hook pre', timeout: 3 }]
+      });
+
+      // PostToolUse: fact extraction (no matcher)
+      if (!settings.hooks.PostToolUse) settings.hooks.PostToolUse = [];
+      settings.hooks.PostToolUse.push({
+        hooks: [{ type: 'command', command: 'icm hook post', timeout: 5 }]
+      });
+
+      // PreCompact: memory rescue before compaction (no matcher)
+      if (!settings.hooks.PreCompact) settings.hooks.PreCompact = [];
+      settings.hooks.PreCompact.push({
+        hooks: [{ type: 'command', command: 'icm hook compact', timeout: 10 }]
+      });
+
+      // UserPromptSubmit: recall injection (no matcher)
+      if (!settings.hooks.UserPromptSubmit) settings.hooks.UserPromptSubmit = [];
+      settings.hooks.UserPromptSubmit.push({
+        hooks: [{ type: 'command', command: 'icm hook prompt', timeout: 5 }]
+      });
+
+      fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+    " "$SETTINGS_FILE"
+    echo "CONFIGURED: icm hooks in settings.json (PreToolUse Bash, PostToolUse, PreCompact, UserPromptSubmit)"
+  fi
+
+  # Register icm MCP server
+  if grep -q '"icm"' "$SETTINGS_FILE" 2>/dev/null && node -e "
+    const s = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
+    process.exit(s.mcpServers && s.mcpServers.icm ? 0 : 1);
+  " "$SETTINGS_FILE" 2>/dev/null; then
+    echo "ALREADY CONFIGURED: icm MCP server in settings.json"
+  else
+    node -e "
+      const fs = require('fs');
+      const settingsPath = process.argv[1];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.mcpServers) settings.mcpServers = {};
+      settings.mcpServers.icm = { command: 'icm', args: ['serve', '--compact'], env: {} };
+      fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+    " "$SETTINGS_FILE"
+    echo "CONFIGURED: icm MCP server in settings.json"
+  fi
+fi
+
 # --- Install fleet index components ---
 
 echo ""
@@ -1537,6 +1709,8 @@ SERVER_COUNT=$(node -e "const r=JSON.parse(require('fs').readFileSync(process.ar
 echo "  MCP registry     -> settings.json mcpServers ($SERVER_COUNT servers)"
 echo "  Managed repos    -> ~/.claude/repos/ (from resources.json, if present)"
 echo "  CLI scripts      -> $LOCAL_BIN/ (q, qa, claude-loop, knowledge-consolidate, repo-fleet-index)"
+echo "  rtk              -> token optimizer (PreToolUse Bash hook, RTK.md context)"
+echo "  icm              -> persistent memory (4 hooks + MCP server)"
 echo "  Session hooks    -> $CLAUDE_DIR/hooks/ (auto-run on session start/end)"
 echo "  Fleet index      -> $CLAUDE_DIR/fleet/ (repo manifests and digest)"
 echo "  Fleet MCP        -> $CLAUDE_DIR/mcp/ (fleet-index MCP server)"
