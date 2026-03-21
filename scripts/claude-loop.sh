@@ -639,8 +639,9 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
           RETRY_TASK=""
           RETRY_ATTEMPT=0
           mark_task_fail "${TASK_QUEUE_FILE}" "${CURRENT_TASK}" "${ATTEMPT}"
-          log_event "event=task_fail" "task=${CURRENT_TASK}" "attempts=${ATTEMPT}"
+          log_event "event=task_fail" "task=${CURRENT_TASK}" "attempts=${ATTEMPT}" "classification=likely_too_big"
           echo "claude-loop: task failed after ${ATTEMPT} attempts: ${CURRENT_TASK}"
+          echo "claude-loop: ⚠ task may be too large — consider splitting into smaller tasks"
         else
           # More attempts remain — retry without writing [FAIL] to the queue file
           RETRY_TASK="${CURRENT_TASK}"
@@ -648,6 +649,12 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
           log_event "event=loop_event" "message=task attempt failed" \
             "task=${CURRENT_TASK}" "attempt=${ATTEMPT}" "max=${MAX_TASK_ATTEMPTS}"
           echo "claude-loop: task attempt ${ATTEMPT}/${MAX_TASK_ATTEMPTS} failed: ${CURRENT_TASK}"
+
+          # Classify as likely too-big after 2+ failures (not transient)
+          if [[ "${ATTEMPT}" -ge 2 ]]; then
+            log_event "event=task_too_big" "task=${CURRENT_TASK}" "attempt=${ATTEMPT}"
+            echo "claude-loop: ⚠ task may be too large for one iteration — consider splitting"
+          fi
 
           # Exponential backoff: 10s, 20s, 40s
           BACKOFF_S="$(( 10 * (1 << (ATTEMPT - 1)) ))"

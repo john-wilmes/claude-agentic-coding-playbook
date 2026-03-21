@@ -1812,6 +1812,20 @@ well; the sequencing must come from outside the agent. This is another instance
 of the broader pattern: instructions control *what* the agent produces, but
 *process* requires tooling.
 
+### Task Sizing for Agent Loops
+
+Tasks in an automated loop (e.g., `claude-loop --task-queue`) should be scoped to complete within a single context window — roughly 60% of the model's effective capacity.
+
+**Rules of thumb:**
+- If a task description lists 3+ independent changes, split it into separate tasks.
+- If a task requires reading more than 5-6 files to understand context, it's likely too big.
+- If a task requires coordinated changes across 3+ files, consider using subagents for the multi-file edit.
+- One task = one commit. If you can't describe the expected diff in 2-3 sentences, the task is too large.
+
+**Detection:** `claude-loop` classifies tasks as "likely too big" after 2 failed attempts. Check `--status` output or JSONL logs for `task_too_big` events.
+
+**What to do:** Rewrite the failing task as 2-3 smaller tasks in the queue file. Each subtask should have a clear, verifiable deliverable.
+
 ### Limitations of cross-session communication
 
 The shared communication channel described above operates in real time between
