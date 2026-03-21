@@ -273,7 +273,6 @@ function queryRelevant(db, opts = {}, limit = 5) {
 
       // Category boosts
       if (entryCategory === "security") metaScore += 2;
-      if (entryCategory === "gotcha")   metaScore += 1;
 
       // Confidence boost
       if (entryConfidence === "high") metaScore += 1;
