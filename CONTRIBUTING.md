@@ -88,7 +88,7 @@ Use a markdown table with a header row and alignment markers. Include a source r
 
 ## Code of Conduct
 
-This project follows the [Contributor Covenant v2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct/). By participating, you agree to uphold its standards. Report violations to the repository maintainers via a private GitHub message or email listed in the repository contact information.
+This project follows the [Contributor Covenant v2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct/). By participating, you agree to uphold its standards. Report violations to the repository maintainers via a private GitHub message or via the contact information in SECURITY.md.
 
 ---
 

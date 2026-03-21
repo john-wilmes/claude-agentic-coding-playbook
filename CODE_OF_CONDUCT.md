@@ -6,7 +6,7 @@ All contributors, maintainers, and participants are expected to uphold these sta
 
 ## Reporting
 
-Report violations to the repository maintainers via a private GitHub message or the email listed in the repository contact information.
+Report violations to the repository maintainers via a private GitHub message or via the contact information in SECURITY.md.
 
 ## Full Text
 

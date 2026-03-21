@@ -203,16 +203,5 @@
     },
     "env_required": [],
     "notes": "Detects PII/PHI entities on demand. See best-practices.md section 13 for full sanitization architecture."
-  },
-  "mma": {
-    "description": "Multi-Model Analyzer — cross-repo dependency graphs, blast radius, architecture, symbol search, diagnostics, metrics",
-    "config": {
-      "command": "node",
-      "args": ["apps/cli/dist/index.js", "serve", "--db", "data/mma.db"],
-      "cwd": "~/Documents/multi-model-analyzer",
-      "disabled": false
-    },
-    "env_required": [],
-    "notes": "9 tools: query, search, get_callers, get_callees, get_dependencies, get_architecture, get_diagnostics, get_metrics, get_blast_radius. Requires: npm install in MMA workspace, then 'mma index' to create DB. DB populated by daily 'mma index' run."
   }
 }

@@ -104,7 +104,7 @@ CLAUDE.md rules are advisory (~50-90% compliance). Hooks are deterministic (>95%
 **Quality:**
 - **Post-tool verify** -- Auto-runs project tests after Edit/Write on code files with debouncing.
 - **PR review guard** -- Enforces code review before pushing. Blocks `git push` if changes haven't been reviewed.
-- **Context guard** -- Dual-mode context window monitoring. Warns at 35%/50%, blocks at 60%, failsafe sentinel at 75%.
+- **Context guard** -- Dual-mode context window monitoring. Warns at 35%/50%, advisory block at 60% (informational, not hard-blocking), failsafe sentinel at 75%.
 - **Stuck detector** -- Detects and breaks agent loops when the same action repeats.
 
 **Resource management:**

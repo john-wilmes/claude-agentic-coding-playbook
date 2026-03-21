@@ -29,7 +29,7 @@ Each task follows this flow:
 ### Environment Isolation
 
 - **Baseline**: Uses a clean temporary HOME with no `.claude/` configuration.
-- **Playbook**: Uses a temporary HOME with the playbook installed via `install.sh --profile dev --force`.
+- **Playbook**: Uses a temporary HOME with the playbook installed via `install.sh --force`.
 - All Claude Code nesting env vars (`CLAUDE_CODE_SSE_PORT`, etc.) are stripped to prevent interaction with a parent session.
 
 ### Model and Tools

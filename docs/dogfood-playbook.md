@@ -75,7 +75,7 @@ Use `git stash` explicitly before rebase, then `git stash pop` after resolving c
 |---|--------|---------|----------------|
 | 4.1 | Launch Claude Code | `cd $TEST_HOME/Documents && claude` | Session starts |
 | 4.2 | Check hook fired | Look for "Recent commits" or knowledge entries in session context | Session context injected |
-| 4.3 | Check hook log | `cat ~/.claude/hooks.log` | Shows "session-start" entry |
+| 4.3 | Check hook log | `cat ~/.claude/logs/YYYY-MM-DD.jsonl` | Shows "session-start" entry |
 
 ## 5. Knowledge Injection
 
@@ -144,7 +144,7 @@ Use `git stash` explicitly before rebase, then `git stash pop` after resolving c
 | # | Action | Command | Pass Criterion |
 |---|--------|---------|----------------|
 | 13.1 | Exit Claude Code | Type `/exit` or Ctrl+C | Session ends cleanly |
-| 13.2 | Check hook log | `cat ~/.claude/hooks.log` | Shows "session-end" entry |
+| 13.2 | Check hook log | `cat ~/.claude/logs/YYYY-MM-DD.jsonl` | Shows "session-end" entry |
 | 13.3 | Check auto-commit | `cd ~/.claude && git log --oneline -1` | Shows auto-commit with session ID (session-end hook auto-inits git repo if needed) |
 
 ## 14. Bloat Guard (PreToolUse Hook)
@@ -171,7 +171,7 @@ Tests PII/PHI detection and redaction. Requires a `.claude/sanitize.yaml` config
 |       |                     | `entities: [US_SSN, EMAIL]` | |
 | 15.2 | Write file with PII | Ask Claude to write a file containing `SSN: 123-45-6789` | Blocked with "PII/PHI detected", redacted version shown |
 | 15.3 | Read file with PII | Manually create a file with PII, then ask Claude to read it | additionalContext shows redacted version with `[SSN]` placeholder |
-| 15.4 | Bash command with PII | Ask Claude to run `echo "email: user@example.com"` | Blocked with PII detection warning |
+| 15.4 | Bash command with PII | Ask Claude to run `echo "email: user@example.com"` | PostToolUse detection only — informational additionalContext shows redacted output. Bash is NOT blocked PreToolUse (sanitize-guard only blocks Edit/Write). |
 | 15.5 | Clean content passes | Ask Claude to write a file with no PII | No warning, write succeeds |
 | 15.6 | No config = no scanning | Remove `.claude/sanitize.yaml`, repeat 15.2 | No warning, write succeeds (opt-in only) |
 
