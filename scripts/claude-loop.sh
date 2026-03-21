@@ -526,7 +526,7 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
   CURRENT_TASK=""
   # Default: interactive mode (no -p). Session stays open for user interaction.
   # User exits with Ctrl+C; sentinel from /checkpoint triggers loop restart.
-  CLAUDE_CMD=("claude" "--append-system-prompt" "claude-loop started this session. SessionStart injected your memory and context. MANDATORY per CLAUDE.md 'claude-loop auto-continue' rule: Start working on the first Next Step from Current Work immediately. Do not wait, summarize, or ask — just begin the work.")
+  CLAUDE_CMD=("claude" "--append-system-prompt" "claude-loop started this session. SessionStart injected your memory and context. MANDATORY per CLAUDE.md 'claude-loop auto-continue' rule: Start working on the first Next Step from Current Work immediately. Do not wait, summarize, or ask — just begin the work." "Continue working. Start on the first Next Step from Current Work immediately.")
 
   if [[ -n "${TASK_QUEUE_FILE}" ]]; then
     if [[ -n "${RETRY_TASK}" ]]; then
