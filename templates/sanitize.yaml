@@ -1,0 +1,7 @@
+sanitization:
+  enabled: true
+  exclude_paths:
+    - "tests/fixtures/**"
+    - "test/fixtures/**"
+    - "**/test-data/**"
+    - "**/*.test.*"

@@ -367,6 +367,21 @@ if [ -f "$SCRIPT_DIR/templates/project-CLAUDE.md" ]; then
   install_file "$SCRIPT_DIR/templates/project-CLAUDE.md" "$CLAUDE_DIR/templates/project-CLAUDE.md" "template: project-CLAUDE.md"
 fi
 
+# sanitize.yaml template (copy to INSTALL_ROOT/.claude/ if not already present)
+if [ -f "$SCRIPT_DIR/templates/sanitize.yaml" ]; then
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would copy sanitize.yaml template to $INSTALL_ROOT/.claude/sanitize.yaml (if not exists)"
+  else
+    if [ ! -f "$INSTALL_ROOT/.claude/sanitize.yaml" ]; then
+      mkdir -p "$INSTALL_ROOT/.claude"
+      cp "$SCRIPT_DIR/templates/sanitize.yaml" "$INSTALL_ROOT/.claude/sanitize.yaml"
+      echo "INSTALLED: sanitize.yaml template -> $INSTALL_ROOT/.claude/sanitize.yaml"
+    else
+      echo "EXISTS: $INSTALL_ROOT/.claude/sanitize.yaml (skipped)"
+    fi
+  fi
+fi
+
 # Create research directory as sibling
 echo ""
 echo "--- Creating research directory ---"
@@ -1455,6 +1470,17 @@ fi
 
 echo ""
 echo "--- Installing fleet index ---"
+
+# Create fleet directory scaffolding
+if [ "$DRY_RUN" = true ]; then
+  echo "[DRY RUN] MKDIR: $GLOBAL_CLAUDE_DIR/repos/"
+  echo "[DRY RUN] MKDIR: $GLOBAL_CLAUDE_DIR/fleet/manifests/"
+else
+  mkdir -p "$GLOBAL_CLAUDE_DIR/repos"
+  mkdir -p "$GLOBAL_CLAUDE_DIR/fleet/manifests"
+  echo "CREATED: $GLOBAL_CLAUDE_DIR/repos/"
+  echo "CREATED: $GLOBAL_CLAUDE_DIR/fleet/manifests/"
+fi
 
 # Fleet indexer engine
 if [ -f "$SCRIPT_DIR/templates/fleet/fleet-index.js" ]; then
