@@ -645,7 +645,19 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
     echo "claude-loop: sentinel restart — cooling down 5s..."
     sleep 5
     # Loop continues (restart)
-  elif [[ -z "${TASK_QUEUE_FILE}" && "${EXIT_CODE}" -eq 0 ]]; then
+  elif [[ -n "${TASK_QUEUE_FILE}" ]]; then
+    # Task queue mode: advance to next task if one exists, otherwise stop.
+    if next_task="$(get_next_task "${TASK_QUEUE_FILE}" 2>/dev/null)"; then
+      log_event "event=loop_event" "message=advancing to next task" "next_task=${next_task}"
+      echo "claude-loop: advancing to next task — cooling down 5s..."
+      sleep 5
+      # Loop continues (next task)
+    else
+      log_event "event=loop_event" "message=task queue exhausted, loop stopped" "exit_code=${EXIT_CODE}"
+      echo "claude-loop: all tasks completed or failed, stopping."
+      LOOP_RUNNING=false
+    fi
+  elif [[ "${EXIT_CODE}" -eq 0 ]]; then
     # Interactive mode: normal exit (e.g. /exit) restarts with a new session.
     # Only signals (Ctrl+C) stop the loop — handled above.
     log_event "event=loop_event" "message=interactive restart (normal exit)" "exit_code=${EXIT_CODE}"

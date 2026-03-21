@@ -537,6 +537,44 @@ STUBEOF
 }
 run_test "checked-off task without sentinel treated as success" t_checked_task_no_sentinel_succeeds
 
+# ─── Test 14: Task queue advances to next task after failed task exhausts retries
+
+t_advance_after_failed_task() {
+  local tmpbin tmpdir tmpqueue
+  tmpbin="$(mktemp -d)"
+  tmpdir="$(mktemp -d)"
+  tmpqueue="$(mktemp)"
+
+  cat > "${tmpqueue}" <<'EOF'
+- [ ] Failing task
+- [ ] Second task
+EOF
+
+  # Stub claude: always exits 1 (never writes sentinel, never checks off task)
+  cat > "${tmpbin}/claude" <<'STUBEOF'
+#!/usr/bin/env bash
+exit 1
+STUBEOF
+  chmod +x "${tmpbin}/claude"
+
+  local out rc=0
+  out="$(cd "${tmpdir}" && PATH="${tmpbin}:${PATH}" \
+    bash "${SCRIPT}" --task-queue "${tmpqueue}" --max-sessions 10 2>&1)" || rc=$?
+
+  local content
+  content="$(cat "${tmpqueue}")"
+  rm -rf "${tmpbin}" "${tmpdir}" "${tmpqueue}"
+
+  # First task should be marked [FAIL]
+  echo "${content}" | grep -q "\[FAIL\] Failing task" \
+    || { echo "First task not marked [FAIL]; content: ${content}"; return 1; }
+
+  # Should have attempted the second task after first failed
+  echo "${out}" | grep -q "Second task" \
+    || { echo "Expected loop to advance to 'Second task'; output: ${out}"; return 1; }
+}
+run_test "task queue advances after failed task exhausts retries" t_advance_after_failed_task
+
 # ─── Summary ──────────────────────────────────────────────────────────────────
 
 echo ""
