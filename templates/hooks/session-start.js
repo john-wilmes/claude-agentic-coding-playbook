@@ -348,6 +348,16 @@ process.stdin.on("end", () => {
     // Inject relevant knowledge entries, enriched with Current Work terms
     const currentWorkTerms = extractSalientTerms(currentWork);
     const relevantEntries = getRelevantKnowledge(cwd, 5, currentWorkTerms);
+
+    // Write injected IDs state file for retrieval-miss detection at session end
+    try {
+      const stateDir = path.join(os.tmpdir(), "claude-session-start");
+      fs.mkdirSync(stateDir, { recursive: true });
+      const stateFile = path.join(stateDir, `${sessionId}.json`);
+      const injectedIds = relevantEntries.map(e => e.fm && e.fm.id).filter(Boolean);
+      fs.writeFileSync(stateFile, JSON.stringify({ injectedIds }));
+    } catch {}
+
     if (relevantEntries.length > 0) {
       const entryLines = relevantEntries.map((e) => {
         const line = `  **[${e.fm.category}] ${e.fm.tool}:** ${e.summary}`;
