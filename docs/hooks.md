@@ -80,6 +80,14 @@ Saves an emergency snapshot to MEMORY.md before `/compact` runs. Captures the cu
 - **Example trigger:** Running `/compact` when context is large.
 - **State files:** `/tmp/claude-pre-compact/`
 
+#### `post-compact.js` — PostCompact
+
+Re-injects memory context into the conversation after auto-compaction. Reads the `## Pre-compact snapshot` section written by `pre-compact.js` (falling back to `## Current Work`) from the project's MEMORY.md and surfaces it as `additionalContext` so the agent can resume where it left off. If running under `claude-loop`, also appends the task queue sentinel path.
+
+- **Configuration:** Works out of the box.
+- **Example trigger:** Auto-compaction fires mid-session; agent would otherwise lose its current-work context.
+- **Example output:** `additionalContext` containing the Pre-compact snapshot or Current Work section from MEMORY.md.
+
 ---
 
 ### Safety
@@ -122,6 +130,25 @@ Auto-runs project tests after Edit/Write operations on code files. Reads the tes
 - **Example output:** `{"decision": "warn", "message": "Tests failed (exit 1):\n  FAIL: expected 3 but got 4"}` (first 20 lines of output)
 - **Thresholds:** 10-second debounce, 30-second test timeout.
 
+#### `task-completed-gate.js` — TaskCompleted
+
+Quality gate that runs the project's test suite before a teammate agent is allowed to mark its task complete. Only fires for teammate agents (`agent_id` must be present in hook input); main agent completions are not gated. Extracts the test command from the project CLAUDE.md and runs it with a 30-second timeout. If tests fail, returns `additionalContext` feedback blocking the completion and asking the agent to fix the failures first.
+
+- **Configuration:** Requires a `Test:` line in the project CLAUDE.md. Without it, the gate is skipped.
+- **Example trigger:** A teammate subagent signals task completion in a project that has tests configured.
+- **Example output:** `additionalContext: "Tests failed. Fix before completing:\n<first 20 lines of test output>"`
+- **Timeout:** 30 seconds.
+
+#### `tool-failure-logger.js` — PostToolUseFailure
+
+Logs tool errors to the shared JSONL log and warns the agent when the same tool fails repeatedly within a session. Skips user-initiated interrupts. Maintains a per-session failure count in `/tmp/claude-tool-failures/`; once a tool crosses the repeat threshold, injects a `additionalContext` advisory suggesting the agent try a different approach.
+
+- **Configuration:** Works out of the box.
+- **Repeat threshold:** 3 failures of the same tool name within a session.
+- **Example trigger:** `Edit` failing 3 times in a row on the same file.
+- **Example output:** `additionalContext: "Edit has failed 3 times this session. Consider a different approach."`
+- **State files:** `/tmp/claude-tool-failures/`
+
 #### `pr-review-guard.js` — PreToolUse
 
 Blocks `gh pr merge` until CodeRabbit has reviewed the PR. Checks for CodeRabbit as the author of a formal review or comment. Degrades gracefully — allows merge if `gh` CLI is unavailable or the API call fails.
@@ -156,6 +183,32 @@ Detects repetition loops by hashing tool name + input. Maintains a sliding windo
 ---
 
 ### Resource Management
+
+#### `teammate-idle.js` — TeammateIdle
+
+Nudges idle teammate agents to check their task list before going idle. When a teammate agent fires a TeammateIdle event, this hook exits with code 2 and injects a `additionalContext` message instructing the agent to run `TaskList` and check for unfinished work. Main agent idle events (no `agent_id`) are ignored.
+
+- **Configuration:** Works out of the box.
+- **Example trigger:** A teammate subagent goes idle after finishing one subtask but has more items in the task queue.
+- **Example output:** `additionalContext: "You went idle but may have remaining tasks. Run TaskList to check for unfinished work before going idle."`
+
+#### `subagent-context.js` — SubagentStart
+
+Injects helpful context into spawned subagents at the moment they start. Skips read-only agent types (Explore, Plan) since they don't write code and don't need quality gate reminders. For all other subagents, injects up to two pieces of context: a `claude-loop` warning (if `CLAUDE_LOOP_PID` is set) telling the agent to summarize partial work before hitting max turns, and the project's quality gate test command extracted from the `## Quality Gates` section of CLAUDE.md.
+
+- **Configuration:** Works out of the box. Quality gate context requires a `Test:` line in the project CLAUDE.md.
+- **Example trigger:** Parent agent spawning a coding subagent inside a `claude-loop` session.
+- **Example output:** `additionalContext` with claude-loop resume instructions and/or `Quality gates: \`<test-command>\`. Run before finalizing your work.`
+
+#### `subagent-recovery.js` — PostToolUse
+
+Detects truncated Task subagent output and writes a recovery state file so `claude-loop` can resume the work. Fires only on `Task` tool PostToolUse events from the parent agent (skips subagent contexts). Scans the tool response for known truncation markers (max turns, context overflow) and classifies the reason. On detection, writes a JSON state file with the original prompt, partial result (up to 5,000 characters), and reason to `/tmp/claude-subagent-recovery/`, then returns an `additionalContext` advisory with actionable remediation options.
+
+- **Configuration:** Works out of the box.
+- **Truncation patterns:** Detects `max_turns`, `maximum number of turns`, `context window`, `token limit exceeded`, and similar phrases.
+- **Example trigger:** A Task subagent hits its turn limit mid-task.
+- **Example output:** `additionalContext: "Subagent truncated (max_turns). Original task: '...'. Partial result preserved in recovery state. Consider: (1) retry with smaller scope, (2) split into multiple subagents, or (3) increase max_turns."`
+- **State files:** `/tmp/claude-subagent-recovery/{sessionKey}.json`
 
 #### `model-router.js` — PreToolUse
 
@@ -205,10 +258,11 @@ Prevents silent data loss by enforcing a line limit on MEMORY.md. When MEMORY.md
 
 #### `knowledge-capture.js` — utility module
 
-Stages knowledge candidates when learning opportunities are detected (e.g., a test transitions from fail to pass, a stuck loop gets resolved). Stores candidates to SQLite (Node 22.5+) or falls back to JSONL files in `~/.claude/knowledge/staged/`.
+Stages knowledge candidates when learning opportunities are detected (e.g., a test transitions from fail to pass, a stuck loop gets resolved). Stores candidates to SQLite (Node 22.5+) or falls back to JSONL files in `~/.claude/knowledge/staged/`. Exposes `stageCandidate()`, `readStagedCandidates()`, `clearStagedCandidates()`, and `pruneStagedFiles()` for use by other hooks.
 
-- **Used by:** `session-end.js`, `post-tool-verify.js`
+- **Used by:** `session-end.js`, `post-tool-verify.js`, `stuck-detector.js`
 - **Configuration:** Works out of the box. Degrades gracefully on older Node versions.
+- **Storage:** SQLite at `~/.claude/knowledge/knowledge.db` (Node 22.5+), or JSONL files in `~/.claude/knowledge/staged/` on older Node.
 
 #### `knowledge-db.js` — utility module
 
@@ -228,7 +282,7 @@ These are shared libraries, not standalone hooks:
 | `log.js` | JSONL logging to `~/.claude/logs/YYYY-MM-DD.jsonl`. 90-day retention with auto-pruning. |
 | `bm25.js` | BM25 full-text search. Pure Node stdlib. Used for knowledge entry scoring. |
 | `pii-detector.js` | PII/PHI pattern detection and redaction. 6 built-in entity types (SSN, email, phone, credit card, IP, MRN). Supports custom patterns via `.claude/sanitize.yaml`. |
-| `knowledge-capture.js` | Stages knowledge candidates for review. SQLite or JSONL fallback. |
+| `knowledge-capture.js` | Stages knowledge candidates for review. Exposes `stageCandidate()`, `readStagedCandidates()`, `clearStagedCandidates()`, `pruneStagedFiles()`. SQLite or JSONL fallback. |
 | `knowledge-db.js` | Central knowledge store with FTS5 search. Requires Node 22.5+. |
 
 ---

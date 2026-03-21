@@ -60,7 +60,8 @@ chmod +x install.sh
     learn/SKILL.md                    #   /learn - capture knowledge entries
     playbook/SKILL.md                 #   /playbook - analyze and improve config
     promote/SKILL.md                  #   /promote - promote lessons to global scope
-  hooks/                               #   20 hooks — safety, quality, resource management (see docs/hooks.md)
+    continue/SKILL.md                 #   /continue - resume work from last session
+  hooks/                               #   25 hooks — safety, quality, resource management (see docs/hooks.md)
   templates/
     project-CLAUDE.md                 #   Template for project-level CLAUDE.md
     hooks/pre-commit                  #   Git pre-commit hook (blocks secrets, large files)
@@ -84,6 +85,8 @@ The installer **will not overwrite** existing skills or configuration without pr
 - **`/playbook`** -- Analyze your CLAUDE.md configuration and suggest improvements. Modes: `global`, `project`, `check`.
 - **`/learn`** -- Capture a non-obvious lesson as a structured knowledge entry for future sessions.
 - **`/promote`** -- Promote a project-level lesson to global scope.
+- **`/continue`** -- Resume work from where the last session left off. Reads injected memory context and starts working immediately.
+
 **Research:**
 - **`/investigate`** -- Full investigation lifecycle with multi-agent evidence collection, synthesis, tagging, and PHI sanitization. Subcommands: `new`, `run`, `collect`, `synthesize`, `close`, `status`, `list`, `search`.
 
@@ -173,6 +176,8 @@ Standalone tools installed to `~/.local/bin/`:
 | `q` | Lightweight CLI for direct Anthropic API Q&A. Uses Haiku by default for fast, cheap answers. |
 | `qa` | File-capable agentic CLI using the Anthropic API with tool use (bash + text editor). No hooks or MCP. |
 | `claude-loop` | Auto-restart wrapper for Claude Code sessions. Supports `--task-queue` for batch execution. |
+| `knowledge-consolidate` | Deduplicate and consolidate knowledge entries using the claude CLI for pairwise overlap analysis. |
+| `repo-fleet-index` | CLI wrapper for the repo fleet indexer and MCP server. Builds manifests and a digest across your repos. |
 
 ## Log Analysis
 
