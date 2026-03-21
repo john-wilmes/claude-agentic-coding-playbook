@@ -281,6 +281,74 @@ test("handles malformed JSON gracefully", () => {
   assert.deepStrictEqual(result.json, {}, "Should return {}");
 });
 
+// ── Round-trip and edge case tests ───────────────────────────────────────────
+
+const PRE_COMPACT_PATH = path.join(REPO_ROOT, "templates", "hooks", "pre-compact.js");
+
+test("pre-compact → post-compact round-trip: snapshot written by pre-compact is read by readCurrentWork", () => {
+  const { home, cleanup } = createTempHome();
+  const cwd = "/tmp/test-project-" + Date.now();
+  // Seed an existing MEMORY.md so pre-compact has something to upsert into
+  createMemoryFile(home, cwd, "# Memory\n\n## Current Work\n\nInitial work.\n");
+  const sessionId = "test-session-" + Date.now();
+  try {
+    // Run pre-compact to write the snapshot into the MEMORY.md
+    const preResult = runHook(
+      PRE_COMPACT_PATH,
+      { session_id: sessionId, cwd, trigger: "test" },
+      { HOME: home, USERPROFILE: home }
+    );
+    assert.strictEqual(preResult.status, 0, "pre-compact should exit 0");
+
+    // Determine the MEMORY.md path using the same encoding as the hooks
+    const cwdEncoded = cwd.replace(/:/g, "-").replace(/[\\/]/g, "-").replace(/^-/, "");
+    const memPath = path.join(home, ".claude", "projects", cwdEncoded, "memory", "MEMORY.md");
+
+    // post-compact's readCurrentWork should find and return the Pre-compact snapshot section
+    const content = readCurrentWork(memPath);
+    assert.ok(content !== null, "readCurrentWork should not return null after pre-compact ran");
+    assert.ok(content.includes("Pre-compact snapshot"), "Should contain snapshot header");
+    assert.ok(content.includes("Trigger"), "Should contain Trigger field written by pre-compact");
+    assert.ok(content.includes("Branch"), "Should contain Branch field written by pre-compact");
+  } finally {
+    // Clean up pre-compact state file so it doesn't affect other tests
+    const stateFile = path.join(os.tmpdir(), "claude-pre-compact", `${sessionId}.done`);
+    try { fs.rmSync(stateFile); } catch {}
+    cleanup();
+  }
+});
+
+test("readCurrentWork returns null for completely empty file", () => {
+  const tmpFile = path.join(os.tmpdir(), `post-compact-empty-${Date.now()}.md`);
+  fs.writeFileSync(tmpFile, "");
+  try {
+    const result = readCurrentWork(tmpFile);
+    assert.strictEqual(result, null, "Should return null for empty file");
+  } finally {
+    try { fs.rmSync(tmpFile); } catch {}
+  }
+});
+
+test("readCurrentWork returns header-only string when Current Work section body is empty", () => {
+  // extractSection trims to the header alone when no body lines exist before the
+  // next ## header; the non-empty header string is returned (not null).
+  const tmpFile = path.join(os.tmpdir(), `post-compact-empty-section-${Date.now()}.md`);
+  fs.writeFileSync(tmpFile, "## Current Work\n\n## Next Section\n\nHas content.\n");
+  try {
+    const result = readCurrentWork(tmpFile);
+    assert.strictEqual(result, "## Current Work", "Should return header-only string for empty section body");
+  } finally {
+    try { fs.rmSync(tmpFile); } catch {}
+  }
+});
+
+test("buildContext treats empty string sentinel same as null (no task queue appended)", () => {
+  const result = buildContext("## Current Work\n\nDoing stuff", "");
+  assert.ok(result !== null, "Should return content, not null");
+  assert.ok(result.includes("Doing stuff"), "Should include work content");
+  assert.ok(!result.includes("Task queue:"), "Should NOT append Task queue for empty string sentinel");
+});
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
 console.log(`\n${"─".repeat(60)}`);
