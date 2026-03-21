@@ -223,6 +223,33 @@ process.stdin.on("end", () => {
       try { capture.pruneStagedFiles(7); } catch {}
     }
 
+    // Run stale archive once per day
+    try {
+      const archiveStateFile = path.join(os.tmpdir(), "claude-knowledge-archive-last.txt");
+      const today = new Date().toISOString().slice(0, 10);
+      let lastRun = "";
+      try { lastRun = fs.readFileSync(archiveStateFile, "utf8").trim(); } catch {}
+      if (lastRun !== today && knowledgeDb) {
+        const db = knowledgeDb.openDb();
+        if (db) {
+          const count = knowledgeDb.archiveStale(db);
+          if (count > 0) {
+            if (logModule) {
+              logModule.writeLog({
+                hook: "session-end",
+                event: "stale-archive",
+                details: `Archived ${count} stale entries`,
+                context: { count },
+              });
+            } else {
+              logEntry(`stale-archive: archived ${count} entries`);
+            }
+          }
+          fs.writeFileSync(archiveStateFile, today);
+        }
+      }
+    } catch {}
+
     if (pushFailureMsg) {
       process.stdout.write(JSON.stringify({
         hookSpecificOutput: {

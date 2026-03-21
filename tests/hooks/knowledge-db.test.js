@@ -26,6 +26,7 @@ const {
   clearStagedCandidates,
   pruneStagedRows,
   archiveEntry,
+  archiveStale,
   exportToJsonl,
   importFromJsonl,
   migrateFromFilesystem,
@@ -617,6 +618,114 @@ test("20. queryRelevant returns empty array when no entries match", () => {
   const results = queryRelevant(db, { queryTerms: ["xyzzy", "quux", "frobnicate"] });
   assert.ok(Array.isArray(results), "should return an array");
   assert.strictEqual(results.length, 0, "should return empty array when no entries exist");
+});
+
+// Test 21: last_accessed and access_count columns exist after openDb
+test("21. last_accessed and access_count columns exist after openDb", () => {
+  const db = openDb(":memory:");
+  assert.ok(db, "openDb should return a db object");
+
+  // Insert a row and verify the new columns are accessible
+  const entry = makeEntry({ id: "col-check" });
+  insertEntry(db, entry);
+
+  const row = db.prepare(`SELECT last_accessed, access_count FROM entries WHERE id = 'col-check'`).get();
+  assert.ok(row, "should be able to SELECT last_accessed and access_count");
+  // Newly inserted entry should have NULL last_accessed and 0 (or NULL) access_count
+  assert.strictEqual(row.last_accessed, null, "last_accessed should be NULL for new entry");
+});
+
+// Test 22: queryRelevant updates last_accessed and access_count for returned entries
+test("22. queryRelevant updates last_accessed and access_count for returned entries", () => {
+  const db = openDb(":memory:");
+  const entry = makeEntry({
+    id:           "access-track",
+    tool:         "git",
+    context_text: "unique tracking phrase xylophone zeppelin quasar",
+    fix_text:     "some fix",
+  });
+  insertEntry(db, entry);
+
+  // Verify initial state: last_accessed NULL, access_count 0/NULL
+  const before = db.prepare(`SELECT last_accessed, access_count FROM entries WHERE id = 'access-track'`).get();
+  assert.strictEqual(before.last_accessed, null, "last_accessed should be NULL before query");
+
+  // Query it back
+  const results = queryRelevant(db, { queryTerms: ["xylophone", "zeppelin"] });
+  assert.ok(results.find(r => r.id === "access-track"), "should find entry");
+
+  // Verify access tracking was updated
+  const after = db.prepare(`SELECT last_accessed, access_count FROM entries WHERE id = 'access-track'`).get();
+  const today = new Date().toISOString().slice(0, 10);
+  assert.strictEqual(after.last_accessed, today, "last_accessed should be updated to today");
+  assert.ok(after.access_count >= 1, "access_count should be incremented");
+});
+
+// Test 23: archiveStale archives entries not accessed in 30+ days
+test("23. archiveStale archives entries not accessed in 30+ days", () => {
+  const db = openDb(":memory:");
+  const oldDate = new Date(Date.now() - 35 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  const entry = makeEntry({ id: "stale-entry" });
+  insertEntry(db, entry);
+  // Manually set last_accessed to 35 days ago and access_count > 0
+  db.prepare(`UPDATE entries SET last_accessed = $d, access_count = 5 WHERE id = 'stale-entry'`).run({ $d: oldDate });
+
+  archiveStale(db, 30);
+
+  const row = db.prepare(`SELECT status FROM entries WHERE id = 'stale-entry'`).get();
+  assert.strictEqual(row.status, "archived", "stale entry should be archived");
+});
+
+// Test 24: archiveStale preserves recently accessed entries
+test("24. archiveStale preserves recently accessed entries", () => {
+  const db = openDb(":memory:");
+  const recentDate = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  const entry = makeEntry({ id: "fresh-entry" });
+  insertEntry(db, entry);
+  db.prepare(`UPDATE entries SET last_accessed = $d, access_count = 3 WHERE id = 'fresh-entry'`).run({ $d: recentDate });
+
+  archiveStale(db, 30);
+
+  const row = db.prepare(`SELECT status FROM entries WHERE id = 'fresh-entry'`).get();
+  assert.strictEqual(row.status, "active", "recently accessed entry should remain active");
+});
+
+// Test 25: archiveStale handles NULL last_accessed (uses created fallback)
+test("25. archiveStale handles NULL last_accessed (uses created_at fallback)", () => {
+  const db = openDb(":memory:");
+  const oldDate = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString();
+
+  const entry = makeEntry({ id: "old-created", created: oldDate });
+  insertEntry(db, entry);
+  // last_accessed remains NULL (never queried), but created is old
+
+  archiveStale(db, 30);
+
+  const row = db.prepare(`SELECT status FROM entries WHERE id = 'old-created'`).get();
+  assert.strictEqual(row.status, "archived", "entry with old created date and NULL last_accessed should be archived");
+});
+
+// Test 26: archiveStale returns count of archived entries
+test("26. archiveStale returns count of archived entries", () => {
+  const db = openDb(":memory:");
+  const oldDate = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const recentDate = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  const stale1 = makeEntry({ id: "stale-count-1" });
+  const stale2 = makeEntry({ id: "stale-count-2" });
+  const fresh  = makeEntry({ id: "fresh-count" });
+
+  insertEntry(db, stale1);
+  insertEntry(db, stale2);
+  insertEntry(db, fresh);
+
+  db.prepare(`UPDATE entries SET last_accessed = $d, access_count = 2 WHERE id IN ('stale-count-1', 'stale-count-2')`).run({ $d: oldDate });
+  db.prepare(`UPDATE entries SET last_accessed = $d, access_count = 1 WHERE id = 'fresh-count'`).run({ $d: recentDate });
+
+  const count = archiveStale(db, 30);
+  assert.strictEqual(count, 2, "archiveStale should return count of 2 archived entries");
 });
 
 // ─── Summary ─────────────────────────────────────────────────────────────────

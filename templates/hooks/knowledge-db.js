@@ -114,6 +114,10 @@ function openDb(dbPath) {
     // Create schema (idempotent — uses IF NOT EXISTS)
     db.exec(SCHEMA_SQL);
 
+    // Schema migration: add access tracking columns if they don't exist yet
+    try { db.exec("ALTER TABLE entries ADD COLUMN last_accessed TEXT"); } catch {}
+    try { db.exec("ALTER TABLE entries ADD COLUMN access_count INTEGER DEFAULT 0"); } catch {}
+
     // One-time migration from filesystem entries
     if (resolvedPath !== ":memory:") {
       _migrateIfNeeded(db);
@@ -308,6 +312,21 @@ function queryRelevant(db, opts = {}, limit = 5) {
         } catch {}
       }
 
+      // Access-based staleness penalty: entries not accessed in 14+ days get a small penalty
+      // New entries (access_count === 0 or null) are not penalized — they're fresh captures
+      if (row.access_count && row.access_count > 0 && row.last_accessed) {
+        try {
+          const lastAccessedMs = new Date(row.last_accessed).getTime();
+          const daysSinceAccess = (Date.now() - lastAccessedMs) / (1000 * 60 * 60 * 24);
+          if (daysSinceAccess > 14) {
+            combined -= 1;
+          }
+          if (daysSinceAccess > 30) {
+            combined -= 1; // additional -1 for very stale entries (total -2)
+          }
+        } catch {}
+      }
+
       return { ...row, _combined: combined };
     });
 
@@ -317,6 +336,17 @@ function queryRelevant(db, opts = {}, limit = 5) {
 
     // Clean up internal field
     for (const r of results) delete r._combined;
+
+    // Update access tracking for returned entries
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const updateStmt = db.prepare(
+      `UPDATE entries SET last_accessed = $last_accessed, access_count = COALESCE(access_count, 0) + 1 WHERE id = $id`
+    );
+    for (const entry of results) {
+      try {
+        updateStmt.run({ $last_accessed: today, $id: entry.id });
+      } catch {}
+    }
 
     return results;
   } catch {
@@ -468,6 +498,54 @@ function archiveEntry(db, id) {
     stmt.run({ $archived_at: new Date().toISOString(), $id: id });
   } catch {
     // Non-throwing
+  }
+}
+
+// ─── archiveStale ────────────────────────────────────────────────────────────
+
+/**
+ * Archive entries that have not been accessed in daysThreshold or more days.
+ * Uses last_accessed if present; falls back to created column if last_accessed is NULL.
+ * Only archives active entries.
+ *
+ * @param {object} db - DatabaseSync instance
+ * @param {number} [daysThreshold=30] - Number of days of inactivity before archiving
+ * @returns {number} Count of archived entries
+ */
+function archiveStale(db, daysThreshold = 30) {
+  try {
+    if (!db) return 0;
+    const cutoffMs = Date.now() - daysThreshold * 24 * 60 * 60 * 1000;
+    const cutoff = new Date(cutoffMs).toISOString().slice(0, 10); // YYYY-MM-DD
+    const now = new Date().toISOString();
+
+    // Find active entries where last_accessed < cutoff, OR last_accessed is NULL
+    // and created < cutoff (ISO date string comparison works for both date and datetime)
+    const findStmt = db.prepare(`
+      SELECT id FROM entries
+      WHERE status = 'active'
+        AND (
+          (last_accessed IS NOT NULL AND last_accessed < $cutoff)
+          OR
+          (last_accessed IS NULL AND created < $cutoff)
+        )
+    `);
+    const staleRows = findStmt.all({ $cutoff: cutoff });
+
+    if (staleRows.length === 0) return 0;
+
+    const archiveStmt = db.prepare(`
+      UPDATE entries SET status = 'archived', archived_at = $archived_at WHERE id = $id
+    `);
+    for (const row of staleRows) {
+      try {
+        archiveStmt.run({ $archived_at: now, $id: row.id });
+      } catch {}
+    }
+
+    return staleRows.length;
+  } catch {
+    return 0;
   }
 }
 
@@ -708,6 +786,7 @@ module.exports = {
   clearStagedCandidates,
   pruneStagedRows,
   archiveEntry,
+  archiveStale,
   exportToJsonl,
   importFromJsonl,
   migrateFromFilesystem,
