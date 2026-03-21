@@ -60,7 +60,6 @@ chmod +x install.sh
     learn/SKILL.md                    #   /learn - capture knowledge entries
     playbook/SKILL.md                 #   /playbook - analyze and improve config
     promote/SKILL.md                  #   /promote - promote lessons to global scope
-    continue/SKILL.md                 #   /continue - resume work from last session
   hooks/                               #   25 hooks — safety, quality, resource management (see docs/hooks.md)
   templates/
     project-CLAUDE.md                 #   Template for project-level CLAUDE.md
@@ -85,8 +84,6 @@ The installer **will not overwrite** existing skills or configuration without pr
 - **`/playbook`** -- Analyze your CLAUDE.md configuration and suggest improvements. Modes: `global`, `project`, `check`.
 - **`/learn`** -- Capture a non-obvious lesson as a structured knowledge entry for future sessions.
 - **`/promote`** -- Promote a project-level lesson to global scope.
-- **`/continue`** -- Resume work from where the last session left off. Reads injected memory context and starts working immediately.
-
 **Research:**
 - **`/investigate`** -- Full investigation lifecycle with multi-agent evidence collection, synthesis, tagging, and PHI sanitization. Subcommands: `new`, `run`, `collect`, `synthesize`, `close`, `status`, `list`, `search`.
 

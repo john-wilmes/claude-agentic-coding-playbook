@@ -54,6 +54,7 @@ _load_helpers() {
     /^# mark_task_done /,/^}$/ { print; next }
     /^# mark_task_fail /,/^}$/ { print; next }
     /^# task_is_checked /,/^}$/ { print; next }
+    /^# auto_commit_task /,/^}$/ { print; next }
   ' "${SCRIPT}")"
   eval "${src}"
 }
@@ -574,6 +575,72 @@ STUBEOF
     || { echo "Expected loop to advance to 'Second task'; output: ${out}"; return 1; }
 }
 run_test "task queue advances after failed task exhausts retries" t_advance_after_failed_task
+
+# ─── Test: auto_commit_task commits uncommitted changes ──────────────────────
+
+t_auto_commit_commits() {
+  _load_helpers
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  git -C "${tmpdir}" init -q
+  git -C "${tmpdir}" config user.email "test@test.com"
+  git -C "${tmpdir}" config user.name "Test"
+  # Initial commit so HEAD exists
+  touch "${tmpdir}/initial.txt"
+  git -C "${tmpdir}" add -A
+  git -C "${tmpdir}" commit -q -m "initial"
+  # Create an uncommitted file
+  echo "new content" > "${tmpdir}/work.txt"
+  # Run auto_commit_task from inside the repo
+  (cd "${tmpdir}" && auto_commit_task "Test task")
+  # Verify the commit was created
+  local msg
+  msg="$(git -C "${tmpdir}" log -1 --format=%s)"
+  rm -rf "${tmpdir}"
+  [[ "${msg}" == *"Test task"* ]] \
+    || { echo "Expected commit message to contain 'Test task', got: ${msg}"; return 1; }
+}
+run_test "auto_commit_task commits uncommitted changes" t_auto_commit_commits
+
+# ─── Test: auto_commit_task is no-op when tree is clean ──────────────────────
+
+t_auto_commit_noop_clean() {
+  _load_helpers
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  git -C "${tmpdir}" init -q
+  git -C "${tmpdir}" config user.email "test@test.com"
+  git -C "${tmpdir}" config user.name "Test"
+  touch "${tmpdir}/initial.txt"
+  git -C "${tmpdir}" add -A
+  git -C "${tmpdir}" commit -q -m "initial"
+  local count_before
+  count_before="$(git -C "${tmpdir}" rev-list --count HEAD)"
+  # Run auto_commit_task on clean tree
+  (cd "${tmpdir}" && auto_commit_task "Should not commit")
+  local count_after
+  count_after="$(git -C "${tmpdir}" rev-list --count HEAD)"
+  rm -rf "${tmpdir}"
+  [[ "${count_before}" == "${count_after}" ]] \
+    || { echo "Expected no new commit, before=${count_before} after=${count_after}"; return 1; }
+}
+run_test "auto_commit_task is no-op when tree is clean" t_auto_commit_noop_clean
+
+# ─── Test: auto_commit_task is no-op outside git repo ────────────────────────
+
+t_auto_commit_noop_no_git() {
+  _load_helpers
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  # No git init — not a repo
+  echo "file" > "${tmpdir}/test.txt"
+  local rc=0
+  (cd "${tmpdir}" && auto_commit_task "No repo") || rc=$?
+  rm -rf "${tmpdir}"
+  [[ ${rc} -eq 0 ]] \
+    || { echo "Expected exit 0 outside git repo, got ${rc}"; return 1; }
+}
+run_test "auto_commit_task is no-op outside git repo" t_auto_commit_noop_no_git
 
 # ─── Summary ──────────────────────────────────────────────────────────────────
 

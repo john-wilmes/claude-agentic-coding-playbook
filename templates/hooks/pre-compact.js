@@ -1,7 +1,7 @@
 // PreCompact hook: saves an emergency snapshot to MEMORY.md before compaction.
 //
 // Captures current git branch and modified files so that post-compaction
-// /continue has concrete state to resume from.
+// the next session has concrete state to resume from.
 //
 // State file in /tmp/claude-pre-compact/ prevents duplicate snapshots within
 // the same session (one snapshot per session_id is enough).

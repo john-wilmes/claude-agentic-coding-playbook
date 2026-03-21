@@ -263,6 +263,23 @@ task_is_checked() {
   grep -qF "[x] ${task}" "${file}" 2>/dev/null
 }
 
+# auto_commit_task TASK_TEXT
+# Creates a git commit with all staged+unstaged changes after task completion.
+# No-op if not in a git repo or if the working tree is clean.
+# This makes git history the state machine — each completed task is a commit.
+auto_commit_task() {
+  local task="$1"
+  # Bail if not in a git repo
+  git rev-parse --is-inside-work-tree &>/dev/null || return 0
+  # Bail if working tree is clean (checkpoint already committed)
+  if git diff --quiet HEAD &>/dev/null && [[ -z "$(git ls-files --others --exclude-standard)" ]]; then
+    return 0
+  fi
+  # Stage all changes and commit
+  git add -A
+  git commit -m "claude-loop: completed task — ${task}" 2>/dev/null || true
+}
+
 # ─── Sentinel watcher ─────────────────────────────────────────────────────────
 
 _start_sentinel_watcher() {
@@ -603,6 +620,7 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
       # Clean checkpoint exit = task completed successfully
       RETRY_TASK=""
       RETRY_ATTEMPT=0
+      auto_commit_task "${CURRENT_TASK}"
       mark_task_done "${TASK_QUEUE_FILE}" "${CURRENT_TASK}"
       log_event "event=task_advance" "task=${CURRENT_TASK}" "status=done"
       echo "claude-loop: task completed: ${CURRENT_TASK}"
@@ -611,6 +629,7 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
       if task_is_checked "${TASK_QUEUE_FILE}" "${CURRENT_TASK}"; then
         RETRY_TASK=""
         RETRY_ATTEMPT=0
+        auto_commit_task "${CURRENT_TASK}"
         log_event "event=task_advance" "task=${CURRENT_TASK}" "status=done_no_sentinel"
         echo "claude-loop: task completed (checked off, no sentinel): ${CURRENT_TASK}"
       else
