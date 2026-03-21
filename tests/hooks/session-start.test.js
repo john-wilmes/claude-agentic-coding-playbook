@@ -568,6 +568,47 @@ test("22. source_project matching current project has no penalty", () => {
 });
 
 
+// Test 23: extractSalientTerms — extracts meaningful terms, skips stopwords
+test("23. extractSalientTerms extracts meaningful terms from Current Work text", () => {
+  const { extractSalientTerms } = requireModule();
+  const text = "Fixed claude-loop task-advance bug and ran dogfood v3 on vnse project";
+  const terms = extractSalientTerms(text);
+  assert.ok(terms.includes("claude-loop"), "should include claude-loop");
+  assert.ok(terms.includes("task-advance"), "should include task-advance");
+  assert.ok(terms.includes("bug"), "should include bug");
+  assert.ok(terms.includes("dogfood"), "should include dogfood");
+  assert.ok(terms.includes("vnse"), "should include vnse");
+  assert.ok(terms.includes("project"), "should include project");
+  // Stopwords should be filtered
+  assert.ok(!terms.includes("and"), "should not include stopword 'and'");
+  assert.ok(!terms.includes("the"), "should not include stopword 'the'");
+});
+
+// Test 24: extractSalientTerms — empty/null input returns empty array
+test("24. extractSalientTerms returns empty array for empty input", () => {
+  const { extractSalientTerms } = requireModule();
+  assert.deepStrictEqual(extractSalientTerms(""), []);
+  assert.deepStrictEqual(extractSalientTerms(null), []);
+  assert.deepStrictEqual(extractSalientTerms(undefined), []);
+});
+
+// Test 25: extractSalientTerms — respects maxTerms limit
+test("25. extractSalientTerms respects maxTerms limit", () => {
+  const { extractSalientTerms } = requireModule();
+  const text = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima";
+  const terms = extractSalientTerms(text, 3);
+  assert.strictEqual(terms.length, 3, "should return exactly 3 terms");
+});
+
+// Test 26: extractSalientTerms — deduplicates tokens
+test("26. extractSalientTerms deduplicates repeated tokens", () => {
+  const { extractSalientTerms } = requireModule();
+  const text = "hook hook hook testing testing testing";
+  const terms = extractSalientTerms(text);
+  const hookCount = terms.filter(t => t === "hook").length;
+  assert.strictEqual(hookCount, 1, "should only include 'hook' once");
+});
+
 // ─── Summary ──────────────────────────────────────────────────────────────────
 
 console.log(`\n${"─".repeat(60)}`);

@@ -118,14 +118,41 @@ function parseEnvYaml(content) {
   return result;
 }
 
+// Extract salient terms from free text (e.g. Current Work) for FTS5 query enrichment.
+// Returns up to maxTerms unique lowercase tokens, filtering stopwords and short words.
+function extractSalientTerms(text, maxTerms = 8) {
+  if (!text) return [];
+  const stopwords = new Set([
+    "the", "and", "for", "with", "from", "this", "that", "was", "were", "been",
+    "have", "has", "had", "not", "but", "all", "can", "her", "his", "its",
+    "our", "you", "are", "will", "would", "could", "should", "into", "about",
+    "after", "before", "between", "each", "also", "than", "then", "when",
+    "what", "which", "who", "how", "done", "work", "next", "steps", "session",
+    "current", "state", "clean", "commit", "commits", "ahead", "origin",
+    "master", "working", "tree", "saved", "memory", "files", "file", "open",
+    "updated", "added", "removed", "fixed", "ran", "running", "using", "used",
+  ]);
+  // Extract words, kebab-case tokens, and dot-separated identifiers
+  const tokens = text.toLowerCase().match(/[a-z][a-z0-9]+(?:[-_.][a-z0-9]+)*/g) || [];
+  const seen = new Set();
+  const result = [];
+  for (const t of tokens) {
+    if (t.length < 3 || stopwords.has(t) || seen.has(t)) continue;
+    seen.add(t);
+    result.push(t);
+    if (result.length >= maxTerms) break;
+  }
+  return result;
+}
+
 // Read and score knowledge entries via SQLite DB, return top N
-function getRelevantKnowledge(cwd, maxEntries = 5) {
+function getRelevantKnowledge(cwd, maxEntries = 5, extraTerms = []) {
   try {
     let knowledgeDb;
     try { knowledgeDb = require("./knowledge-db"); } catch { return []; }
 
     const projectContext = detectProjectContext(cwd);
-    if (projectContext.tools.length === 0 && projectContext.tags.length === 0) {
+    if (projectContext.tools.length === 0 && projectContext.tags.length === 0 && extraTerms.length === 0) {
       return [];
     }
 
@@ -133,8 +160,8 @@ function getRelevantKnowledge(cwd, maxEntries = 5) {
     const dbPath = path.join(os.homedir(), ".claude", "knowledge", "knowledge.db");
     const db = knowledgeDb.openDb(dbPath);
 
-    // Build query terms from project context
-    const queryTerms = [...projectContext.tools, ...projectContext.tags, projectContext.projectName]
+    // Build query terms from project context + current work terms
+    const queryTerms = [...projectContext.tools, ...projectContext.tags, projectContext.projectName, ...extraTerms]
       .filter(Boolean);
 
     const entries = knowledgeDb.queryRelevant(db, {
@@ -318,8 +345,9 @@ process.stdin.on("end", () => {
       parts.push(`Environment variables loaded from ${envFilePath}: ${varNames}`);
     }
 
-    // Inject relevant knowledge entries
-    const relevantEntries = getRelevantKnowledge(cwd);
+    // Inject relevant knowledge entries, enriched with Current Work terms
+    const currentWorkTerms = extractSalientTerms(currentWork);
+    const relevantEntries = getRelevantKnowledge(cwd, 5, currentWorkTerms);
     if (relevantEntries.length > 0) {
       const entryLines = relevantEntries.map((e) => {
         const line = `  **[${e.fm.category}] ${e.fm.tool}:** ${e.summary}`;
@@ -368,5 +396,5 @@ process.stdin.on("end", () => {
 
 // Export for testing
 if (typeof module !== "undefined") {
-  module.exports = { detectProjectContext, parseFrontmatter, scoreEntry, getRelevantKnowledge, parseEnvYaml };
+  module.exports = { detectProjectContext, parseFrontmatter, scoreEntry, getRelevantKnowledge, parseEnvYaml, extractSalientTerms };
 }
