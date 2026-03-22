@@ -23,7 +23,7 @@ SENTINEL_FILE="/tmp/claude-checkpoint-exit-$$"
 CLAUDE_PID_FILE="/tmp/claude-loop-cpid-$$"
 SENTINEL_POLL_INTERVAL="${SENTINEL_POLL_INTERVAL:-2}"
 LOCK_FILE="/tmp/claude-loop-${_CWD_HASH}.lock"
-LOG_DIR="${HOME}/.claude/logs"
+LOG_DIR="${LOG_DIR:-${HOME}/.claude/logs}"
 LOG_FILE="${LOG_DIR}/claude-loop-$(date +%Y-%m-%d).jsonl"
 MAX_TASK_ATTEMPTS=3
 
@@ -49,6 +49,7 @@ Options:
   --status             Print current loop status and exit
   --report             Summarize today's log and exit
   --dry-run            Show what would be done without running claude
+  --version            Print version and exit
   --help               Show this message
 
 Sentinel file: /tmp/claude-checkpoint-exit-<pid>
@@ -67,6 +68,10 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --version)
+      git describe --tags --always 2>/dev/null || echo dev
+      exit 0
+      ;;
     --help)
       usage
       exit 0
@@ -362,6 +367,9 @@ sentinel_restarts = 0
 tasks_done = 0
 tasks_failed = 0
 total_duration_ms = 0
+task_order = []
+task_status = {}
+task_attempts = {}
 
 try:
     with open(log_file) as f:
@@ -385,6 +393,17 @@ try:
                 tasks_done += 1
             elif event == "task_fail":
                 tasks_failed += 1
+            # Per-task status tracking (only for task-queue sessions)
+            task = rec.get("task", "")
+            if task:
+                if task not in task_status:
+                    task_order.append(task)
+                    task_status[task] = "pending"
+                if event == "task_advance":
+                    task_status[task] = "done"
+                elif event == "task_fail":
+                    task_status[task] = "failed"
+                    task_attempts[task] = rec.get("attempts", 0)
 except FileNotFoundError:
     print("  Log file not found.")
     sys.exit(0)
@@ -397,6 +416,20 @@ if total_duration_ms > 0:
     mins = total_duration_ms // 60000
     secs = (total_duration_ms % 60000) // 1000
     print(f"  Total session time : {mins}m {secs}s")
+
+if task_order:
+    print("")
+    print("  Task queue:")
+    for task in task_order:
+        status = task_status[task]
+        if status == "done":
+            marker = "[x]"
+        elif status == "failed":
+            attempts = task_attempts.get(task, 0)
+            marker = f"[FAIL] (attempts: {attempts})"
+        else:
+            marker = "[ ]"
+        print(f"    {marker} {task}")
 PYEOF
 }
 

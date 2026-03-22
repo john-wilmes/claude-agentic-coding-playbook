@@ -73,6 +73,16 @@ t_help() {
 }
 run_test "--help exits 0 and prints usage" t_help
 
+# ─── Test 1b: --version exits 0 and prints a version string ──────────────────
+
+t_version() {
+  local out rc=0
+  out="$(bash "${SCRIPT}" --version 2>&1)" || rc=$?
+  [[ ${rc} -eq 0 ]] || { echo "--version exit code was ${rc}, expected 0"; return 1; }
+  [[ -n "${out}" ]] || { echo "--version produced no output"; return 1; }
+}
+run_test "--version exits 0 and prints version string" t_version
+
 # ─── Test 2: --dry-run prints plan without running claude ─────────────────────
 
 t_dry_run() {
@@ -190,6 +200,36 @@ EOF
     || { echo "Second task was incorrectly modified; content:\n${content}"; return 1; }
 }
 run_test "mark_task_done marks the correct task [x]" t_mark_task_done
+
+# ─── Test 4b: mark_task_done converts [FAIL] entry to [x] ───────────────────
+
+t_mark_task_done_from_fail() {
+  _load_helpers
+
+  local tmpfile
+  tmpfile="$(mktemp)"
+  cat > "${tmpfile}" <<'EOF'
+- [FAIL] Fix authentication bug (attempts: 3)
+- [ ] Other task
+EOF
+
+  mark_task_done "${tmpfile}" "Fix authentication bug"
+
+  local content
+  content="$(cat "${tmpfile}")"
+  rm -f "${tmpfile}"
+
+  echo "${content}" | grep -q "\- \[x\] Fix authentication bug" \
+    || { echo "[FAIL] entry not converted to [x]; content: ${content}"; return 1; }
+  # Should NOT still have [FAIL]
+  if echo "${content}" | grep -q "\[FAIL\]"; then
+    echo "[FAIL] marker still present after mark_task_done; content: ${content}"; return 1
+  fi
+  # Other task should remain unchecked
+  echo "${content}" | grep -q "\- \[ \] Other task" \
+    || { echo "Other task was incorrectly modified; content: ${content}"; return 1; }
+}
+run_test "mark_task_done converts [FAIL] entry to [x]" t_mark_task_done_from_fail
 
 # ─── Test 5: mark_task_fail — marks task [FAIL] with attempt count ────────────
 
@@ -641,6 +681,93 @@ t_auto_commit_noop_no_git() {
     || { echo "Expected exit 0 outside git repo, got ${rc}"; return 1; }
 }
 run_test "auto_commit_task is no-op outside git repo" t_auto_commit_noop_no_git
+
+# ─── Test 15: --report shows task queue status section ───────────────────────
+
+t_report_task_queue_section() {
+  local tmplogdir today logfile
+  tmplogdir="$(mktemp -d)"
+  today="$(date +%Y-%m-%d)"
+  logfile="${tmplogdir}/claude-loop-${today}.jsonl"
+
+  # Write log entries simulating a 3-task run: one done, one failed, one pending
+  python3 - "${logfile}" <<'PYEOF'
+import json, sys, datetime
+
+logfile = sys.argv[1]
+def entry(**kw):
+    kw["ts"] = datetime.datetime.utcnow().isoformat() + "Z"
+    return json.dumps(kw)
+
+lines = [
+    entry(event="session_start",  task="Build the widget",  attempt=1),
+    entry(event="session_end",    task="Build the widget",  exit_code=0, sentinel=True,  duration_ms=1000),
+    entry(event="task_advance",   task="Build the widget",  status="done"),
+    entry(event="session_start",  task="Deploy to staging", attempt=1),
+    entry(event="session_end",    task="Deploy to staging", exit_code=1, sentinel=False, duration_ms=500),
+    entry(event="task_fail",      task="Deploy to staging", attempts=3),
+    entry(event="session_start",  task="Write tests",       attempt=1),
+    entry(event="session_end",    task="Write tests",       exit_code=1, sentinel=False, duration_ms=200),
+]
+with open(logfile, "w") as f:
+    for line in lines:
+        f.write(line + "\n")
+PYEOF
+
+  local out rc=0
+  out="$(LOG_DIR="${tmplogdir}" bash "${SCRIPT}" --report 2>&1)" || rc=$?
+  rm -rf "${tmplogdir}"
+
+  [[ ${rc} -eq 0 ]] || { echo "Exit code was ${rc}, expected 0; output: ${out}"; return 1; }
+
+  echo "${out}" | grep -q "Task queue:" \
+    || { echo "Expected 'Task queue:' section; output: ${out}"; return 1; }
+  echo "${out}" | grep -q "\[x\].*Build the widget" \
+    || { echo "Expected '[x] Build the widget'; output: ${out}"; return 1; }
+  echo "${out}" | grep -q "\[FAIL\].*Deploy to staging" \
+    || { echo "Expected '[FAIL] Deploy to staging'; output: ${out}"; return 1; }
+  echo "${out}" | grep -q "\[ \].*Write tests" \
+    || { echo "Expected '[ ] Write tests'; output: ${out}"; return 1; }
+}
+run_test "--report shows per-task status in Task queue section" t_report_task_queue_section
+
+# ─── Test 16: --report omits task queue section when log has no task fields ───
+
+t_report_no_task_queue_section() {
+  local tmplogdir today logfile
+  tmplogdir="$(mktemp -d)"
+  today="$(date +%Y-%m-%d)"
+  logfile="${tmplogdir}/claude-loop-${today}.jsonl"
+
+  # Write log entries for an interactive (no task queue) run — empty task fields
+  python3 - "${logfile}" <<'PYEOF'
+import json, sys, datetime
+
+logfile = sys.argv[1]
+def entry(**kw):
+    kw["ts"] = datetime.datetime.utcnow().isoformat() + "Z"
+    return json.dumps(kw)
+
+lines = [
+    entry(event="session_start", task="", attempt=1),
+    entry(event="session_end",   task="", exit_code=0, sentinel=False, duration_ms=3000),
+]
+with open(logfile, "w") as f:
+    for line in lines:
+        f.write(line + "\n")
+PYEOF
+
+  local out rc=0
+  out="$(LOG_DIR="${tmplogdir}" bash "${SCRIPT}" --report 2>&1)" || rc=$?
+  rm -rf "${tmplogdir}"
+
+  [[ ${rc} -eq 0 ]] || { echo "Exit code was ${rc}, expected 0; output: ${out}"; return 1; }
+
+  if echo "${out}" | grep -q "Task queue:"; then
+    echo "Task queue section should not appear for interactive logs; output: ${out}"; return 1
+  fi
+}
+run_test "--report omits task queue section for interactive (no-task) logs" t_report_no_task_queue_section
 
 # ─── Summary ──────────────────────────────────────────────────────────────────
 
