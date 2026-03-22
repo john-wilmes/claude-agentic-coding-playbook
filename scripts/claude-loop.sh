@@ -665,6 +665,14 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
         auto_commit_task "${CURRENT_TASK}"
         log_event "event=task_advance" "task=${CURRENT_TASK}" "status=done_no_sentinel"
         echo "claude-loop: task completed (checked off, no sentinel): ${CURRENT_TASK}"
+      elif [[ "${EXIT_CODE}" -eq 0 ]] && [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then
+        # Exit 0 with uncommitted changes = implicit task completion
+        RETRY_TASK=""
+        RETRY_ATTEMPT=0
+        auto_commit_task "${CURRENT_TASK}"
+        mark_task_done "${TASK_QUEUE_FILE}" "${CURRENT_TASK}"
+        log_event "event=task_advance" "task=${CURRENT_TASK}" "status=done_implicit"
+        echo "claude-loop: task completed (exit 0 + changes detected): ${CURRENT_TASK}"
       else
         # Non-sentinel exit = task did not finish cleanly
         if [[ "${ATTEMPT}" -ge "${MAX_TASK_ATTEMPTS}" ]]; then

@@ -682,6 +682,98 @@ t_auto_commit_noop_no_git() {
 }
 run_test "auto_commit_task is no-op outside git repo" t_auto_commit_noop_no_git
 
+# ─── Test: exit 0 + uncommitted changes = implicit task completion ───────────
+
+t_exit0_with_changes_completes_task() {
+  local tmpbin tmpdir tmpqueue
+  tmpbin="$(mktemp -d)"
+  tmpdir="$(mktemp -d)"
+  tmpqueue="$(mktemp)"
+
+  # Init a git repo so git diff works
+  git -C "${tmpdir}" init -q
+  git -C "${tmpdir}" config user.email "test@test.com"
+  git -C "${tmpdir}" config user.name "Test"
+  touch "${tmpdir}/initial.txt"
+  git -C "${tmpdir}" add -A
+  git -C "${tmpdir}" commit -q -m "initial"
+
+  cat > "${tmpqueue}" <<'EOF'
+- [ ] Implement feature X
+- [ ] Other task
+EOF
+
+  # Stub claude: creates a file (uncommitted change) and exits 0
+  cat > "${tmpbin}/claude" <<STUBEOF
+#!/usr/bin/env bash
+echo "new work" > "${tmpdir}/feature.txt"
+exit 0
+STUBEOF
+  chmod +x "${tmpbin}/claude"
+
+  local out rc=0
+  out="$(cd "${tmpdir}" && PATH="${tmpbin}:${PATH}" \
+    bash "${SCRIPT}" --task-queue "${tmpqueue}" --max-sessions 2 2>&1)" || rc=$?
+
+  local content
+  content="$(cat "${tmpqueue}")"
+  rm -rf "${tmpbin}" "${tmpdir}" "${tmpqueue}"
+
+  # Should see implicit completion message
+  echo "${out}" | grep -q "exit 0 + changes detected" \
+    || { echo "Expected 'exit 0 + changes detected' message; output: ${out}"; return 1; }
+
+  # Task should be marked [x]
+  echo "${content}" | grep -q "\[x\] Implement feature X" \
+    || { echo "Task not marked done; queue: ${content}"; return 1; }
+}
+run_test "exit 0 + uncommitted changes = implicit task completion" t_exit0_with_changes_completes_task
+
+# ─── Test: exit 0 + clean tree = task failed (no work done) ─────────────────
+
+t_exit0_clean_tree_fails_task() {
+  local tmpbin tmpdir tmpqueue
+  tmpbin="$(mktemp -d)"
+  tmpdir="$(mktemp -d)"
+  tmpqueue="$(mktemp)"
+
+  git -C "${tmpdir}" init -q
+  git -C "${tmpdir}" config user.email "test@test.com"
+  git -C "${tmpdir}" config user.name "Test"
+  touch "${tmpdir}/initial.txt"
+  git -C "${tmpdir}" add -A
+  git -C "${tmpdir}" commit -q -m "initial"
+
+  cat > "${tmpqueue}" <<'EOF'
+- [ ] Do nothing task
+EOF
+
+  # Stub claude: exits 0 but makes no changes
+  cat > "${tmpbin}/claude" <<'STUBEOF'
+#!/usr/bin/env bash
+exit 0
+STUBEOF
+  chmod +x "${tmpbin}/claude"
+
+  local out rc=0
+  out="$(cd "${tmpdir}" && PATH="${tmpbin}:${PATH}" \
+    bash "${SCRIPT}" --task-queue "${tmpqueue}" --max-sessions 3 2>&1)" || rc=$?
+
+  local content
+  content="$(cat "${tmpqueue}")"
+  rm -rf "${tmpbin}" "${tmpdir}" "${tmpqueue}"
+
+  # Should NOT see implicit completion
+  if echo "${out}" | grep -q "exit 0 + changes detected"; then
+    echo "Should not complete task with no changes; output: ${out}"; return 1
+  fi
+
+  # Task should be marked [FAIL] after exhausting attempts
+  echo "${content}" | grep -q "\[FAIL\] Do nothing task" \
+    || { echo "Task should be [FAIL]; queue: ${content}"; return 1; }
+}
+run_test "exit 0 + clean tree = task failed (no work done)" t_exit0_clean_tree_fails_task
+
 # ─── Test 15: --report shows task queue status section ───────────────────────
 
 t_report_task_queue_section() {
