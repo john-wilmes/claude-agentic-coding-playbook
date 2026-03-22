@@ -769,6 +769,73 @@ PYEOF
 }
 run_test "--report omits task queue section for interactive (no-task) logs" t_report_no_task_queue_section
 
+# ─── Test 17: get_next_task returns exit 1 for empty queue file ───────────────
+
+t_empty_queue_file() {
+  _load_helpers
+
+  local tmpfile
+  tmpfile="$(mktemp)"
+  : > "${tmpfile}"  # empty file
+
+  local result rc=0
+  result="$(get_next_task "${tmpfile}")" || rc=$?
+  rm -f "${tmpfile}"
+
+  [[ ${rc} -eq 1 ]] || { echo "Expected exit 1 for empty file, got ${rc}"; return 1; }
+  [[ -z "${result}" ]] || { echo "Expected empty output, got: ${result}"; return 1; }
+}
+run_test "get_next_task returns exit 1 for empty queue file" t_empty_queue_file
+
+# ─── Test 18: get_next_task returns exit 1 when all tasks are done ────────────
+
+t_all_tasks_done() {
+  _load_helpers
+
+  local tmpfile
+  tmpfile="$(mktemp)"
+  cat > "${tmpfile}" <<'EOF'
+- [x] Task one
+- [x] Task two
+- [FAIL] Task three (attempts: 3)
+EOF
+
+  local result rc=0
+  result="$(get_next_task "${tmpfile}")" || rc=$?
+  rm -f "${tmpfile}"
+
+  [[ ${rc} -eq 1 ]] || { echo "Expected exit 1 when all done/failed, got ${rc}"; return 1; }
+  [[ -z "${result}" ]] || { echo "Expected empty output, got: ${result}"; return 1; }
+}
+run_test "get_next_task returns exit 1 when all tasks done or failed" t_all_tasks_done
+
+# ─── Test 19: --dry-run with exhausted queue shows "(none)" ──────────────────
+
+t_dry_run_exhausted_queue() {
+  local tmpbin tmpqueue
+  tmpbin="$(mktemp -d)"
+  tmpqueue="$(mktemp)"
+  cat > "${tmpbin}/claude" <<'EOF'
+#!/usr/bin/env bash
+exit 99
+EOF
+  chmod +x "${tmpbin}/claude"
+
+  cat > "${tmpqueue}" <<'EOF'
+- [x] Done task
+- [FAIL] Failed task (attempts: 3)
+EOF
+
+  local out rc=0
+  out="$(PATH="${tmpbin}:${PATH}" bash "${SCRIPT}" --task-queue "${tmpqueue}" --dry-run 2>&1)" || rc=$?
+  rm -rf "${tmpbin}" "${tmpqueue}"
+
+  [[ ${rc} -eq 0 ]] || { echo "Exit code was ${rc}, expected 0; output: ${out}"; return 1; }
+  echo "${out}" | grep -q "none" \
+    || { echo "Expected '(none)' for exhausted queue; output: ${out}"; return 1; }
+}
+run_test "--dry-run with exhausted queue shows no next task" t_dry_run_exhausted_queue
+
 # ─── Summary ──────────────────────────────────────────────────────────────────
 
 echo ""
