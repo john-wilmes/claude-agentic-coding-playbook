@@ -12,9 +12,9 @@ const path = require("path");
 const os = require("os");
 
 // Convert a cwd path to the ~/.claude/projects/ key format:
-//   /home/user/Documents/myproject  ->  -home-user-Documents-myproject
+//   /home/user/Documents/myproject  ->  -home-user-Documents-myproject  (leading dash kept)
 function cwdToProjectKey(cwd) {
-  return cwd.replace(/:/g, "-").replace(/[\\/]/g, "-").replace(/^-/, "");
+  return cwd.replace(/:/g, "-").replace(/[\\/]/g, "-");
 }
 
 function findMemoryPath(cwd) {

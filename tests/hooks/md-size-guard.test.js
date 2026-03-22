@@ -225,7 +225,7 @@ test("7. Same-day collision: pre-existing overflow → counter suffix -2", (env,
 
 test("8. Missing MEMORY.md → empty JSON, no crash", (env, cwd) => {
   // Construct the path that would be MEMORY.md but don't create the file
-  const cwdEncoded = cwd.replace(/:/g, "-").replace(/[\\/]/g, "-").replace(/^-/, "");
+  const cwdEncoded = cwd.replace(/:/g, "-").replace(/[\\/]/g, "-");
   const fakePath = path.join(env.home, ".claude", "projects", cwdEncoded, "memory", "MEMORY.md");
 
   const result = runGuardHook(
@@ -296,7 +296,7 @@ test("12. Malformed/empty JSON input → empty JSON", (env, cwd) => {
 test("13. Missing cwd in hook event → empty JSON (no process.cwd() fallback)", (env, cwd) => {
   // Construct a MEMORY.md path that would match if cwd were provided, but
   // don't include cwd in the event — the hook must return {} rather than guess.
-  const cwdEncoded = cwd.replace(/:/g, "-").replace(/[\\/]/g, "-").replace(/^-/, "");
+  const cwdEncoded = cwd.replace(/:/g, "-").replace(/[\\/]/g, "-");
   const memPath = path.join(env.home, ".claude", "projects", cwdEncoded, "memory", "MEMORY.md");
   fs.mkdirSync(path.dirname(memPath), { recursive: true });
   fs.writeFileSync(memPath, genLines(200));

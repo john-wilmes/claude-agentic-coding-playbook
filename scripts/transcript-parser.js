@@ -10,7 +10,7 @@ const os = require("os");
  * e.g., "/home/user/project" -> "home-user-project"
  */
 function encodeCwd(cwd) {
-  return cwd.replace(/:/g, "-").replace(/[\\/]/g, "-").replace(/^-/, "");
+  return cwd.replace(/:/g, "-").replace(/[\\/]/g, "-");
 }
 
 /**

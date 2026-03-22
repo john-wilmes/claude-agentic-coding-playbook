@@ -22,7 +22,7 @@ const CLAUDE_WARN = 700;
 function isMemoryFile(filePath, cwd) {
   if (!filePath || !cwd) return false;
   try {
-    const cwdEncoded = cwd.replace(/:/g, "-").replace(/[\\/]/g, "-").replace(/^-/, "");
+    const cwdEncoded = cwd.replace(/:/g, "-").replace(/[\\/]/g, "-");
     const expectedPath = path.join(os.homedir(), ".claude", "projects", cwdEncoded, "memory", "MEMORY.md");
     return path.resolve(filePath) === path.resolve(expectedPath);
   } catch {

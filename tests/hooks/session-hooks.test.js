@@ -132,7 +132,7 @@ test("4. Path encoding: produces Claude Code-compatible project key", (env) => {
   const projDir = createProjectDir({ git: true });
 
   // Compute expected encoding (same algorithm as the fix)
-  const expected = projDir.replace(/:/g, "-").replace(/[\\/]/g, "-").replace(/^-/, "");
+  const expected = projDir.replace(/:/g, "-").replace(/[\\/]/g, "-");
 
   const memContent = "## Current Work\n\nPath encoding test marker.\n";
   createMemoryFile(env.home, projDir, memContent);
@@ -401,11 +401,11 @@ test("21. session-end only stages its OWN project MEMORY.md, not other projects'
   const gitIn = { cwd: env.claudeDir, encoding: "utf8", env: { ...process.env, ...gitEnv } };
 
   // Use simple predictable fake cwd paths so encoding is deterministic
-  // Encoding: colons → dashes, separators → dashes, strip leading dash
+  // Encoding: colons → dashes, separators → dashes, keep leading dash
   const projACwd = "C:\\projects\\alpha";   // encodes to: C--projects-alpha
   const projBCwd = "C:\\projects\\beta";    // encodes to: C--projects-beta
-  const encA = projACwd.replace(/:/g, "-").replace(/[\\/]/g, "-").replace(/^-/, "");
-  const encB = projBCwd.replace(/:/g, "-").replace(/[\\/]/g, "-").replace(/^-/, "");
+  const encA = projACwd.replace(/:/g, "-").replace(/[\\/]/g, "-");
+  const encB = projBCwd.replace(/:/g, "-").replace(/[\\/]/g, "-");
 
   const memA = path.join(env.claudeDir, "projects", encA, "memory", "MEMORY.md");
   const memB = path.join(env.claudeDir, "projects", encB, "memory", "MEMORY.md");
@@ -471,7 +471,7 @@ function initGitRepo(env) {
  * Encode a cwd string using the same algorithm as session-end.js.
  */
 function encodeCwd(cwd) {
-  return cwd.replace(/:/g, "-").replace(/[\\/]/g, "-").replace(/^-/, "");
+  return cwd.replace(/:/g, "-").replace(/[\\/]/g, "-");
 }
 
 /**

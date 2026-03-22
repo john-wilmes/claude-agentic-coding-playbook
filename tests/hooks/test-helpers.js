@@ -75,8 +75,8 @@ ${fix}
  * @returns {string} path to the MEMORY.md file
  */
 function createMemoryFile(home, cwd, content) {
-  // Replicate Claude Code's encoding: colon→dash, separators→dash, strip leading dash
-  const cwdEncoded = cwd.replace(/:/g, "-").replace(/[\\/]/g, "-").replace(/^-/, "");
+  // Replicate Claude Code's encoding: colon→dash, separators→dash, keep leading dash
+  const cwdEncoded = cwd.replace(/:/g, "-").replace(/[\\/]/g, "-");
   const memDir = path.join(home, ".claude", "projects", cwdEncoded, "memory");
   fs.mkdirSync(memDir, { recursive: true });
   const memPath = path.join(memDir, "MEMORY.md");

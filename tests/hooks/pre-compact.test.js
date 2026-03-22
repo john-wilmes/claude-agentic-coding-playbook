@@ -65,7 +65,7 @@ function createTempProjectDir() {
  * Replicates cwdToProjectKey logic from the hook.
  */
 function expectedMemoryPath(home, cwd) {
-  const key = cwd.replace(/:/g, "-").replace(/[\\/]/g, "-").replace(/^-/, "");
+  const key = cwd.replace(/:/g, "-").replace(/[\\/]/g, "-");
   return path.join(home, ".claude", "projects", key, "memory", "MEMORY.md");
 }
 

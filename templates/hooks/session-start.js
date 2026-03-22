@@ -242,7 +242,7 @@ process.stdin.on("end", () => {
     let lessonsLearned = "";
     let memorySizeWarning = "";
     try {
-      const cwdEncoded = cwd.replace(/:/g, "-").replace(/[\\/]/g, "-").replace(/^-/, "");
+      const cwdEncoded = cwd.replace(/:/g, "-").replace(/[\\/]/g, "-");
       const memoryPath = path.join(os.homedir(), ".claude", "projects", cwdEncoded, "memory", "MEMORY.md");
       const memoryContent = fs.readFileSync(memoryPath, "utf8");
       const cwMatch = memoryContent.match(/## Current Work\n([\s\S]*?)(?=\n## |\n$|$)/);

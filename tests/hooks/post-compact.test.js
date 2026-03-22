@@ -50,12 +50,12 @@ console.log("\npost-compact.js:");
 
 test("cwdToProjectKey converts path separators to dashes", () => {
   const key = cwdToProjectKey("/home/user/Documents/myproject");
-  assert.strictEqual(key, "home-user-Documents-myproject");
+  assert.strictEqual(key, "-home-user-Documents-myproject");
 });
 
-test("cwdToProjectKey strips leading dash", () => {
+test("cwdToProjectKey keeps leading dash (matches Claude Code encoding)", () => {
   const key = cwdToProjectKey("/foo/bar");
-  assert.strictEqual(key, "foo-bar");
+  assert.strictEqual(key, "-foo-bar");
 });
 
 test("findMemoryPath returns path under homedir", () => {
@@ -64,7 +64,7 @@ test("findMemoryPath returns path under homedir", () => {
   const home = os.homedir();
   assert.ok(memPath.startsWith(home), "Should be under homedir");
   assert.ok(memPath.endsWith("MEMORY.md"), "Should end with MEMORY.md");
-  assert.ok(memPath.includes("home-user-myproject"), "Should encode cwd in path");
+  assert.ok(memPath.includes("-home-user-myproject"), "Should encode cwd in path");
 });
 
 test("readCurrentWork returns null when file does not exist", () => {
@@ -301,7 +301,7 @@ test("pre-compact → post-compact round-trip: snapshot written by pre-compact i
     assert.strictEqual(preResult.status, 0, "pre-compact should exit 0");
 
     // Determine the MEMORY.md path using the same encoding as the hooks
-    const cwdEncoded = cwd.replace(/:/g, "-").replace(/[\\/]/g, "-").replace(/^-/, "");
+    const cwdEncoded = cwd.replace(/:/g, "-").replace(/[\\/]/g, "-");
     const memPath = path.join(home, ".claude", "projects", cwdEncoded, "memory", "MEMORY.md");
 
     // post-compact's readCurrentWork should find and return the Pre-compact snapshot section

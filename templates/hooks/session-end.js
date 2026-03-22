@@ -168,7 +168,7 @@ process.stdin.on("end", () => {
       }
 
       // Encode cwd to the project key Claude Code uses for memory paths
-      const encodedCwd = cwd.replace(/:/g, "-").replace(/[\\/]/g, "-").replace(/^-/, "");
+      const encodedCwd = cwd.replace(/:/g, "-").replace(/[\\/]/g, "-");
       const memoryPath = `projects/${encodedCwd}/memory/MEMORY.md`;
 
       try {
