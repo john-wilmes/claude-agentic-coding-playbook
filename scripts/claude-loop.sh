@@ -341,6 +341,12 @@ show_status() {
     echo "  Running   : no"
   fi
 
+  if [[ -f "${LOG_FILE}" ]]; then
+    local session_count
+    session_count="$(grep -c '"session_start"' "${LOG_FILE}" 2>/dev/null || echo 0)"
+    echo "  Sessions  : ${session_count}"
+  fi
+
   echo "  Log file  : ${LOG_FILE}"
 
   if [[ -f "${LOG_FILE}" ]]; then

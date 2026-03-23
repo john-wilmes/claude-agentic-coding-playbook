@@ -1025,6 +1025,47 @@ PYEOF
 }
 run_test "--status shows Duration from first to last log timestamp" t_status_duration
 
+# ─── Test: --status shows Sessions count from log ────────────────────────────
+
+t_status_session_count() {
+  local tmpdir tmplog
+  tmpdir="$(mktemp -d)"
+  tmplog="${tmpdir}/claude-loop-$(date +%Y-%m-%d).jsonl"
+
+  # Write log entries with 3 session_start events and other events
+  python3 - "${tmplog}" <<'PYEOF'
+import json, sys, datetime
+
+log_file = sys.argv[1]
+t = datetime.datetime(2026, 3, 23, 10, 0, 0)
+entries = [
+    {"event": "session_start", "task": "task one",   "attempt": 1},
+    {"event": "session_end",   "task": "task one",   "exit_code": 0},
+    {"event": "session_start", "task": "task two",   "attempt": 1},
+    {"event": "session_end",   "task": "task two",   "exit_code": 1},
+    {"event": "session_start", "task": "task two",   "attempt": 2},
+    {"event": "session_end",   "task": "task two",   "exit_code": 0},
+]
+with open(log_file, "w") as f:
+    for i, e in enumerate(entries):
+        rec = {"ts": (t.replace(minute=i)).isoformat() + "Z"}
+        rec.update(e)
+        f.write(json.dumps(rec) + "\n")
+PYEOF
+
+  local out rc=0
+  out="$(LOG_DIR="${tmpdir}" bash "${SCRIPT}" --status 2>&1)" || rc=$?
+
+  rm -rf "${tmpdir}"
+
+  [[ ${rc} -eq 0 ]] || { echo "--status exit code was ${rc}, expected 0"; return 1; }
+  echo "${out}" | grep -q "Sessions" \
+    || { echo "--status output missing 'Sessions' line; got: ${out}"; return 1; }
+  echo "${out}" | grep -q "Sessions.*3" \
+    || { echo "--status Sessions should show 3; got: ${out}"; return 1; }
+}
+run_test "--status shows Sessions count from log" t_status_session_count
+
 # ─── Test: --dry-run --log-file shows custom log path ────────────────────────
 
 t_dry_run_log_file() {
