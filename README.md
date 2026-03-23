@@ -2,7 +2,7 @@
 
 # Agentic Coding Playbook
 
-Evidence-based practices for LLM-assisted software development. Optimized for [Claude Code](https://claude.com/claude-code) with cross-tool principles that apply to Cursor, Copilot, and other AI coding tools.
+Evidence-based practices for LLM-assisted software development. Built for [Claude Code](https://claude.com/claude-code). The principles in [best-practices.md](docs/best-practices.md) are conceptually portable, but all hooks, skills, and scripts target Claude Code specifically.
 
 ## Why This Exists
 
@@ -22,6 +22,31 @@ Key findings from the research:
 | Teams with AI review seeing quality gains | 81% vs 55% | Qodo |
 
 Full details with citations: [docs/best-practices.md](docs/best-practices.md)
+
+## Try a Single Hook
+
+Want to test the waters before a full install? Copy `context-guard.js` (context window monitoring) and its logger dependency:
+
+```bash
+mkdir -p ~/.claude/hooks
+curl -fsSL https://raw.githubusercontent.com/john-wilmes/claude-agentic-coding-playbook/master/templates/hooks/context-guard.js -o ~/.claude/hooks/context-guard.js
+curl -fsSL https://raw.githubusercontent.com/john-wilmes/claude-agentic-coding-playbook/master/templates/hooks/log.js -o ~/.claude/hooks/log.js
+chmod +x ~/.claude/hooks/context-guard.js ~/.claude/hooks/log.js
+```
+
+Then add to `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      { "matcher": "", "hooks": [{ "type": "command", "command": "node ~/.claude/hooks/context-guard.js" }] }
+    ]
+  }
+}
+```
+
+This gives you context window warnings after every tool call. The full install also registers `context-guard.js` on `SessionStart` and wires up the remaining 20 hooks.
 
 ## Quick Install
 
@@ -253,6 +278,14 @@ See [docs/swe-bench-methodology.md](docs/swe-bench-methodology.md) for task sele
 
 - **Subagent overflow recovery (claude-loop)** -- When a subagent runs out of turns or context, detect the truncation via a PostToolUse hook on Task, write a state file with remaining work, and have claude-loop inject it as the prompt for a fresh session to finish the job.
 - **Multi-agent coordination testing** -- Dogfood test team workflows (TeamCreate, SendMessage, shared task lists) in real coding sessions to validate coordination patterns and discover emergent issues.
+
+## Limitations
+
+- **Claude Code only**: All hooks, skills, and scripts target Claude Code. The principles in `best-practices.md` are conceptually portable to Cursor, Copilot, etc., but the tooling is not.
+- **Hook startup overhead**: 21 hooks add ~50-100ms per tool call. Negligible for most workflows, noticeable in rapid-fire operations.
+- **CLAUDE.md budget**: The combined profile's CLAUDE.md consumes instruction budget. Projects with large existing CLAUDE.md files may hit the ~150-200 instruction line ceiling.
+- **Node.js 18+ required**: Hooks use modern Node.js APIs (`structuredClone`, etc.).
+- **Single maintainer**: This is a personal project, not backed by a company or large team.
 
 ## Contributing
 
