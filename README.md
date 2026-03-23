@@ -254,4 +254,4 @@ Issues and PRs welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for citation stan
 
 ## License
 
-Apache 2.0
+MIT
