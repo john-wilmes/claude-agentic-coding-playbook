@@ -43,10 +43,12 @@ chmod +x install.sh
 | Flag | Description |
 |------|-------------|
 | `--root <path>` | Controls where `research/` is created (default: `~/Documents`). Config always goes to `~/.claude/` |
-| `--knowledge-repo <url>` | Git URL for a shared knowledge repository (cloned to `<root>/.claude/knowledge/`) |
+| `--knowledge-repo <url>` | Git URL for a shared knowledge repository (cloned to `~/.claude/knowledge/`) |
 | `--wizard` | Interactive merge with your existing configuration |
 | `--force` | Overwrite existing files without prompting |
 | `--dry-run` | Preview what would be installed |
+| `--extras` | Install optional extras (e.g., SWE-Bench scripts, fleet indexer) |
+| `--uninstall` | Remove all installed playbook files from `~/.claude/` |
 
 ### What Gets Installed
 
@@ -60,11 +62,11 @@ chmod +x install.sh
     learn/SKILL.md                    #   /learn - capture knowledge entries
     playbook/SKILL.md                 #   /playbook - analyze and improve config
     promote/SKILL.md                  #   /promote - promote lessons to global scope
-  hooks/                               #   25 hooks — safety, quality, resource management (see docs/hooks.md)
+  hooks/                               #   26 hooks — safety, quality, resource management (see docs/hooks.md)
   templates/
     project-CLAUDE.md                 #   Template for project-level CLAUDE.md
-    hooks/pre-commit                  #   Git pre-commit hook (blocks secrets, large files)
-    knowledge/                        #   Knowledge entry format
+    knowledge/
+      pre-commit                      #   Git pre-commit hook (blocks secrets, large files)
 
 <install-root>/                        # e.g. ~/Documents (set with --root)
   research/                            # Research/investigation workspace
@@ -93,8 +95,9 @@ CLAUDE.md rules are advisory (~50-90% compliance). Hooks are deterministic (>95%
 
 **Session lifecycle:**
 - **Session start** -- Injects memory, knowledge entries, and git context. Warns when MEMORY.md or CLAUDE.md exceed size thresholds.
-- **Session end** -- Captures session summary and updates knowledge database on exit.
+- **Session end** -- Auto-commits memory changes, detects retrieval misses, archives stale knowledge entries.
 - **Pre-compact** -- Saves context state before `/compact` runs, preserving critical information.
+- **Post-compact** -- Re-injects memory and task context after auto-compaction.
 
 **Safety:**
 - **Prompt injection guard** -- Blocks high-confidence injection patterns in Bash commands (zero false positives by design).
@@ -103,7 +106,7 @@ CLAUDE.md rules are advisory (~50-90% compliance). Hooks are deterministic (>95%
 
 **Quality:**
 - **Post-tool verify** -- Auto-runs project tests after Edit/Write on code files with debouncing.
-- **PR review guard** -- Enforces code review before pushing. Blocks `git push` if changes haven't been reviewed.
+- **PR review guard** -- Enforces code review before merging. Blocks `gh pr merge` until CodeRabbit has reviewed the PR.
 - **Context guard** -- Dual-mode context window monitoring. Warns at 35%/50%, advisory block at 60% (informational, not hard-blocking), failsafe sentinel at 75%.
 - **Stuck detector** -- Detects and breaks agent loops when the same action repeats.
 
@@ -112,6 +115,7 @@ CLAUDE.md rules are advisory (~50-90% compliance). Hooks are deterministic (>95%
 - **Filesize guard** -- Warns when reading or writing large files that waste context.
 - **Bloat guard** -- Detects runaway file creation and flags unexpected project growth.
 - **Markdown size guard** -- Warns when CLAUDE.md or MEMORY.md approach size thresholds.
+- **Read-once dedup** -- Blocks re-reads of unchanged files (38-40% context savings).
 
 **Knowledge:**
 - **Knowledge capture** -- Extracts reusable lessons from session activity for the knowledge database.
@@ -122,8 +126,9 @@ CLAUDE.md rules are advisory (~50-90% compliance). Hooks are deterministic (>95%
 - **Subagent recovery** -- Detects truncated subagent output after Task tool calls and writes recovery state.
 - **Tool failure logger** -- Logs tool errors to `~/.claude/logs/tool-failures.jsonl` on PostToolUseFailure.
 - **Task completed gate** -- Quality gate on TaskCompleted: blocks teammate task completion if tests fail.
+- **Teammate idle** -- Nudges idle teammates to check their TaskList.
 
-Utility modules (`log.js`, `bm25.js`, `pii-detector.js`) are shared libraries used by the hooks above. See [Hook Reference](docs/hooks.md) for details on every hook.
+Utility modules (`log.js`, `bm25.js`, `pii-detector.js`, `knowledge-capture.js`, `knowledge-db.js`) are shared libraries used by the hooks above. See [Hook Reference](docs/hooks.md) for details on every hook.
 
 ### CLAUDE.md Rules
 
@@ -135,7 +140,7 @@ The combined CLAUDE.md includes:
 - **Testing as feedback loop** -- verify continuously, not just at the end
 - **Code review enforcement** -- review staged changes before every commit
 - **Evidence discipline** -- numbered observations with source, relevance, and 3-line max
-- **PII/PHI protection** -- Presidio-based auto-sanitization for investigation files
+- **PII/PHI protection** -- Regex-based PII auto-sanitization for investigation files
 - **Security baseline** -- sandbox mode, credential protection, MCP server restrictions
 - **Efficiency rules** -- parallel tool calls, no re-reads, two-attempt limit
 - **Memory discipline** -- Current Work tracking for session continuity
@@ -212,7 +217,7 @@ The wizard will:
 
 ## Documentation
 
-- **[Best Practices Guide](docs/best-practices.md)** -- the full evidence-backed guide with 54 verified citations
+- **[Best Practices Guide](docs/best-practices.md)** -- the full evidence-backed guide with 59 verified citations
 - **[Project CLAUDE.md Template](templates/project-CLAUDE.md)** -- starting point for per-project instructions
 - **[Dogfooding Guide](docs/dogfooding.md)** -- how to design and run a sustained dogfood campaign against real codebases, with a 100-task worked example
 - **[Dogfood Playbook](docs/dogfood-playbook.md)** -- manual interactive testing checklist for verifying the full user experience

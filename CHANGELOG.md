@@ -16,12 +16,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Access tracking and decay for knowledge entries
 - Retrieval miss detection at session end (knowledge system)
 - Enriched knowledge retrieval with Current Work terms from MEMORY.md
+- Read-once deduplication hook for 38-40% file-read context savings
+- Block 6 additional credential directories per Trail of Bits recommendations
+- Close readiness gaps: --uninstall flag, Node v18+ version check, session-end tests, analyze-logs tests, sanitize tests
 
 ### Fixed
 - Leading dash in CWD path encoding for project memory lookup
 - Auto-send initial prompt in claude-loop interactive mode
 - Knowledge scoring category bias removed
 - claude-loop advances to next task after failed task exhausts retries
+- Correct 5 misattributed citations, add 5 orphan citations, fix model routing advice
+- MCP registry test count mismatch
 
 ## [0.1.0] - 2025-02-24
 

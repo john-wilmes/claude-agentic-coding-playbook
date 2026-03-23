@@ -233,6 +233,16 @@ Blocks reads of oversized files (>10 MB) and binary files before they waste cont
 - **Blocked binary extensions:** 50+ types — video (.mp4, .mov), audio (.wav, .mp3), archives (.zip, .tar.gz), databases (.db, .sqlite), compiled (.exe, .dll, .so).
 - **Example output:** `{"decision": "deny", "message": "Binary file .mp4 cannot be meaningfully read as text"}`
 
+#### `read-once-dedup.js` — PreToolUse
+
+Tracks Read tool calls per session and blocks re-reads of unchanged files to prevent redundant context consumption. On each Read call, records the file path and its mtime; subsequent reads of the same file are blocked if the mtime has not changed. Allows reads with different offset/limit windows (partial reads of a large file are treated as distinct). Skips subagent contexts and files under `~/.claude/` to avoid blocking memory file reads.
+
+- **Configuration:** Works out of the box. State persists via `CLAUDE_LOOP_PID`.
+- **Context savings:** 38-40% reduction in file-read context consumption in typical sessions.
+- **Example trigger:** Agent re-reading a file it already has in context.
+- **Example output:** `{"decision": "deny", "message": "read-once-dedup: <file> unchanged since last read. Use content already in context."}`
+- **State files:** `/tmp/claude-read-once-dedup/`
+
 #### `bloat-guard.js` — PreToolUse
 
 Detects runaway file creation. Warns when the agent creates files matching throwaway patterns (`test-*.js`, `debug-*`, `tmp-*`, `scratch.*`) and escalates after 5+ new files per session.
@@ -281,7 +291,7 @@ These are shared libraries, not standalone hooks:
 |---|---|
 | `log.js` | JSONL logging to `~/.claude/logs/YYYY-MM-DD.jsonl`. 90-day retention with auto-pruning. |
 | `bm25.js` | BM25 full-text search. Pure Node stdlib. Used for knowledge entry scoring. |
-| `pii-detector.js` | PII/PHI pattern detection and redaction. 6 built-in entity types (SSN, email, phone, credit card, IP, MRN). Supports custom patterns via `.claude/sanitize.yaml`. |
+| `pii-detector.js` | PII/PHI pattern detection and redaction. 7 built-in entity types (SSN, email, phone, credit card, IP, MRN, DOB). Supports custom patterns via `.claude/sanitize.yaml`. |
 | `knowledge-capture.js` | Stages knowledge candidates for review. Exposes `stageCandidate()`, `readStagedCandidates()`, `clearStagedCandidates()`, `pruneStagedFiles()`. SQLite or JSONL fallback. |
 | `knowledge-db.js` | Central knowledge store with FTS5 search. Requires Node 22.5+. |
 

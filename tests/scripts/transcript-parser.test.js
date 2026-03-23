@@ -85,12 +85,12 @@ function writeSessionFile(projectDir, sessionId, lines = []) {
 
 console.log("\nencodeCwd:");
 
-test("Unix absolute path: replaces slashes with dashes, strips leading dash", () => {
-  assert.strictEqual(encodeCwd("/home/user/project"), "home-user-project");
+test("Unix absolute path: replaces slashes with dashes, leading dash preserved", () => {
+  assert.strictEqual(encodeCwd("/home/user/project"), "-home-user-project");
 });
 
-test("Root path: single slash becomes empty string (leading dash stripped)", () => {
-  assert.strictEqual(encodeCwd("/"), "");
+test("Root path: single slash becomes a single dash (leading dash preserved)", () => {
+  assert.strictEqual(encodeCwd("/"), "-");
 });
 
 test("Path with no leading slash (relative): no stripping needed", () => {
@@ -106,7 +106,7 @@ test("Windows-style forward-slash path: C:/Users/user -> C--Users-user", () => {
 });
 
 test("Path with multiple consecutive slashes: each slash becomes a dash", () => {
-  assert.strictEqual(encodeCwd("/home//user///project"), "home--user---project");
+  assert.strictEqual(encodeCwd("/home//user///project"), "-home--user---project");
 });
 
 test("Path already dash-encoded: unchanged", () => {
@@ -117,13 +117,13 @@ test("Empty string: returns empty string", () => {
   assert.strictEqual(encodeCwd(""), "");
 });
 
-test("Path with mixed colon and slash (Windows UNC-like): both replaced, one leading dash stripped", () => {
-  // //server/share -> --server-share (two slashes -> two dashes) -> -server-share (one leading dash stripped)
-  assert.strictEqual(encodeCwd("//server/share"), "-server-share");
+test("Path with mixed colon and slash (Windows UNC-like): both replaced, leading dashes preserved", () => {
+  // //server/share -> --server-share (two slashes -> two dashes, both preserved)
+  assert.strictEqual(encodeCwd("//server/share"), "--server-share");
 });
 
 test("Deep path: all slashes converted", () => {
-  assert.strictEqual(encodeCwd("/a/b/c/d/e"), "a-b-c-d-e");
+  assert.strictEqual(encodeCwd("/a/b/c/d/e"), "-a-b-c-d-e");
 });
 
 // ---------------------------------------------------------------------------
@@ -135,14 +135,14 @@ console.log("\ngetProjectDir:");
 test("Returns ~/.claude/projects/<encoded-cwd>", () => {
   const home = os.homedir();
   const result = getProjectDir("/home/user/myproject");
-  const expected = path.join(home, ".claude", "projects", "home-user-myproject");
+  const expected = path.join(home, ".claude", "projects", "-home-user-myproject");
   assert.strictEqual(result, expected);
 });
 
 test("Encodes cwd before joining", () => {
   const home = os.homedir();
   const result = getProjectDir("/foo/bar");
-  assert.strictEqual(result, path.join(home, ".claude", "projects", "foo-bar"));
+  assert.strictEqual(result, path.join(home, ".claude", "projects", "-foo-bar"));
 });
 
 test("Uses os.homedir() as base", () => {

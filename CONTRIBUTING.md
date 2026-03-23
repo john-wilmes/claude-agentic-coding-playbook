@@ -122,6 +122,12 @@ for t in tests/skills/*.test.js; do node "$t" || exit 1; done
 for t in tests/investigate/*.test.js; do node "$t" || exit 1; done
 ```
 
+Markdown linting (CI enforces this):
+
+```bash
+npx markdownlint-cli2 '**/*.md'
+```
+
 Individual test files can also be run directly, for example:
 
 ```bash

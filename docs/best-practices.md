@@ -1560,6 +1560,7 @@ entries into your `settings.json` without overwriting existing configuration.
 | Grafana | uvx (stdio) | Disabled | — |
 | Elasticsearch | uvx (stdio) | Disabled | — |
 | Serena | uvx (stdio) | Disabled | `--context claude-code` |
+| Fleet Index | node (stdio) | **Enabled** | — |
 | Zendesk | npx (stdio) | Disabled | — |
 | ClickUp | HTTP (remote) | Disabled | OAuth |
 | MongoDB | npx (stdio) | Disabled | `--readOnly` |
@@ -2160,7 +2161,7 @@ the agent would do correctly without the instruction.
 For teams that need to validate the installer on a fresh environment (e.g., new
 developer onboarding or CI infrastructure), the repository includes
 `scripts/ec2-dogfood.sh` -- a standalone script that installs prerequisites, runs
-both profiles, tests hooks, and verifies knowledge repo integration on a clean
+the combined profile, tests hooks, and verifies knowledge repo integration on a clean
 Ubuntu instance.
 
 ---
@@ -2173,7 +2174,7 @@ performance degrades non-linearly as fill increases. This section synthesizes th
 research so that design decisions — compaction thresholds, instruction placement,
 evaluation methodology — have explicit empirical grounding.
 
-### 16.1 Context Window Topology
+### 17.1 Context Window Topology
 
 #### Context rot
 
@@ -2238,7 +2239,7 @@ before the session ends.
 
 ---
 
-### 16.2 Observation Management
+### 17.2 Observation Management
 
 Tool outputs are the dominant cost driver and the highest-leverage compression
 target. The techniques below are ranked by token savings and performance impact.
@@ -2291,7 +2292,7 @@ degraded zone when handoff occurs.
 
 ---
 
-### 16.3 Instruction Reliability
+### 17.3 Instruction Reliability
 
 Instructions in CLAUDE.md are text. Text is probabilistic. The research quantifies
 how unreliable that is in agentic scenarios.
@@ -2344,7 +2345,7 @@ differently can fail or succeed depending on phrasing, not semantics.
 
 ---
 
-### 16.4 Process Supervision for Autonomous Agents
+### 17.4 Process Supervision for Autonomous Agents
 
 Autonomous agents introduce a class of failure that interactive sessions do not
 have: the agent continues running after the user disengages. Two variants:
@@ -2387,7 +2388,7 @@ script is the supervisor.
 
 ---
 
-### 16.5 Evaluation Without Confounding
+### 17.5 Evaluation Without Confounding
 
 Measuring agent capability without confounding infrastructure effects is harder than
 it appears. The dominant failure mode: using automated test pass rates as a proxy
@@ -2455,7 +2456,7 @@ the workflow").
 
 ---
 
-Last updated: 2026-03-10
+Last updated: 2026-03-23
 
 ---
 
@@ -2575,6 +2576,6 @@ Last updated: 2026-03-10
 
 57. **Shinn et al. -- Reflexion: Language Agents with Verbal Reinforcement Learning.** https://arxiv.org/abs/2303.11366 -- NeurIPS 2023; diminishing returns past round 1 of reflection; rounds 3+ yield single-digit-percent improvement at up to 50x the token cost of a single pass.
 
-58. **BRICS Economic Research -- Rationale Clauses and Instruction Compliance (2024).** -- Rationale clauses alongside instructions improve compliance ~30% when the agent understands why a rule exists; structured explanations outperform bare imperatives.
+58. **BRICS Economic Research -- Rationale Clauses and Instruction Compliance (2024).** No URL available. Rationale clauses alongside instructions improve compliance ~30% when the agent understands why a rule exists; structured explanations outperform bare imperatives.
 
 59. **Cline -- Proactive Session Handoff at 50% Context Fill.** https://github.com/cline/cline -- Production finding: handoff at 50% fill rather than 80% avoids the degraded zone; waiting for the model-enforced threshold means the agent is already degraded when handoff occurs.
