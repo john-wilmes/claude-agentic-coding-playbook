@@ -33,6 +33,7 @@ TASK_QUEUE_FILE=""
 MAX_SESSIONS=0          # 0 = unlimited
 DRY_RUN=false
 STATUS_MODE=false
+STATUS_JSON_MODE=false
 REPORT_MODE=false
 
 # ─── Argument parsing ─────────────────────────────────────────────────────────
@@ -94,6 +95,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --status)
       STATUS_MODE=true
+      shift
+      ;;
+    --status-json)
+      STATUS_JSON_MODE=true
       shift
       ;;
     --report)
@@ -346,6 +351,26 @@ show_status() {
   fi
 }
 
+# ─── Status JSON mode ─────────────────────────────────────────────────────────
+
+show_status_json() {
+  local running=false
+  local pid=""
+  if [[ -f "${LOCK_FILE}" ]]; then
+    if ! flock -n "${LOCK_FILE}" true 2>/dev/null; then
+      running=true
+      # Extract PID from lock file name: claude-loop-<hash>.lock
+      # The PID of the holding process is not in the file; report the lock file only.
+    fi
+  fi
+  if [[ "${running}" == "true" ]]; then
+    printf '{"running":true,"lock_file":"%s","sentinel_file":"%s"}\n' \
+      "${LOCK_FILE}" "${SENTINEL_FILE}"
+  else
+    printf '{"running":false}\n'
+  fi
+}
+
 # ─── Report mode ──────────────────────────────────────────────────────────────
 
 show_report() {
@@ -507,6 +532,11 @@ fi
 
 if [[ "${STATUS_MODE}" == "true" ]]; then
   show_status
+  exit 0
+fi
+
+if [[ "${STATUS_JSON_MODE}" == "true" ]]; then
+  show_status_json
   exit 0
 fi
 

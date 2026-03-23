@@ -928,6 +928,61 @@ EOF
 }
 run_test "--dry-run with exhausted queue shows no next task" t_dry_run_exhausted_queue
 
+# ─── Test: --status-json ──────────────────────────────────────────────────────
+
+t_status_json_not_running() {
+  # When no loop holds the lock, --status-json should output {"running":false}.
+  # Use a temp dir as CWD so the lock file is isolated from any real claude-loop.
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  local out rc=0
+  out="$(cd "${tmpdir}" && bash "${SCRIPT}" --status-json 2>&1)" || rc=$?
+  rm -rf "${tmpdir}"
+  [[ ${rc} -eq 0 ]] || { echo "--status-json exit code was ${rc}, expected 0"; return 1; }
+  # Must be valid JSON
+  echo "${out}" | python3 -c "import json,sys; json.load(sys.stdin)" \
+    || { echo "--status-json output is not valid JSON: ${out}"; return 1; }
+  # running key must be false
+  local running
+  running="$(echo "${out}" | python3 -c "import json,sys; print(json.load(sys.stdin)['running'])")"
+  [[ "${running}" == "False" ]] \
+    || { echo "Expected running=False, got: ${running}; output: ${out}"; return 1; }
+}
+run_test "--status-json not running: outputs valid JSON with running=false" t_status_json_not_running
+
+t_status_json_keys_when_running() {
+  # When a loop holds the lock, --status-json should include lock_file and sentinel_file keys.
+  # Use a temp dir as CWD so the lock file is isolated, then hold it with flock.
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  local cwd_hash
+  cwd_hash="$(echo "${tmpdir}" | md5sum | cut -c1-8)"
+  local lock_file="/tmp/claude-loop-${cwd_hash}.lock"
+
+  # Acquire lock; it will be released when this subshell exits (fd 8 closes)
+  exec 8>"${lock_file}"
+  flock -x 8
+
+  local out rc=0
+  out="$(cd "${tmpdir}" && bash "${SCRIPT}" --status-json 2>&1)" || rc=$?
+
+  flock -u 8
+  exec 8>&-
+  rm -f "${lock_file}"
+  rm -rf "${tmpdir}"
+
+  [[ ${rc} -eq 0 ]] || { echo "--status-json exit code was ${rc}, expected 0"; return 1; }
+  echo "${out}" | python3 -c "import json,sys; json.load(sys.stdin)" \
+    || { echo "--status-json output is not valid JSON: ${out}"; return 1; }
+  local running
+  running="$(echo "${out}" | python3 -c "import json,sys; print(json.load(sys.stdin)['running'])")"
+  [[ "${running}" == "True" ]] \
+    || { echo "Expected running=True, got: ${running}; output: ${out}"; return 1; }
+  echo "${out}" | python3 -c "import json,sys; d=json.load(sys.stdin); assert 'lock_file' in d, 'missing lock_file'; assert 'sentinel_file' in d, 'missing sentinel_file'" \
+    || { echo "--status-json missing required keys; output: ${out}"; return 1; }
+}
+run_test "--status-json running: outputs valid JSON with lock_file and sentinel_file keys" t_status_json_keys_when_running
+
 # ─── Summary ──────────────────────────────────────────────────────────────────
 
 echo ""
