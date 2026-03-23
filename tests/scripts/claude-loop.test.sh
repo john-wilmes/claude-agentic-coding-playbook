@@ -1025,6 +1025,18 @@ PYEOF
 }
 run_test "--status shows Duration from first to last log timestamp" t_status_duration
 
+# ─── Test: --dry-run --log-file shows custom log path ────────────────────────
+
+t_dry_run_log_file() {
+  local custom_log="/tmp/test-log.jsonl"
+  local out rc=0
+  out="$(bash "${SCRIPT}" --dry-run --log-file "${custom_log}" 2>&1)" || rc=$?
+  [[ ${rc} -eq 0 ]] || { echo "--dry-run --log-file exit code was ${rc}, expected 0"; return 1; }
+  echo "${out}" | grep -q "${custom_log}" \
+    || { echo "dry-run output did not show custom log path '${custom_log}'; got: ${out}"; return 1; }
+}
+run_test "--dry-run --log-file shows custom log path in output" t_dry_run_log_file
+
 # ─── Summary ──────────────────────────────────────────────────────────────────
 
 echo ""
