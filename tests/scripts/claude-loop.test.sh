@@ -993,6 +993,38 @@ t_status_json_keys_when_running() {
 }
 run_test "--status-json running: outputs valid JSON with lock_file and sentinel_file keys" t_status_json_keys_when_running
 
+# ─── Test: --status shows Duration when log has multiple timestamps ───────────
+
+t_status_duration() {
+  local tmpdir tmplog
+  tmpdir="$(mktemp -d)"
+  tmplog="${tmpdir}/claude-loop-$(date +%Y-%m-%d).jsonl"
+
+  # Write two log entries with different timestamps (90 seconds apart)
+  python3 - "${tmplog}" <<'PYEOF'
+import json, sys, datetime
+
+log_file = sys.argv[1]
+t1 = datetime.datetime(2026, 3, 23, 10, 0, 0)
+t2 = datetime.datetime(2026, 3, 23, 10, 1, 30)
+with open(log_file, "w") as f:
+    f.write(json.dumps({"ts": t1.isoformat() + "Z", "event": "loop_event", "message": "loop started"}) + "\n")
+    f.write(json.dumps({"ts": t2.isoformat() + "Z", "event": "session_end"}) + "\n")
+PYEOF
+
+  local out rc=0
+  out="$(LOG_DIR="${tmpdir}" bash "${SCRIPT}" --status 2>&1)" || rc=$?
+
+  rm -rf "${tmpdir}"
+
+  [[ ${rc} -eq 0 ]] || { echo "--status exit code was ${rc}, expected 0"; return 1; }
+  echo "${out}" | grep -q "Duration" \
+    || { echo "--status output missing 'Duration' line; got: ${out}"; return 1; }
+  echo "${out}" | grep -q "1m 30s" \
+    || { echo "--status Duration should be '1m 30s'; got: ${out}"; return 1; }
+}
+run_test "--status shows Duration from first to last log timestamp" t_status_duration
+
 # ─── Summary ──────────────────────────────────────────────────────────────────
 
 echo ""

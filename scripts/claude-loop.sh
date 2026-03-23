@@ -347,6 +347,47 @@ show_status() {
     local last_event
     last_event="$(tail -1 "${LOG_FILE}" 2>/dev/null || true)"
     echo "  Last event: ${last_event:-none}"
+    local duration_str
+    duration_str="$(python3 - "${LOG_FILE}" <<'PYEOF'
+import json, sys, datetime
+
+log_file = sys.argv[1]
+first_ts = None
+last_ts = None
+
+try:
+    with open(log_file) as f:
+        for raw in f:
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                rec = json.loads(raw)
+                ts = rec.get("ts", "")
+                if ts:
+                    if first_ts is None:
+                        first_ts = ts
+                    last_ts = ts
+            except json.JSONDecodeError:
+                continue
+except FileNotFoundError:
+    pass
+
+if first_ts and last_ts and first_ts != last_ts:
+    try:
+        t1 = datetime.datetime.fromisoformat(first_ts.rstrip("Z"))
+        t2 = datetime.datetime.fromisoformat(last_ts.rstrip("Z"))
+        total_secs = int((t2 - t1).total_seconds())
+        mins = total_secs // 60
+        secs = total_secs % 60
+        print(f"{mins}m {secs}s")
+    except Exception:
+        pass
+PYEOF
+)"
+    if [[ -n "${duration_str}" ]]; then
+      echo "  Duration  : ${duration_str}"
+    fi
   else
     echo "  Last event: (no log today)"
   fi
