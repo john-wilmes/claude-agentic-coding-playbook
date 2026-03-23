@@ -224,9 +224,19 @@ node scripts/analyze-logs.js --since 2026-03-01
 
 # Filter by session or hook
 node scripts/analyze-logs.js --session abc123 --hook context-guard
+
+# Session timeline — merges hook log events with transcript tool calls
+node scripts/analyze-logs.js --timeline SESSION_ID --project-dir /path/to/project
+
+# Cross-session aggregate metrics
+node scripts/analyze-logs.js --aggregate
 ```
 
 Output includes context-guard progression per session, stuck-detector triggers, model-router distribution, and prompt-injection blocks.
+
+`--timeline SESSION_ID` requires `--project-dir PATH` to locate transcript files. The timeline shows tool calls (with `[ERROR]` markers), hook interventions (`<!>` warn, `!!!` block/escalate, `---` info), context-guard percentages, and a summary line.
+
+`--aggregate` reports cross-session metrics: session count, context usage stats (avg/median/max), hook fire rates per session, and session health rates (stuck-detector triggers, sycophancy warnings, model routing distribution).
 
 ## Existing Users
 

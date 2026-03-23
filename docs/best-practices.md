@@ -1191,6 +1191,8 @@ generation [56].
 
 The `sycophancy-detector` hook provides automated enforcement of this pattern. It tracks quick-edit sequences (Read → Edit without investigation), compliance runs (consecutive modifications without reads), and session-level modification ratios, and warns when the agent's behavior drifts toward rubber-stamping rather than genuine review.
 
+To investigate a specific session post-hoc, use `analyze-logs.js --timeline SESSION_ID --project-dir PATH`. The timeline merges hook log events with transcript tool calls in chronological order, showing tool calls (with `[ERROR]` markers), hook interventions (`<!>` warn, `!!!` block/escalate), and context-guard percentages. For cross-session trends, `--aggregate` reports context usage stats, hook fire rates per session, and session health rates (stuck-detector triggers, sycophancy warnings, model routing distribution).
+
 ### Pre-commit hooks for mechanical enforcement
 
 Some rules should not depend on the agent following instructions. A pre-commit

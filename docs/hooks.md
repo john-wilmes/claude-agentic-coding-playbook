@@ -364,4 +364,4 @@ These supplement the global CLAUDE.md with targeted guidance for hook and test a
 
 ## Log Analysis
 
-All hook decisions are logged to `~/.claude/logs/YYYY-MM-DD.jsonl`. See the [Log Analysis](../README.md#log-analysis) section in the README for analysis commands.
+All hook decisions are logged to `~/.claude/logs/YYYY-MM-DD.jsonl`. See the [Log Analysis](../README.md#log-analysis) section in the README for the full list of analysis commands, including `--timeline SESSION_ID` (chronological session timeline merging hook events with transcript tool calls) and `--aggregate` (cross-session metrics: context usage, hook fire rates, session health).
