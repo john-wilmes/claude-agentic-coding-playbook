@@ -1074,6 +1074,44 @@ if [ -f "$SCRIPT_DIR/templates/hooks/filesize-guard.js" ]; then
   fi
 fi
 
+# Read-once dedup hook (PreToolUse: blocks re-reads of unchanged files)
+if [ -f "$SCRIPT_DIR/templates/hooks/read-once-dedup.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/read-once-dedup.js" "$CLAUDE_DIR/hooks/read-once-dedup.js" "read-once dedup: read-once-dedup.js"
+
+  echo ""
+  echo "--- Configuring read-once-dedup in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  DEDUP_CMD="node $CLAUDE_DIR/hooks/read-once-dedup.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add read-once-dedup hook (PreToolUse Read) to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    if grep -q "read-once-dedup" "$SETTINGS_FILE" 2>/dev/null; then
+      echo "ALREADY CONFIGURED: read-once-dedup hook in settings.json"
+    else
+      node -e "
+        const fs = require('fs');
+        const path = require('path');
+        const settingsPath = path.resolve(process.argv[1]);
+        const hookCmd = process.argv[2];
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (!settings.hooks) settings.hooks = {};
+        if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+        settings.hooks.PreToolUse.push({
+          matcher: 'Read',
+          hooks: [{ type: 'command', command: hookCmd, timeout: 5 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      " "$SETTINGS_FILE" "$DEDUP_CMD"
+      echo "CONFIGURED: read-once-dedup hook in settings.json (PreToolUse Read)"
+    fi
+  fi
+fi
+
 # Bloat guard hook (PreToolUse: blocks oversized file writes)
 if [ -f "$SCRIPT_DIR/templates/hooks/bloat-guard.js" ]; then
   install_file "$SCRIPT_DIR/templates/hooks/bloat-guard.js" "$CLAUDE_DIR/hooks/bloat-guard.js" "bloat guard: bloat-guard.js"
