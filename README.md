@@ -203,7 +203,7 @@ Standalone tools installed to `~/.local/bin/`:
 |--------|-------------|
 | `q` | Lightweight CLI for direct Anthropic API Q&A. Uses Haiku by default for fast, cheap answers. |
 | `qa` | File-capable agentic CLI using the Anthropic API with tool use (bash + text editor). No hooks or MCP. |
-| `claude-loop` | Auto-restart wrapper for Claude Code sessions. Supports `--task-queue` for batch execution. |
+| `claude-loop` | Auto-restart wrapper for Claude Code sessions. Supports `--task-queue`, `--status-json`, `--log-file`, and `--report`. |
 | `knowledge-consolidate` | Deduplicate and consolidate knowledge entries using the claude CLI for pairwise overlap analysis. |
 | `repo-fleet-index` | CLI wrapper for the repo fleet indexer and MCP server. Builds manifests and a digest across your repos. |
 
