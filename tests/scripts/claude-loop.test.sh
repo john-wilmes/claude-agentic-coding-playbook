@@ -73,6 +73,16 @@ t_help() {
 }
 run_test "--help exits 0 and prints usage" t_help
 
+# ─── Test 1b-extra: --help lists --status-json ────────────────────────────────
+
+t_help_status_json() {
+  local out
+  out="$(bash "${SCRIPT}" --help 2>&1)"
+  echo "${out}" | grep -q "\-\-status-json" \
+    || { echo "--help output did not contain '--status-json'"; return 1; }
+}
+run_test "--help output contains --status-json" t_help_status_json
+
 # ─── Test 1b: --version exits 0 and prints a version string ──────────────────
 
 t_version() {
