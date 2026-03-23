@@ -211,7 +211,23 @@ test("15. allowed-tools ≤10 items (string) -> no tool count advisory", (env) =
   assert.ok(!ctx.includes("tool selection degrades"), `Unexpected advisory present. Got: ${ctx}`);
 });
 
-test("16. Route event writes JSONL log entry", (env) => {
+test("16. allowed-tools with exactly 10 items (array) does not trigger warning", (env) => {
+  const exactlyTenTools = ["Bash","Read","Write","Edit","Glob","Grep","Task","WebFetch","WebSearch","Bash2"];
+  assert.strictEqual(exactlyTenTools.length, 10, "Fixture must have exactly 10 tools");
+
+  const result = runRouter({
+    subagent_type: "general-purpose",
+    prompt: "Search the codebase for API definitions",
+    "allowed-tools": exactlyTenTools,
+  }, env);
+
+  assert.ok(result.json.hookSpecificOutput, "Should have hookSpecificOutput");
+  const ctx = result.json.hookSpecificOutput.additionalContext;
+  assert.ok(!ctx.includes("Consider splitting"), `Unexpected 'Consider splitting' advisory for 10 tools. Got: ${ctx}`);
+  assert.ok(!ctx.includes("tool selection degrades"), `Unexpected tool count advisory for 10 tools. Got: ${ctx}`);
+});
+
+test("17. Route event writes JSONL log entry", (env) => {
   const result = runRouter({
     subagent_type: "Explore",
     prompt: "Find all TypeScript files",

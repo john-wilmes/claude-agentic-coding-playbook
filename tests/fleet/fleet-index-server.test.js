@@ -199,6 +199,66 @@ test("7. resources/read returns error for unknown URI", () => {
   );
 });
 
+test("8. search_repos with missing query returns structured validation error", () => {
+  const { responses } = rpcCall([
+    INIT_REQUEST,
+    { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "search_repos", arguments: {} } },
+  ]);
+  const resp = responses.find(r => r.id === 2);
+  assert.ok(resp, "should receive tools/call response");
+  assert.ok(resp.result, "response should have result (not a JSON-RPC error)");
+  assert.ok(Array.isArray(resp.result.content) && resp.result.content.length > 0, "result.content should be non-empty");
+  const payload = JSON.parse(resp.result.content[0].text);
+  assert.strictEqual(payload.isError, true, "payload.isError should be true");
+  assert.strictEqual(payload.errorCategory, "validation", "errorCategory should be 'validation'");
+  assert.strictEqual(payload.isRetryable, false, "isRetryable should be false");
+  assert.ok(typeof payload.description === "string" && payload.description.length > 0, "description should be a non-empty string");
+});
+
+test("9. get_manifest with missing repo returns structured validation error", () => {
+  const { responses } = rpcCall([
+    INIT_REQUEST,
+    { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_manifest", arguments: {} } },
+  ]);
+  const resp = responses.find(r => r.id === 2);
+  assert.ok(resp, "should receive tools/call response");
+  assert.ok(resp.result, "response should have result");
+  const payload = JSON.parse(resp.result.content[0].text);
+  assert.strictEqual(payload.isError, true, "payload.isError should be true");
+  assert.strictEqual(payload.errorCategory, "validation", "errorCategory should be 'validation'");
+  assert.strictEqual(payload.isRetryable, false, "isRetryable should be false");
+  assert.ok(typeof payload.description === "string" && payload.description.length > 0, "description should be a non-empty string");
+});
+
+test("10. get_manifest with nonexistent repo returns structured validation error", () => {
+  const { responses } = rpcCall([
+    INIT_REQUEST,
+    { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_manifest", arguments: { repo: "nonexistent/repo" } } },
+  ]);
+  const resp = responses.find(r => r.id === 2);
+  assert.ok(resp, "should receive tools/call response");
+  assert.ok(resp.result, "response should have result");
+  const payload = JSON.parse(resp.result.content[0].text);
+  assert.strictEqual(payload.isError, true, "payload.isError should be true");
+  assert.strictEqual(payload.errorCategory, "validation", "errorCategory should be 'validation'");
+  assert.ok(payload.description.includes("nonexistent/repo"), `description should mention the repo, got: ${payload.description}`);
+});
+
+test("11. get_digest when digest file doesn't exist returns structured validation error", () => {
+  // Use a nonexistent path to guarantee the digest file is absent
+  const { responses } = rpcCall([
+    INIT_REQUEST,
+    { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_digest", arguments: {} } },
+  ], { FLEET_DIGEST_FILE: "/nonexistent/path/fleet-digest.txt" });
+  const resp = responses.find(r => r.id === 2);
+  assert.ok(resp, "should receive tools/call response");
+  assert.ok(resp.result, "response should have result");
+  const payload = JSON.parse(resp.result.content[0].text);
+  assert.strictEqual(payload.isError, true, "payload.isError should be true");
+  assert.strictEqual(payload.errorCategory, "validation", "errorCategory should be 'validation'");
+  assert.ok(typeof payload.description === "string" && payload.description.length > 0, "description should be a non-empty string");
+});
+
 // ─── Summary ──────────────────────────────────────────────────────────────────
 
 console.log(`\n${"─".repeat(60)}`);

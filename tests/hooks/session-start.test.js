@@ -609,6 +609,37 @@ test("26. extractSalientTerms deduplicates repeated tokens", () => {
   assert.strictEqual(hookCount, 1, "should only include 'hook' once");
 });
 
+// Test 27: getRelevantKnowledge returns empty array when queryRelevant returns error status
+test("27. getRelevantKnowledge returns empty array when queryRelevant returns error status", () => {
+  // Arrange: create a DB with a broken schema (drop entries table) so queryRelevant returns { status: "error" }
+  const { home, cleanup } = createTempHome();
+  try {
+    const knowledgeDb = require("../../templates/hooks/knowledge-db");
+    const dbPath = path.join(home, ".claude", "knowledge", "knowledge.db");
+    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+
+    const mod = requireModule();
+    const dir = createProjectDir({ git: true });
+    try {
+      const entries = withFakeHome(home, () => {
+        // Open a valid DB first so the file exists
+        const db = knowledgeDb.openDb(dbPath);
+        // Drop the entries table to force queryRelevant to return { status: "error" }
+        db.prepare("DROP TABLE IF EXISTS entries").run();
+        db.prepare("DROP TABLE IF EXISTS knowledge_fts").run();
+        db.close();
+        // Now call getRelevantKnowledge — it opens the DB file and queries it
+        return mod.getRelevantKnowledge(dir);
+      });
+      assert.deepStrictEqual(entries, [], "Should return empty array when queryRelevant returns error status");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  } finally {
+    cleanup();
+  }
+});
+
 // ─── Summary ──────────────────────────────────────────────────────────────────
 
 console.log(`\n${"─".repeat(60)}`);

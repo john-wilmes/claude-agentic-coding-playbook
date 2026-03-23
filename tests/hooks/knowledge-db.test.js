@@ -738,6 +738,27 @@ test("26. archiveStale returns count of archived entries", () => {
   assert.strictEqual(count, 2, "archiveStale should return count of 2 archived entries");
 });
 
+// Test 27: queryRelevant returns error status when db is null
+test("27. queryRelevant returns error status when db is null", () => {
+  const nullResult = queryRelevant(null, { queryTerms: ["test"] });
+  assert.strictEqual(nullResult.status, "error", "status should be 'error'");
+  assert.strictEqual(nullResult.error, "database unavailable", "error should be 'database unavailable'");
+  assert.deepStrictEqual(nullResult.results, [], "results should be empty array");
+});
+
+// Test 28: queryRelevant returns error status on exception (entries table dropped)
+test("28. queryRelevant returns error status on exception (entries table dropped)", () => {
+  const db = openDb(":memory:");
+  // Drop the entries table to force an exception inside queryRelevant
+  db.prepare("DROP TABLE IF EXISTS entries").run();
+  db.prepare("DROP TABLE IF EXISTS knowledge_fts").run();
+
+  const result = queryRelevant(db, { queryTerms: ["test"] });
+  assert.strictEqual(result.status, "error", "status should be 'error' when query throws");
+  assert.ok(typeof result.error === "string" && result.error.length > 0, "error should be a non-empty string");
+  assert.deepStrictEqual(result.results, [], "results should be empty array on exception");
+});
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
 console.log(`\n${"─".repeat(60)}`);
