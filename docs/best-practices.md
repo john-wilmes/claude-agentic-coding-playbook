@@ -132,6 +132,20 @@ Anthropic's officially recommended workflow separates research from execution to
 avoid solving the wrong problem [1]. This five-phase pattern is the foundation of
 effective agentic coding.
 
+```mermaid
+flowchart LR
+    E[Explore] --> P[Plan] --> C[Code] --> V[Verify] --> Co[Commit]
+    V -->|tests fail| C
+    T[Trivial change] -.->|skip| C
+
+    style E fill:#e8f4fd,stroke:#2196f3
+    style P fill:#e8f4fd,stroke:#2196f3
+    style C fill:#e8f4fd,stroke:#2196f3
+    style V fill:#e8f4fd,stroke:#2196f3
+    style Co fill:#e8f4fd,stroke:#2196f3
+    style T fill:#fff3e0,stroke:#ff9800
+```
+
 ### Phase 1: Explore
 
 Use Plan Mode or subagents to read files and understand the codebase without

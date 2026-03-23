@@ -43,6 +43,24 @@ Claude Code hooks are Node.js scripts that run at five lifecycle events:
 | **TeammateIdle** | Teammate agent goes idle | Nudge agent to check for remaining work |
 | **SubagentStart** | Subagent is spawned | Inject project context into subagent |
 
+```mermaid
+flowchart TD
+    A[Session starts] -->|SessionStart| B[Inject context & knowledge]
+    B --> C{Agent requests tool}
+    C -->|PreToolUse| D{Hook decision}
+    D -->|allow / warn| E[Tool executes]
+    D -->|deny| C
+    E -->|success| F[PostToolUse]
+    E -->|failure| G[PostToolUseFailure]
+    F --> C
+    G --> C
+    C -->|/compact| H[PreCompact → save state]
+    H --> I[Compaction runs]
+    I --> J[PostCompact → re-inject context]
+    J --> C
+    C -->|session ends| K[SessionEnd → save memory]
+```
+
 **Communication:** Hooks write JSON to stdout wrapped in a `hookSpecificOutput` envelope:
 
 - **Allow** — silent `{}` (or no output). The action proceeds normally.
