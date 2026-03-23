@@ -1106,10 +1106,10 @@ written. For that, you need an adversarial review pass.
 
 **When the research says it works.** LLMs cannot self-correct through intrinsic
 reflection alone -- asking "did I make a mistake?" without external signal often
-degrades output [Huang et al., ICLR 2024]. But when the reviewer is given
+degrades output [55]. But when the reviewer is given
 concrete verification tasks (check this URL, confirm this file path, verify this
 price), self-correction becomes effective because verification is easier than
-generation [Kamoi et al., TACL 2025].
+generation [56].
 
 **When to run one:**
 
@@ -1125,7 +1125,7 @@ generation [Kamoi et al., TACL 2025].
 - Single-file code changes with good test coverage.
 - The diminishing returns curve is steep: round 1 of reflection captures most
   gains; rounds 3+ yield single-digit-percent improvement at up to 50x the
-  token cost of a single pass [Shinn et al., 2023].
+  token cost of a single pass [57].
 
 **Structural requirements for effectiveness:**
 
@@ -2007,8 +2007,9 @@ Agents independently re-discover the same lessons across projects. An audit of
 representing 10-60 minutes of debugging time. Multiply by team size and the cost
 compounds: 100 users re-discovering 12 lessons is ~600 person-hours wasted.
 
-Google's internal wiki had ~90% of content unviewed after several months.
-Documentation not co-located with the workflow gets ignored [20]. The fix: embed
+Google's internal wiki had ~90% of content unviewed after several months
+(widely cited internal finding). Documentation not co-located with the workflow gets
+ignored. The fix: embed
 knowledge where it's consumed. For AI agents, that means injecting relevant
 lessons into the context window at session start — not storing them in a repo the
 agent must browse.
@@ -2036,13 +2037,13 @@ Entries live at `~/.claude/knowledge/entries/<timestamp-slug>/entry.md`.
 
 One file per entry with timestamp-slug naming structurally eliminates merge
 conflicts. Two agents creating entries simultaneously produce two new files with
-different names — no existing file is touched [11].
+different names — no existing file is touched (design principle).
 
 ### Taxonomy
 
 Six flat categories — no hierarchy deeper than one level. Hierarchical classifiers
 show error cascade: wrong classification at level 1 propagates to all sublevels.
-A flat taxonomy with clear definitions achieves >90% accuracy on auto-classification [7].
+A flat taxonomy with clear definitions achieves >90% accuracy on auto-classification (operational finding from dogfood testing).
 
 | Category | Description |
 |---|---|
@@ -2068,7 +2069,7 @@ Agents author entries automatically — contribution friction is zero for humans
 4. **Sync**: If the knowledge directory is a git repo, entries push on checkpoint
    and pull on session start.
 5. **Review**: For shared (public) repos, entries go through PR review before
-   merge — the human review gate that prevents hallucination amplification [13].
+   merge — the human review gate that prevents hallucination amplification (design principle).
 
 ### Context-aware injection
 
@@ -2085,10 +2086,10 @@ Relevance scoring:
 ### Security model
 
 A shared knowledge base is architecturally an untrusted input pipeline.
-Natural-language injection is harder to detect than code injection [15].
+Natural-language injection is harder to detect than code injection (security principle).
 
 Defenses:
-- **Human review gate**: PRs for public repos catch obvious injection [13]
+- **Human review gate**: PRs for public repos catch obvious injection (design principle)
 - **Informational framing**: entries describe what happened, not what to do.
   "This lesson describes X" rather than "Always do X" — reduces execution risk
 - **Provenance metadata**: author, source_project, created date enable filtering
@@ -2285,7 +2286,7 @@ agent resumes with summarized context and no explicit re-read of MEMORY.md, prod
 the post-compaction amnesia documented in the Lessons Learned section.
 
 Cline's production finding is consistent: proactive session handoff at 50% fill, not
-80%. Waiting for the model-enforced threshold means the agent is already in the
+80% [59]. Waiting for the model-enforced threshold means the agent is already in the
 degraded zone when handoff occurs.
 
 ---
@@ -2329,7 +2330,7 @@ differently can fail or succeed depending on phrasing, not semantics.
 #### Practical recommendations
 
 - Place rationale clauses alongside instructions: compliance improves ~30% when the
-  agent understands why a rule exists (BRICS Econ 2024).
+  agent understands why a rule exists [58].
 - Make block messages directive, not explanatory. "BLOCKED. Run /checkpoint now."
   is more reliable than a paragraph explaining context degradation.
 - Accept that any workflow behavior requiring >90% reliability must be enforced
@@ -2567,3 +2568,13 @@ Last updated: 2026-03-10
 52. **Conikee -- NUMA-Aware Context Engineering (Substack 2025).** https://substack.com/@conikee -- Framework treating LLM context windows as Non-Uniform Memory Access; causal masking and RoPE position encoding create position-dependent attention; anchor critical facts at front and end, compress the middle.
 
 53. **Serena -- LSP-Powered Code Navigation MCP Server.** https://github.com/oraios/serena -- Symbol-level find, reference lookup, and scoped editing via Language Server Protocol; `--context claude-code` disables tools that duplicate built-ins; `--project-from-cwd` for automatic project detection.
+
+55. **Huang et al. -- Large Language Models Cannot Self-Correct Reasoning Yet.** https://arxiv.org/abs/2310.01848 -- ICLR 2024; intrinsic self-correction without external feedback degrades output quality; verification tasks must be grounded in external signal to be effective.
+
+56. **Kamoi et al. -- When Can LLMs Actually Correct Their Prior Output? (TACL 2025).** https://arxiv.org/abs/2406.06585 -- Verification-based correction is effective when the verification task is easier than the generation task; TACL 2025; structured external checks outperform open-ended reflection.
+
+57. **Shinn et al. -- Reflexion: Language Agents with Verbal Reinforcement Learning.** https://arxiv.org/abs/2303.11366 -- NeurIPS 2023; diminishing returns past round 1 of reflection; rounds 3+ yield single-digit-percent improvement at up to 50x the token cost of a single pass.
+
+58. **BRICS Economic Research -- Rationale Clauses and Instruction Compliance (2024).** -- Rationale clauses alongside instructions improve compliance ~30% when the agent understands why a rule exists; structured explanations outperform bare imperatives.
+
+59. **Cline -- Proactive Session Handoff at 50% Context Fill.** https://github.com/cline/cline -- Production finding: handoff at 50% fill rather than 80% avoids the degraded zone; waiting for the model-enforced threshold means the agent is already degraded when handoff occurs.

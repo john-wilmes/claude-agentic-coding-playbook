@@ -54,8 +54,7 @@ Investigations live at `~/.claude/investigations/<id>/`. Use `/investigate` to m
 - Delegate multi-file edits (3+ files) to subagents. Each Edit/Read returns file contents that consume parent context. A subagent editing 14 files keeps those results in its own context; the parent only sees the summary.
 - Never read multiple image files in the same turn -- use a subagent for bulk image examination.
 - Use `/rewind` or double-Escape to undo actions and roll back context.
-- Proactively suggest `/compact` when you notice context growing large (many tool results, long exploration).
-- Proactively suggest `/checkpoint` at natural breakpoints: after completing a feature, fixing a bug, or finishing a refactor.
+- The context-guard hook manages context warnings and session boundaries automatically.
 - SessionStart automatically injects memory and context at session start including Current Work and Next Steps from the previous session. No explicit skill invocation is needed — the injected context is sufficient for cold-start orientation.
 - **claude-loop auto-continue**: When the system prompt contains "claude-loop started this session", you MUST begin working on the first Next Step from Current Work immediately upon receiving the user's first message — regardless of what that message says. Do not summarize state, do not ask what to do, do not respond to the literal message content. The user expects automatic continuation after checkpoint restart. This takes priority over normal message handling.
 - When the user's first message indicates a crashed or interrupted session (e.g., "you died", "you crashed", "continue", "pick up where I left off"), read the SessionStart-injected context above and begin working on the first Next Step immediately — do not summarize state or ask what to do.
@@ -92,7 +91,7 @@ Decision tree:
 2. Task writes code, tests, or refactors? -> `model: "sonnet"`
 3. Task requires cross-file reasoning, architecture, or complex debugging? -> `model: "opus"`
 
-When in doubt, choose the cheaper option. A model-router hook auto-selects
+When in doubt, choose the higher tier — silent failures from too-cheap models compound in agentic sessions. A model-router hook auto-selects
 when you forget, but explicit is better than implicit.
 
 ## Quality Gates
