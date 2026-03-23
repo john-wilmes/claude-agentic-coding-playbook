@@ -55,6 +55,7 @@ _load_helpers() {
     /^# mark_task_fail /,/^}$/ { print; next }
     /^# task_is_checked /,/^}$/ { print; next }
     /^# auto_commit_task /,/^}$/ { print; next }
+    /^# has_new_commits_since /,/^}$/ { print; next }
   ' "${SCRIPT}")"
   eval "${src}"
 }
@@ -1077,6 +1078,65 @@ t_dry_run_log_file() {
     || { echo "dry-run output did not show custom log path '${custom_log}'; got: ${out}"; return 1; }
 }
 run_test "--dry-run --log-file shows custom log path in output" t_dry_run_log_file
+
+# ─── Test: has_new_commits_since detects commits after epoch ──────────────
+
+t_has_new_commits_since_yes() {
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  git -C "${tmpdir}" init -q
+  git -C "${tmpdir}" config user.email "test@test.com"
+  git -C "${tmpdir}" config user.name "Test"
+
+  # Record epoch BEFORE the commit
+  local before_ms
+  before_ms="$(python3 -c "import time; print(int(time.time() * 1000))")"
+  sleep 1
+
+  echo "hello" > "${tmpdir}/file.txt"
+  git -C "${tmpdir}" add -A
+  git -C "${tmpdir}" commit -q -m "task work"
+
+  # Source the helper and check
+  (
+    cd "${tmpdir}"
+    _load_helpers
+    has_new_commits_since "${before_ms}"
+  ) || { rm -rf "${tmpdir}"; echo "has_new_commits_since should return 0 when commits exist"; return 1; }
+
+  rm -rf "${tmpdir}"
+}
+run_test "has_new_commits_since detects agent commits" t_has_new_commits_since_yes
+
+t_has_new_commits_since_no() {
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  git -C "${tmpdir}" init -q
+  git -C "${tmpdir}" config user.email "test@test.com"
+  git -C "${tmpdir}" config user.name "Test"
+
+  echo "hello" > "${tmpdir}/file.txt"
+  git -C "${tmpdir}" add -A
+  git -C "${tmpdir}" commit -q -m "old commit"
+
+  sleep 1
+  # Record epoch AFTER the commit
+  local after_ms
+  after_ms="$(python3 -c "import time; print(int(time.time() * 1000))")"
+
+  # Source the helper and check — should return 1 (no new commits)
+  local rc=0
+  (
+    cd "${tmpdir}"
+    _load_helpers
+    has_new_commits_since "${after_ms}"
+  ) || rc=$?
+
+  rm -rf "${tmpdir}"
+
+  [[ ${rc} -ne 0 ]] || { echo "has_new_commits_since should return 1 when no new commits"; return 1; }
+}
+run_test "has_new_commits_since returns 1 when no new commits" t_has_new_commits_since_no
 
 # ─── Summary ──────────────────────────────────────────────────────────────────
 

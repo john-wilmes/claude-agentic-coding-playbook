@@ -300,6 +300,19 @@ auto_commit_task() {
   git commit -m "claude-loop: completed task — ${task}" 2>/dev/null || true
 }
 
+# has_new_commits_since EPOCH_MS
+# Returns 0 if there are git commits after the given epoch (milliseconds).
+# Returns 1 if no new commits or not in a git repo.
+has_new_commits_since() {
+  local epoch_ms="$1"
+  git rev-parse --is-inside-work-tree &>/dev/null || return 1
+  local epoch_secs
+  epoch_secs="$(( epoch_ms / 1000 ))"
+  local commits
+  commits="$(git log --oneline --after="@${epoch_secs}" 2>/dev/null | head -1)"
+  [[ -n "${commits}" ]]
+}
+
 # ─── Sentinel watcher ─────────────────────────────────────────────────────────
 
 _start_sentinel_watcher() {
@@ -745,23 +758,40 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
       log_event "event=task_advance" "task=${CURRENT_TASK}" "status=done"
       echo "claude-loop: task completed: ${CURRENT_TASK}"
     else
-      # No sentinel — check if agent already checked off the task
+      # No sentinel — determine task outcome
+      TASK_RESOLVED=false
+
+      # Check 1: agent already checked off the task in the queue file
       if task_is_checked "${TASK_QUEUE_FILE}" "${CURRENT_TASK}"; then
         RETRY_TASK=""
         RETRY_ATTEMPT=0
         auto_commit_task "${CURRENT_TASK}"
         log_event "event=task_advance" "task=${CURRENT_TASK}" "status=done_no_sentinel"
         echo "claude-loop: task completed (checked off, no sentinel): ${CURRENT_TASK}"
+        TASK_RESOLVED=true
+
+      # Check 2: exit 0 with uncommitted changes = implicit task completion
       elif [[ "${EXIT_CODE}" -eq 0 ]] && [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then
-        # Exit 0 with uncommitted changes = implicit task completion
         RETRY_TASK=""
         RETRY_ATTEMPT=0
         auto_commit_task "${CURRENT_TASK}"
         mark_task_done "${TASK_QUEUE_FILE}" "${CURRENT_TASK}"
         log_event "event=task_advance" "task=${CURRENT_TASK}" "status=done_implicit"
         echo "claude-loop: task completed (exit 0 + changes detected): ${CURRENT_TASK}"
-      else
-        # Non-sentinel exit = task did not finish cleanly
+        TASK_RESOLVED=true
+
+      # Check 3: exit 0 + clean tree but agent committed during the session
+      elif [[ "${EXIT_CODE}" -eq 0 ]] && has_new_commits_since "${SESSION_START_MS}"; then
+        RETRY_TASK=""
+        RETRY_ATTEMPT=0
+        mark_task_done "${TASK_QUEUE_FILE}" "${CURRENT_TASK}"
+        log_event "event=task_advance" "task=${CURRENT_TASK}" "status=done_agent_committed"
+        echo "claude-loop: task completed (exit 0 + agent committed): ${CURRENT_TASK}"
+        TASK_RESOLVED=true
+      fi
+
+      # If no completion detected, handle as failure
+      if [[ "${TASK_RESOLVED}" == "false" ]]; then
         if [[ "${ATTEMPT}" -ge "${MAX_TASK_ATTEMPTS}" ]]; then
           # All attempts exhausted — permanently mark failed and advance
           RETRY_TASK=""
