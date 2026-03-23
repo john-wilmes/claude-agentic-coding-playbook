@@ -31,26 +31,26 @@ For automated E2E testing using `claude -p` (headless mode), see [`scripts/dogfo
 | # | Action | Command | Pass Criterion |
 |---|--------|---------|----------------|
 | 2.1 | Install playbook | `bash install.sh --root $TEST_HOME/Documents --force` | Exits 0, lists installed files |
-| 2.2 | Verify CLAUDE.md | `grep "Development Workflow" $TEST_HOME/Documents/.claude/CLAUDE.md` | Match found |
-| 2.3 | Verify combined workflows | `grep "Research Workflow" $TEST_HOME/Documents/.claude/CLAUDE.md` | Match found |
-| 2.4 | Verify all skills | `ls $TEST_HOME/Documents/.claude/skills/` | checkpoint, create-project, investigate, learn, playbook, promote |
-| 2.5 | Verify hooks | `ls $TEST_HOME/Documents/.claude/hooks/` | session-start.js, session-end.js, model-router.js (among 26 total hooks) |
-| 2.6 | Verify templates | `ls $TEST_HOME/Documents/.claude/templates/` | hooks/, investigation/, knowledge/, project-CLAUDE.md |
+| 2.2 | Verify CLAUDE.md | `grep "Development Workflow" $TEST_HOME/.claude/CLAUDE.md` | Match found |
+| 2.3 | Verify combined workflows | `grep "Research Workflow" $TEST_HOME/.claude/CLAUDE.md` | Match found |
+| 2.4 | Verify all skills | `ls $TEST_HOME/.claude/skills/` | checkpoint, create-project, investigate, learn, playbook, promote |
+| 2.5 | Verify hooks | `ls $TEST_HOME/.claude/hooks/` | session-start.js, session-end.js, model-router.js (among 22 total hooks) |
+| 2.6 | Verify templates | `ls $TEST_HOME/.claude/templates/` | hooks/, investigation/, knowledge/, project-CLAUDE.md |
 | 2.7 | Verify research dir | `ls $TEST_HOME/Documents/research/` | Directory exists |
-| 2.8 | Smoke-test session-start | `echo '{"session_id":"test","cwd":"/tmp"}' \| node $TEST_HOME/Documents/.claude/hooks/session-start.js` | Valid JSON with `hookEventName: "SessionStart"` |
+| 2.8 | Smoke-test session-start | `echo '{"session_id":"test","cwd":"/tmp"}' \| node $TEST_HOME/.claude/hooks/session-start.js` | Valid JSON with `hookEventName: "SessionStart"` |
 
 ## 3. Knowledge Setup
 
 | # | Action | Command | Pass Criterion |
 |---|--------|---------|----------------|
-| 3.1 | Create knowledge repo | `mkdir -p $TEST_HOME/Documents/.claude/knowledge/entries && cd $TEST_HOME/Documents/.claude/knowledge && git init` | Git repo initialized |
+| 3.1 | Create knowledge repo | `mkdir -p $TEST_HOME/.claude/knowledge/entries && cd $TEST_HOME/.claude/knowledge && git init` | Git repo initialized |
 | 3.2 | Seed a test entry | See [entry template](#knowledge-entry-template) below | entry.md created |
-| 3.3 | Commit entry | `cd $TEST_HOME/Documents/.claude/knowledge && git add . && git commit -m "seed"` | Commit succeeds |
-| 3.4 | Verify injection | `echo '{"session_id":"test","cwd":"'$(pwd)'"}' \| node $TEST_HOME/Documents/.claude/hooks/session-start.js \| python3 -m json.tool` | Output includes "knowledge entries" section |
+| 3.3 | Commit entry | `cd $TEST_HOME/.claude/knowledge && git add . && git commit -m "seed"` | Commit succeeds |
+| 3.4 | Verify injection | `echo '{"session_id":"test","cwd":"'$(pwd)'"}' \| node $TEST_HOME/.claude/hooks/session-start.js \| python3 -m json.tool` | Output includes "knowledge entries" section |
 
 ### Knowledge Entry Template
 
-Create `$TEST_HOME/Documents/.claude/knowledge/entries/20260223-test-gotcha/entry.md`:
+Create `$TEST_HOME/.claude/knowledge/entries/20260223-test-gotcha/entry.md`:
 
 ```markdown
 ---
@@ -95,7 +95,7 @@ Use `git stash` explicitly before rebase, then `git stash pop` after resolving c
 
 | # | Action | Command | Pass Criterion |
 |---|--------|---------|----------------|
-| 7.1 | Start session in investigations dir | `cd $TEST_HOME/Documents/.claude/investigations` and start a session | SessionStart injects context; use `/investigate` to list open investigations |
+| 7.1 | Start session in investigations dir | `cd $TEST_HOME/.claude/investigations` and start a session | SessionStart injects context; use `/investigate` to list open investigations |
 | 7.2 | Resume specific investigation | `/investigate <id> status` | Loads investigation brief, evidence, and status |
 
 ## 8. `/playbook` Skill
@@ -109,9 +109,9 @@ Use `git stash` explicitly before rebase, then `git stash pop` after resolving c
 
 | # | Action | Command | Pass Criterion |
 |---|--------|---------|----------------|
-| 9.1 | Capture a lesson | Type `/learn` and describe a lesson | Creates entry file under $TEST_HOME/Documents/.claude/knowledge/entries/ |
+| 9.1 | Capture a lesson | Type `/learn` and describe a lesson | Creates entry file under $TEST_HOME/.claude/knowledge/entries/ |
 | 9.2 | Verify entry format | Read the created entry.md | Has YAML frontmatter with id, tool, category, tags |
-| 9.3 | Verify git commit | `cd $TEST_HOME/Documents/.claude/knowledge && git log --oneline -1` | Shows commit for the new entry |
+| 9.3 | Verify git commit | `cd $TEST_HOME/.claude/knowledge && git log --oneline -1` | Shows commit for the new entry |
 
 ## 10. `/checkpoint` Skill
 

@@ -4,7 +4,7 @@
 
 If you discover a security vulnerability in this project, please report it responsibly.
 
-**Email:** [john-wilmes](https://github.com/john-wilmes) via GitHub private message
+Please report security vulnerabilities through GitHub's [Security Advisory](https://github.com/john-wilmes/claude-agentic-coding-playbook/security/advisories/new) feature.
 
 **Do not** open a public GitHub issue for security vulnerabilities.
 

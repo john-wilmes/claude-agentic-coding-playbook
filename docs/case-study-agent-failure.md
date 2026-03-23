@@ -243,6 +243,8 @@ Added to `~/.claude/CLAUDE.md` under Memory File Discipline:
 Installed at `~/.local/bin/q`. Calls Haiku directly via the Anthropic API with
 a minimal system prompt. No Claude Code overhead, no 500-line system prompt.
 
+> Note: This is a snapshot from the time of the case study. See `scripts/q` for the current version.
+
 ```bash
 #!/usr/bin/env bash
 # q - quick task runner using Haiku via direct API

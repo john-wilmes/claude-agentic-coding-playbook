@@ -1,5 +1,7 @@
 # Transcript: When the Agent Fails (2026-02-24)
 
+> Note: Shell configuration references have been preserved for narrative clarity; no sensitive information is exposed.
+
 A real conversation that led to a new section in the playbook. Lightly edited
 for readability — the substance is unchanged.
 

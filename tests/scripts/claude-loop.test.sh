@@ -755,6 +755,9 @@ t_exit0_clean_tree_fails_task() {
   git -C "${tmpdir}" add -A
   git -C "${tmpdir}" commit -q -m "initial"
 
+  # Ensure the commit timestamp is before SESSION_START_MS
+  sleep 1
+
   cat > "${tmpqueue}" <<'EOF'
 - [ ] Do nothing task
 EOF

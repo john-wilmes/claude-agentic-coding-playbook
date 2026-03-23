@@ -46,7 +46,7 @@ Then add to `~/.claude/settings.json`:
 }
 ```
 
-This gives you context window warnings after every tool call. The full install also registers `context-guard.js` on `SessionStart` and wires up the remaining 20 hooks.
+This gives you context window warnings after every tool call. The full install also registers `context-guard.js` on `SessionStart` and wires up the remaining 21 hooks.
 
 ## Quick Install
 
@@ -87,7 +87,7 @@ chmod +x install.sh
     learn/SKILL.md                    #   /learn - capture knowledge entries
     playbook/SKILL.md                 #   /playbook - analyze and improve config
     promote/SKILL.md                  #   /promote - promote lessons to global scope
-  hooks/                               #   21 hooks — safety, quality, resource management (see docs/hooks.md)
+  hooks/                               #   22 hooks — safety, quality, resource management (see docs/hooks.md)
   rules/
     hooks.md                          #   Hook development conventions (globs: templates/hooks/**)
     testing.md                        #   Test conventions (globs: tests/**)
@@ -297,7 +297,7 @@ See [docs/swe-bench-methodology.md](docs/swe-bench-methodology.md) for task sele
 ## Limitations
 
 - **Claude Code only**: All hooks, skills, and scripts target Claude Code. The principles in `best-practices.md` are conceptually portable to Cursor, Copilot, etc., but the tooling is not.
-- **Hook startup overhead**: 21 hooks add ~50-100ms per tool call. Negligible for most workflows, noticeable in rapid-fire operations.
+- **Hook startup overhead**: 22 hooks add ~50-100ms per tool call. Negligible for most workflows, noticeable in rapid-fire operations.
 - **CLAUDE.md budget**: The combined profile's CLAUDE.md consumes instruction budget. Projects with large existing CLAUDE.md files may hit the ~150-200 instruction line ceiling.
 - **Node.js 18+ required**: Hooks use modern Node.js APIs (`structuredClone`, etc.).
 - **Single maintainer**: This is a personal project, not backed by a company or large team.
