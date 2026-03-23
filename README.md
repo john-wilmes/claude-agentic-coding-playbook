@@ -252,6 +252,7 @@ The wizard will:
 
 - **[Agent Failure Analysis](docs/case-study-agent-failure.md)** -- detailed post-mortem of a production agent failure with root cause analysis
 - **[Agent Failure Transcript](docs/transcript-2026-02-24-agent-failure.md)** -- raw session transcript from the failure event
+- **[Feature + Debugging Walkthrough](docs/transcript-2026-03-22-feature-with-debugging.md)** -- annotated session showing the Explore-Code-Verify workflow with a real debugging detour
 
 ### Architecture
 
