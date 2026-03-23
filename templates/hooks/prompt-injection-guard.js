@@ -10,15 +10,15 @@ const INJECTION_PATTERNS = [
   { pattern: /curl\s+.*\$\{?\w*(?:KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)\w*\}?/i, reason: "Potential credential exfiltration via curl" },
   { pattern: /wget\s+.*\$\{?\w*(?:KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)\w*\}?/i, reason: "Potential credential exfiltration via wget" },
   // Reading sensitive credential files and piping/sending them out
-  { pattern: /\b(?:cat|head|tail|less|more)\s+(?:\S*\/)?(?:~\/)?(?:\.ssh\/|\.aws\/credentials|\.gnupg\/)/, reason: "Potential credential exfiltration: reading sensitive credential file" },
+  { pattern: /\b(?:cat|head|tail|less|more)\s+(?:\S*\/)?(?:~\/)?(?:\.ssh\/|\.aws\/credentials|\.gnupg\/|\.azure\/|\.kube\/|\.docker\/config\.json|\.npmrc|\.git-credentials|\.config\/gh\/)/, reason: "Potential credential exfiltration: reading sensitive credential file" },
   { pattern: /\b(?:cat|head|tail|less|more)\s+(?:\/etc\/shadow|\/etc\/passwd)/, reason: "Potential credential exfiltration: reading system credential file" },
   { pattern: /\b(?:cat|head|tail|less|more)\s+(?:\S*\/)?\.env(?:\.(?!example\b|sample\b|template\b)[A-Za-z0-9_-]+)?(?=$|\s|[|;&])/, reason: "Potential credential exfiltration: reading .env file" },
   // Dumping full environment to network tools
   { pattern: /\b(?:env|printenv)\b.*\|\s*\b(?:curl|wget|nc|ncat|netcat)\b/, reason: "Potential credential exfiltration: piping environment to network tool" },
   // One-liner file reads in scripting languages used to exfiltrate
-  { pattern: /python3?\s+-c\s+['"].*open\s*\(.*(?:\.env|credentials|shadow|\.ssh)/, reason: "Potential credential exfiltration via Python one-liner" },
-  { pattern: /ruby\s+-e\s+['"].*File\.read.*(?:\.env|credentials|shadow|\.ssh)/, reason: "Potential credential exfiltration via Ruby one-liner" },
-  { pattern: /perl\s+-e\s+['"].*(?:open|read).*(?:\.env|credentials|shadow|\.ssh)/, reason: "Potential credential exfiltration via Perl one-liner" },
+  { pattern: /python3?\s+-c\s+['"].*open\s*\(.*(?:\.env|credentials|shadow|\.ssh|\.azure|\.kube|\.docker|\.npmrc|\.git-credentials|\.config\/gh)/, reason: "Potential credential exfiltration via Python one-liner" },
+  { pattern: /ruby\s+-e\s+['"].*File\.read.*(?:\.env|credentials|shadow|\.ssh|\.azure|\.kube|\.docker|\.npmrc|\.git-credentials|\.config\/gh)/, reason: "Potential credential exfiltration via Ruby one-liner" },
+  { pattern: /perl\s+-e\s+['"].*(?:open|read).*(?:\.env|credentials|shadow|\.ssh|\.azure|\.kube|\.docker|\.npmrc|\.git-credentials|\.config\/gh)/, reason: "Potential credential exfiltration via Perl one-liner" },
   // Netcat/ncat used as exfiltration channel
   { pattern: /\b(?:nc|ncat|netcat)\b.*\d{1,5}\s*</, reason: "Potential data exfiltration via netcat" },
   { pattern: /\|\s*(?:nc|ncat|netcat)\b/, reason: "Potential data exfiltration via netcat pipe" },

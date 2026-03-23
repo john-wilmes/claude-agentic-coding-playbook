@@ -282,6 +282,56 @@ test("D10. SELECT * FROM users (non-destructive SQL) -> allow", (env) => {
   assert.strictEqual(result.json.decision, undefined);
 });
 
+// ─── Trail of Bits credential directory tests ─────────────────────────────────
+
+console.log("\nprompt-injection-guard.js (Trail of Bits credential directories):");
+
+test("C1. cat ~/.azure/credentials -> block", (env) => {
+  const result = runGuard("cat ~/.azure/credentials", env);
+  assert.strictEqual(result.json.hookSpecificOutput.permissionDecision, "deny");
+  assert.ok(result.json.hookSpecificOutput.permissionDecisionReason.includes("credential"));
+});
+
+test("C2. cat ~/.kube/config -> block", (env) => {
+  const result = runGuard("cat ~/.kube/config", env);
+  assert.strictEqual(result.json.hookSpecificOutput.permissionDecision, "deny");
+  assert.ok(result.json.hookSpecificOutput.permissionDecisionReason.includes("credential"));
+});
+
+test("C3. cat ~/.docker/config.json -> block", (env) => {
+  const result = runGuard("cat ~/.docker/config.json", env);
+  assert.strictEqual(result.json.hookSpecificOutput.permissionDecision, "deny");
+  assert.ok(result.json.hookSpecificOutput.permissionDecisionReason.includes("credential"));
+});
+
+test("C4. cat ~/.npmrc -> block", (env) => {
+  const result = runGuard("cat ~/.npmrc", env);
+  assert.strictEqual(result.json.hookSpecificOutput.permissionDecision, "deny");
+  assert.ok(result.json.hookSpecificOutput.permissionDecisionReason.includes("credential"));
+});
+
+test("C5. cat ~/.git-credentials -> block", (env) => {
+  const result = runGuard("cat ~/.git-credentials", env);
+  assert.strictEqual(result.json.hookSpecificOutput.permissionDecision, "deny");
+  assert.ok(result.json.hookSpecificOutput.permissionDecisionReason.includes("credential"));
+});
+
+test("C6. cat ~/.config/gh/hosts.yml -> block", (env) => {
+  const result = runGuard("cat ~/.config/gh/hosts.yml", env);
+  assert.strictEqual(result.json.hookSpecificOutput.permissionDecision, "deny");
+  assert.ok(result.json.hookSpecificOutput.permissionDecisionReason.includes("credential"));
+});
+
+test("C7. head /home/user/.azure/token -> block", (env) => {
+  const result = runGuard("head /home/user/.azure/token", env);
+  assert.strictEqual(result.json.hookSpecificOutput.permissionDecision, "deny");
+});
+
+test("C8. python3 -c 'open(~/.kube/config)' -> block", (env) => {
+  const result = runGuard(`python3 -c 'open("/home/user/.kube/config").read()'`, env);
+  assert.strictEqual(result.json.hookSpecificOutput.permissionDecision, "deny");
+});
+
 // ─── Unit tests (checkCommand exported function) ──────────────────────────────
 
 console.log("\nprompt-injection-guard.js (checkCommand unit tests):");
