@@ -235,7 +235,7 @@ Detects truncated Task subagent output and writes a recovery state file so `clau
 
 #### `model-router.js` — PreToolUse
 
-Auto-selects the cheapest sufficient model for Task tool calls that don't specify a `model` parameter. Classifies prompts by keyword signals into three tiers:
+Auto-selects the cheapest sufficient model for Task and Agent tool calls that don't specify a `model` parameter. Warns when allowed-tools exceeds 10 items, advising the caller to split into specialized subagents. Classifies prompts by keyword signals into three tiers:
 
 | Tier | Cost | Signals | Examples |
 |---|---|---|---|
@@ -299,7 +299,7 @@ Stages knowledge candidates when learning opportunities are detected (e.g., a te
 
 #### `knowledge-db.js` — utility module
 
-Central SQLite knowledge store using `node:sqlite` (Node 22.5+). Stores knowledge entries with tags, confidence, visibility, and status. Supports full-text search via FTS5 index. Used by `session-start.js` to retrieve relevant entries.
+Central SQLite knowledge store using `node:sqlite` (Node 22.5+). Stores knowledge entries with tags, confidence, visibility, and status. Supports full-text search via FTS5 index. Used by `session-start.js` to retrieve relevant entries. `queryRelevant()` returns `{ results, status, error? }` to distinguish empty results from access failures.
 
 - **Used by:** `session-start.js`, `knowledge-capture.js`
 - **Configuration:** Works out of the box. Database at `~/.claude/knowledge/knowledge.db`.
@@ -321,6 +321,12 @@ These are shared libraries, not standalone hooks:
 ---
 
 ## Customization
+
+**Path-specific rules:** The playbook installs coding conventions to `~/.claude/rules/` that Claude Code applies automatically when working in matching paths:
+- `hooks.md` — Hook development conventions (globs: `templates/hooks/**`)
+- `testing.md` — Test conventions (globs: `tests/**`)
+
+These supplement the global CLAUDE.md with targeted guidance for hook and test authoring without bloating the main instruction file.
 
 **Disable a hook:** Remove its entry from `~/.claude/settings.json`, or delete the hook file from `~/.claude/hooks/`.
 

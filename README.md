@@ -88,6 +88,9 @@ chmod +x install.sh
     playbook/SKILL.md                 #   /playbook - analyze and improve config
     promote/SKILL.md                  #   /promote - promote lessons to global scope
   hooks/                               #   21 hooks — safety, quality, resource management (see docs/hooks.md)
+  rules/
+    hooks.md                          #   Hook development conventions (globs: templates/hooks/**)
+    testing.md                        #   Test conventions (globs: tests/**)
   templates/
     project-CLAUDE.md                 #   Template for project-level CLAUDE.md
     knowledge/
@@ -136,7 +139,7 @@ CLAUDE.md rules are advisory (~50-90% compliance). Hooks are deterministic (>95%
 - **Stuck detector** -- Detects and breaks agent loops when the same action repeats.
 
 **Resource management:**
-- **Model router** -- Auto-selects Haiku/Sonnet/Opus for Task tool calls based on prompt signals.
+- **Model router** -- Auto-selects Haiku/Sonnet/Opus for Task and Agent tool calls based on prompt signals. Warns when allowed-tools exceeds 10.
 - **Filesize guard** -- Warns when reading or writing large files that waste context.
 - **Bloat guard** -- Detects runaway file creation and flags unexpected project growth.
 - **Markdown size guard** -- Warns when CLAUDE.md or MEMORY.md approach size thresholds.

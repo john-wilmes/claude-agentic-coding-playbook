@@ -1638,7 +1638,7 @@ Return structured errors rather than plain strings:
 This pattern lets the agent distinguish "I sent bad input" (fix and retry) from
 "the service is down" (wait and retry) from "I need different permissions" (ask
 the user). Without categories, the agent either retries everything or gives up
-on the first error.
+on the first error. The playbook's `fleet-index-server.js` implements this pattern for all tool error returns.
 
 ### Tool count guidance
 
