@@ -28,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Correct 5 misattributed citations, add 5 orphan citations, fix model routing advice
 - MCP registry test count mismatch
 
-## [0.1.0] - 2025-02-24
+## [0.1.0] - 2026-02-24
 
 Initial public release.
 

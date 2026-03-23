@@ -36,7 +36,12 @@ Claude Code hooks are Node.js scripts that run at five lifecycle events:
 | **SessionEnd** | Session closes | Save state, commit memory |
 | **PreToolUse** | Before a tool executes | Block dangerous actions, validate input |
 | **PostToolUse** | After a tool completes | Run tests, check output, warn on issues |
+| **PostToolUseFailure** | After a tool fails | Log errors, warn on repeated failures |
 | **PreCompact** | Before `/compact` runs | Save state that would be lost |
+| **PostCompact** | After auto-compaction completes | Re-inject memory and task context |
+| **TaskCompleted** | Teammate agent marks task done | Quality gate before task is accepted |
+| **TeammateIdle** | Teammate agent goes idle | Nudge agent to check for remaining work |
+| **SubagentStart** | Subagent is spawned | Inject project context into subagent |
 
 **Communication:** Hooks write JSON to stdout wrapped in a `hookSpecificOutput` envelope:
 
@@ -66,7 +71,7 @@ Injects memory, knowledge entries, and git context at the start of every session
 
 #### `session-end.js` — SessionEnd
 
-Auto-commits memory changes to the `~/.claude` git repo when a session closes. Initializes `~/.claude` as a git repo if needed. Only stages the current session's memory file to avoid contention with other projects.
+Auto-commits memory changes to the `~/.claude` git repo when a session closes. Initializes `~/.claude` as a git repo if needed. Only stages the current session's memory file to avoid contention with other projects. Also detects knowledge retrieval misses (knowledge entries that matched session activity but were not injected at session start) and archives stale knowledge entries once per day.
 
 - **Configuration:** Works out of the box.
 - **Example trigger:** Ending a Claude Code session or closing the terminal.

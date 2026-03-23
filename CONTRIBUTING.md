@@ -111,8 +111,9 @@ for t in tests/hooks/*.test.js; do node "$t" || exit 1; done
 # Fleet tests (Node.js)
 for t in tests/fleet/*.test.js; do node "$t" || exit 1; done
 
-# Script tests (Bash)
+# Script tests (Bash and Node.js)
 for t in tests/scripts/*.test.sh; do bash "$t" || exit 1; done
+for t in tests/scripts/*.test.js; do node "$t" || exit 1; done
 
 # Skill tests (Bash and Node.js)
 for t in tests/skills/*.test.sh; do bash "$t" || exit 1; done

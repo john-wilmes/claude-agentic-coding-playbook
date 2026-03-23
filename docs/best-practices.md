@@ -20,7 +20,7 @@ its well-documented failure modes. The evidence:
   PR completion time 10-20% at scale [Greptile, Macroscope, Microsoft]. Developers
   using Copilot report 15% faster code reviews and 85% confidence in code quality [7].
 - **Productivity**: Developer gains range from -19% to +55% depending on
-  experience level and measurement method [METR, GitHub Copilot, Faros AI].
+  experience level and measurement method [7, 8, 9].
   Stack Overflow's 2025 survey confirms broad adoption: 84% of developers use or
   plan to use AI tools, though 46% distrust accuracy [33].
 - **MCP tool cost**: Every MCP tool definition is re-sent every turn. MCP Tool

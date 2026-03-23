@@ -24,7 +24,7 @@ Options:
   --wizard                   Interactive wizard to merge with existing configuration
   --force                    Overwrite existing files without prompting
   --dry-run                  Show what would be installed without making changes
-  --knowledge-repo <url>     Clone (or pull) a git repo into <root>/.claude/knowledge
+  --knowledge-repo <url>     Clone (or pull) a git repo into ~/.claude/knowledge
   --extras                   Install advanced features (fleet index, MCP registry, managed repos)
   --uninstall                Remove files installed by this script
   -h, --help                 Show this help message

@@ -62,7 +62,7 @@ chmod +x install.sh
     learn/SKILL.md                    #   /learn - capture knowledge entries
     playbook/SKILL.md                 #   /playbook - analyze and improve config
     promote/SKILL.md                  #   /promote - promote lessons to global scope
-  hooks/                               #   26 hooks — safety, quality, resource management (see docs/hooks.md)
+  hooks/                               #   21 hooks — safety, quality, resource management (see docs/hooks.md)
   templates/
     project-CLAUDE.md                 #   Template for project-level CLAUDE.md
     knowledge/
@@ -153,8 +153,9 @@ Run the full test suite:
 # Hook tests (Node.js)
 for t in tests/hooks/*.test.js; do node "$t" || exit 1; done
 
-# Script tests (Bash)
+# Script tests (Bash and Node.js)
 for t in tests/scripts/*.test.sh; do bash "$t" || exit 1; done
+for t in tests/scripts/*.test.js; do node "$t" || exit 1; done
 
 # Skills tests
 for t in tests/skills/*.test.sh; do bash "$t" || exit 1; done && for t in tests/skills/*.test.js; do node "$t" || exit 1; done
@@ -166,7 +167,7 @@ for t in tests/fleet/*.test.js; do node "$t" || exit 1; done
 for t in tests/investigate/*.test.js; do node "$t" || exit 1; done
 
 # Or all at once
-for t in tests/hooks/*.test.js; do node "$t" || exit 1; done && for t in tests/fleet/*.test.js; do node "$t" || exit 1; done && for t in tests/scripts/*.test.sh; do bash "$t" || exit 1; done && for t in tests/skills/*.test.sh; do bash "$t" || exit 1; done && for t in tests/skills/*.test.js; do node "$t" || exit 1; done && for t in tests/investigate/*.test.js; do node "$t" || exit 1; done
+for t in tests/hooks/*.test.js; do node "$t" || exit 1; done && for t in tests/fleet/*.test.js; do node "$t" || exit 1; done && for t in tests/scripts/*.test.sh; do bash "$t" || exit 1; done && for t in tests/scripts/*.test.js; do node "$t" || exit 1; done && for t in tests/skills/*.test.sh; do bash "$t" || exit 1; done && for t in tests/skills/*.test.js; do node "$t" || exit 1; done && for t in tests/investigate/*.test.js; do node "$t" || exit 1; done
 ```
 
 ## CLI Scripts
