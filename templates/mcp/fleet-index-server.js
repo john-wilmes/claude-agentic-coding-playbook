@@ -55,7 +55,8 @@ function loadFleetIndex() {
     }
   }
 
-  // Return a stub so the server still starts but tools degrade gracefully
+  // Return a stub so the server still starts but tools degrade gracefully.
+  // This is a transient degradation — fleet-index.js failed to load (missing or corrupt).
   fleetIndex = {
     searchRepos: () => [],
     listRepos: () => [],
@@ -178,7 +179,7 @@ function manifestToSearchText(m) {
 
 function toolSearchRepos({ query, limit = 10 }) {
   if (!query || typeof query !== "string") {
-    return { error: "query is required and must be a string" };
+    return { isError: true, errorCategory: "validation", isRetryable: false, description: "query is required and must be a string" };
   }
 
   const manifests = readManifests();
@@ -192,7 +193,7 @@ function toolSearchRepos({ query, limit = 10 }) {
     try {
       return fi.searchRepos(query, limit);
     } catch {
-      // fall through to inline BM25
+      // transient degradation — fall through to inline BM25
     }
   }
 
@@ -221,13 +222,13 @@ function toolSearchRepos({ query, limit = 10 }) {
 
 function toolGetManifest({ repo }) {
   if (!repo || typeof repo !== "string") {
-    return { error: "repo is required and must be a string" };
+    return { isError: true, errorCategory: "validation", isRetryable: false, description: "repo is required and must be a string" };
   }
 
   const manifests = readManifests();
   const found = manifests.find((m) => m.repo === repo);
   if (!found) {
-    return { error: `No manifest found for repo: ${repo}` };
+    return { isError: true, errorCategory: "validation", isRetryable: false, description: `No manifest found for repo: ${repo}` };
   }
   return found;
 }
@@ -258,11 +259,11 @@ function toolListRepos({ kind, min_quality } = {}) {
 function toolGetDigest() {
   try {
     if (!fs.existsSync(DIGEST_FILE)) {
-      return { error: `Fleet digest not found at: ${DIGEST_FILE}` };
+      return { isError: true, errorCategory: "validation", isRetryable: false, description: `Fleet digest not found at: ${DIGEST_FILE}` };
     }
     return fs.readFileSync(DIGEST_FILE, "utf8");
   } catch (err) {
-    return { error: `Failed to read digest: ${err.message}` };
+    return { isError: true, errorCategory: "transient", isRetryable: true, description: `Failed to read digest: ${err.message}` };
   }
 }
 
@@ -436,12 +437,12 @@ function dispatch(req) {
               contents: [{ uri, mimeType: "text/plain", text: digest }],
             });
           } else {
-            replyError(id, -32602, digest.error || "Failed to read digest");
+            replyError(id, -32602, digest.description || "Failed to read digest");
           }
         } else if (uri.startsWith("fleet://manifest/")) {
           const repo = uri.slice("fleet://manifest/".length);
           const manifest = toolGetManifest({ repo });
-          if (manifest && !manifest.error) {
+          if (manifest && !manifest.isError) {
             reply(id, {
               contents: [{
                 uri,
@@ -450,7 +451,7 @@ function dispatch(req) {
               }],
             });
           } else {
-            replyError(id, -32602, manifest?.error || `Unknown manifest: ${repo}`);
+            replyError(id, -32602, manifest?.description || `Unknown manifest: ${repo}`);
           }
         } else {
           replyError(id, -32602, `Unknown resource URI: ${uri}`);

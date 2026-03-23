@@ -3,6 +3,7 @@ name: investigate
 description: Manage structured investigations with multi-agent evidence collection, synthesis, tagging, and PHI sanitization. Use when user says "start an investigation", "root cause analysis", or "collect evidence about X". Subcommands: new, run, collect, synthesize, close, status, list, search. Do NOT use for casual debugging or quick code questions — only for formal, multi-step research.
 compatibility: claude-code
 disable-model-invocation: false
+context: fork
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Task
 argument-hint: "<id> [new|run|collect|synthesize|close|status] | list | search <query>"
 ---

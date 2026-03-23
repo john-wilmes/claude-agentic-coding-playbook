@@ -71,11 +71,12 @@ function detectRetrievalMisses(sessionId, cwd) {
         // Try FTS-powered query first; fall back to direct LIKE search if FTS
         // returns nothing (FTS5 content tables may return 0 rows cross-connection).
         const candidateTool = candidate.tool || "";
-        let matched = knowledgeDb.queryRelevant(db, {
+        const matchResult = knowledgeDb.queryRelevant(db, {
           queryTerms,
           projectTool: candidateTool ? [candidateTool] : [],
           cwd,
         }, 10);
+        let matched = matchResult.results || [];
 
         if (matched.length === 0) {
           // Direct LIKE fallback: find active entries matching at least one term in context

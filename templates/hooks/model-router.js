@@ -75,8 +75,8 @@ process.stdin.on("end", () => {
     const toolName = hookInput.tool_name || "";
     const toolInput = hookInput.tool_input || {};
 
-    // Only intercept Task tool calls
-    if (toolName !== "Task") {
+    // Only intercept Task and Agent tool calls
+    if (toolName !== "Task" && toolName !== "Agent") {
       process.stdout.write(JSON.stringify({}));
       process.exit(0);
     }
@@ -100,11 +100,25 @@ process.stdin.on("end", () => {
       context: { model, reason, prompt_head: log.promptHead((toolInput.prompt || ""), 80) },
     });
 
+    let additionalContext = `Model auto-selected: ${model} (${reason}). Override with explicit model parameter.`;
+
+    // Check tool count advisory
+    const allowedTools = toolInput["allowed-tools"];
+    if (allowedTools !== undefined) {
+      const toolList = Array.isArray(allowedTools)
+        ? allowedTools
+        : String(allowedTools).split(",").map((t) => t.trim()).filter(Boolean);
+      const toolCount = toolList.length;
+      if (toolCount > 10) {
+        additionalContext += ` Consider splitting this agent — tool selection degrades above 10 tools (found ${toolCount}). Optimal: 4-5 per agent.`;
+      }
+    }
+
     const output = {
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         updatedInput: { ...toolInput, model },
-        additionalContext: `Model auto-selected: ${model} (${reason}). Override with explicit model parameter.`,
+        additionalContext,
       },
     };
 

@@ -136,7 +136,8 @@ test("3. insertEntry + queryRelevant round-trip (insert entry, query it back)", 
 
   const results = queryRelevant(db, { projectTool: "npm", queryTerms: ["git", "commit"] });
   // Should find it even without FTS match because tool matches
-  const found = results.find(r => r.id === entry.id);
+  assert.strictEqual(results.status, "ok", "queryRelevant should return status ok");
+  const found = results.results.find(r => r.id === entry.id);
   assert.ok(found, "inserted entry should be returned by queryRelevant");
 });
 
@@ -153,7 +154,8 @@ test("4. FTS5 search finds entries by context text", () => {
   const results = queryRelevant(db, {
     queryTerms: ["webpack", "configuration", "NODE_ENV"],
   });
-  const found = results.find(r => r.id === entry.id);
+  assert.strictEqual(results.status, "ok", "queryRelevant should return status ok");
+  const found = results.results.find(r => r.id === entry.id);
   assert.ok(found, "FTS5 should find entry by context_text content");
 });
 
@@ -170,7 +172,8 @@ test("5. FTS5 search finds entries by fix text", () => {
   const results = queryRelevant(db, {
     queryTerms: ["ENTRYPOINT", "CMD", "container"],
   });
-  const found = results.find(r => r.id === entry.id);
+  assert.strictEqual(results.status, "ok", "queryRelevant should return status ok");
+  const found = results.results.find(r => r.id === entry.id);
   assert.ok(found, "FTS5 should find entry by fix_text content");
 });
 
@@ -199,8 +202,9 @@ test("6. queryRelevant with tool match scores higher than no match", () => {
     queryTerms:  ["docker", "build"],
   });
 
-  const matchIdx   = results.findIndex(r => r.id === "tool-match");
-  const noMatchIdx = results.findIndex(r => r.id === "no-match");
+  assert.strictEqual(results.status, "ok", "queryRelevant should return status ok");
+  const matchIdx   = results.results.findIndex(r => r.id === "tool-match");
+  const noMatchIdx = results.results.findIndex(r => r.id === "no-match");
 
   assert.ok(matchIdx !== -1,   "tool-match entry should appear in results");
   assert.ok(noMatchIdx !== -1, "no-match entry should appear in results");
@@ -236,8 +240,9 @@ test("7. queryRelevant source_project penalty reduces score for foreign entries"
     queryTerms:    ["git", "stash", "conflicts"],
   });
 
-  const localIdx   = results.findIndex(r => r.id === "local");
-  const foreignIdx = results.findIndex(r => r.id === "foreign");
+  assert.strictEqual(results.status, "ok", "queryRelevant should return status ok");
+  const localIdx   = results.results.findIndex(r => r.id === "local");
+  const foreignIdx = results.results.findIndex(r => r.id === "foreign");
 
   assert.ok(localIdx !== -1,   "local entry should appear");
   assert.ok(foreignIdx !== -1, "foreign entry should appear");
@@ -334,12 +339,14 @@ test("12. archiveEntry entries excluded from queryRelevant results", () => {
 
   // Verify it appears before archiving
   const before = queryRelevant(db, { queryTerms: ["zephyr", "quorum"] });
-  assert.ok(before.find(r => r.id === "archived-entry"), "should find entry before archiving");
+  assert.strictEqual(before.status, "ok", "queryRelevant should return status ok before archiving");
+  assert.ok(before.results.find(r => r.id === "archived-entry"), "should find entry before archiving");
 
   archiveEntry(db, "archived-entry");
 
   const after = queryRelevant(db, { queryTerms: ["zephyr", "quorum"] });
-  assert.ok(!after.find(r => r.id === "archived-entry"), "archived entry should not appear in results");
+  assert.strictEqual(after.status, "ok", "queryRelevant should return status ok after archiving");
+  assert.ok(!after.results.find(r => r.id === "archived-entry"), "archived entry should not appear in results");
 });
 
 // Test 13: exportToJsonl + importFromJsonl round-trip
@@ -585,11 +592,12 @@ test("18. queryRelevant applies staleness penalty (entry with many commits behin
       cwd:         tmpDir,
     });
 
-    assert.ok(results.length >= 1, "should return at least one result");
+    assert.strictEqual(results.status, "ok", "queryRelevant should return status ok");
+    assert.ok(results.results.length >= 1, "should return at least one result");
 
     // Verify the function runs without error for staleness-capable entries
-    const foundA = results.find(r => r.id === "entry-current");
-    const foundB = results.find(r => r.id === "entry-no-repo");
+    const foundA = results.results.find(r => r.id === "entry-current");
+    const foundB = results.results.find(r => r.id === "entry-no-repo");
     assert.ok(foundA || foundB, "at least one entry should be found");
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -616,8 +624,9 @@ test("20. queryRelevant returns empty array when no entries match", () => {
   const db = openDb(":memory:");
   // No entries inserted — DB is empty
   const results = queryRelevant(db, { queryTerms: ["xyzzy", "quux", "frobnicate"] });
-  assert.ok(Array.isArray(results), "should return an array");
-  assert.strictEqual(results.length, 0, "should return empty array when no entries exist");
+  assert.strictEqual(results.status, "ok", "should return status ok");
+  assert.ok(Array.isArray(results.results), "results.results should be an array");
+  assert.strictEqual(results.results.length, 0, "should return empty results when no entries exist");
 });
 
 // Test 21: last_accessed and access_count columns exist after openDb
@@ -652,7 +661,8 @@ test("22. queryRelevant updates last_accessed and access_count for returned entr
 
   // Query it back
   const results = queryRelevant(db, { queryTerms: ["xylophone", "zeppelin"] });
-  assert.ok(results.find(r => r.id === "access-track"), "should find entry");
+  assert.strictEqual(results.status, "ok", "queryRelevant should return status ok");
+  assert.ok(results.results.find(r => r.id === "access-track"), "should find entry");
 
   // Verify access tracking was updated
   const after = db.prepare(`SELECT last_accessed, access_count FROM entries WHERE id = 'access-track'`).get();

@@ -661,6 +661,41 @@ Mitigations:
   current agentic coding tools. Plan session boundaries proactively rather than
   relying on graceful degradation.
 
+### Progressive summarization trap
+
+Compaction and summarization lose information by design. When the agent repeatedly
+summarizes its own summaries across compaction cycles, critical case-specific
+details erode — variable names, error codes, file paths, and reproduction steps
+disappear first because they look like "low-signal" tokens to the summarizer.
+
+The failure pattern: an agent investigating a bug compacts three times. By the
+fourth cycle, it has lost the specific error message that would have pointed to the
+root cause. It continues investigating but cannot converge because the key fact
+is gone from context.
+
+Mitigation: **persistent case facts blocks.** Before compaction, write
+case-critical details to a scratchpad file (or memory). Include:
+- Exact error messages and stack traces
+- File paths and line numbers under investigation
+- Hypotheses tested and their outcomes
+- Variable values and configuration state
+
+After compaction or fresh session start, re-inject these facts. The cost is a few
+hundred tokens; the alternative is re-discovering facts the agent already found.
+
+### Session decision framework
+
+When a session reaches a natural boundary, choose the right continuation strategy:
+
+| Situation | Strategy | Why |
+|---|---|---|
+| Task complete, new unrelated task | **Fresh start** (`/clear`) | Clean context, no irrelevant history |
+| Task in progress, context < 50% | **Continue** in current session | Sufficient room, context is relevant |
+| Task in progress, context 50-70% | **Checkpoint and fresh start** | Save state to memory, restart with clean context |
+| Task in progress, context > 70% | **Checkpoint immediately** | Risk of auto-compaction losing critical state |
+| Debugging with many failed attempts | **Fresh start** with hypothesis | Failed attempts pollute context; restart with only the working hypothesis |
+| Multi-file refactor, mid-way | **Fork to subagent** | Delegate remaining files to preserve parent context |
+
 ### /rewind and double-Escape for rollback
 
 Every action creates a checkpoint. Double-tap `Escape` or run `/rewind` to open
@@ -1549,6 +1584,78 @@ directory at launch.
 diagnostics, cursor position -- to the agent. This is how VS Code and Cursor
 surface language server information that a standalone CLI cannot access.
 
+### Tool descriptions as the selection mechanism
+
+The agent selects MCP tools primarily by reading their `description` field — not
+by understanding the tool's implementation. A vague description causes the agent
+to either ignore the tool or call it speculatively; a precise description enables
+reliable selection.
+
+**Good descriptions** state what the tool does, what input it expects, and when
+to use it:
+
+```
+"Search fleet manifests by keyword. Returns repos ranked by BM25 relevance.
+Use when looking for repos by technology, language, or purpose."
+```
+
+**Bad descriptions** are generic or implementation-focused:
+
+```
+"Runs a search query"
+"Helper function for the fleet module"
+```
+
+Rules of thumb:
+- Lead with the verb and object ("Search repos", "Create an issue", "Read schema")
+- Include the return type or shape ("Returns ranked list", "Returns full JSON manifest")
+- State when to use it vs. alternatives ("Use instead of grep when searching across repos")
+- Keep it under 100 tokens — the description is re-sent with every API call
+
+### Structured error responses
+
+MCP tools should distinguish error categories so the agent can decide whether to
+retry, rephrase, or escalate:
+
+| Category | Meaning | Agent action |
+|---|---|---|
+| `validation` | Bad input (missing field, wrong type) | Fix input and retry |
+| `transient` | Temporary failure (timeout, service down) | Retry after delay |
+| `business` | Valid request, but business rule prevents it | Report to user |
+| `permission` | Insufficient access | Escalate to user |
+
+Return structured errors rather than plain strings:
+
+```json
+{
+  "isError": true,
+  "errorCategory": "validation",
+  "isRetryable": false,
+  "description": "query is required and must be a string"
+}
+```
+
+This pattern lets the agent distinguish "I sent bad input" (fix and retry) from
+"the service is down" (wait and retry) from "I need different permissions" (ask
+the user). Without categories, the agent either retries everything or gives up
+on the first error.
+
+### Tool count guidance
+
+Tool selection quality degrades as the number of available tools increases.
+Benchmarks show optimal performance at **4-5 tools per agent**, with measurable
+degradation above 10 and significant degradation above 18 [37].
+
+Practical guidelines:
+- **Per-agent sweet spot**: 4-5 tools. Each tool should be clearly differentiated
+  in its description.
+- **Warning zone**: 10-18 tools. The agent starts making suboptimal selections.
+  Consider splitting into specialized subagents.
+- **Danger zone**: 18+ tools. Selection errors become frequent. Use the dynamic
+  toolset pattern or split the server into focused sub-servers.
+- MCP Tool Search (built into Claude Code) mitigates this for MCP tools
+  specifically, but does not help with built-in tools.
+
 ### MCP server registry
 
 The playbook ships a curated registry of production-grade MCP servers at
@@ -2010,6 +2117,85 @@ Design guidance:
   need to persist state, the task is not a fan-out candidate.
 - **Consolidation is the expensive step.** Budget Opus for the synthesis turn --
   it requires reasoning across all N outputs simultaneously.
+
+### Decomposition failure pattern
+
+When a multi-agent task fails, the instinct is to debug the subagent that
+produced wrong output. In practice, **most multi-agent failures trace to the
+coordinator**, not the workers:
+
+- The coordinator decomposed the task incorrectly (overlapping scope, missing
+  dependencies, wrong granularity)
+- The coordinator passed insufficient context (the subagent lacked information
+  it needed to succeed)
+- The coordinator failed to synthesize conflicting outputs from subagents
+
+Debugging checklist for multi-agent failures:
+1. Was the task decomposition correct? Would a human have split it the same way?
+2. Did each subagent receive all necessary context in its prompt?
+3. Were subagent outputs actually contradictory, or did the coordinator misread them?
+
+Fix the coordinator first. Only debug the subagent if its task was well-specified
+and its context was complete.
+
+### Structured context passing
+
+When a coordinator passes work to subagents, context must travel with the content.
+Raw text dumps lose attribution and structure:
+
+**Bad**: "Here's the code to review: [paste 500 lines]"
+
+**Good**: Pass structured metadata alongside content:
+- Source file path and line range
+- Why this code is being reviewed (the triggering change or concern)
+- What the subagent should focus on (security, performance, correctness)
+- What decisions have already been made (constraints the subagent should respect)
+
+The cost of structured context is ~50-100 extra tokens. The cost of missing
+context is a subagent that produces irrelevant or contradictory output, requiring
+a retry that costs 10-100x more.
+
+### Access failure vs empty result
+
+When designing tool interfaces for multi-agent systems, distinguish between
+"nothing found" and "lookup failed":
+
+```
+# Bad — caller cannot distinguish
+return []
+
+# Good — caller knows what happened
+return { results: [], status: "ok" }      // nothing matched
+return { results: [], status: "error",    // lookup failed
+         error: "database unavailable" }
+```
+
+This matters because the agent's next action differs:
+- Empty result → broaden search, try different terms, report "not found"
+- Access failure → retry, check credentials, escalate to user
+
+The playbook's `knowledge-db.js` implements this pattern: `queryRelevant()`
+returns `{ results, status, error? }` so callers can distinguish no-match from
+no-access.
+
+### Escalation design
+
+Agents need clear criteria for when to escalate to a human rather than continuing
+autonomously. Three triggers are reliable:
+
+1. **Explicit human request**: The user asked to be consulted at this decision point
+2. **Policy gap**: The task requires a judgment call not covered by existing instructions
+3. **Inability to progress**: Two attempts at the same approach have failed
+
+Two triggers are **unreliable** and should not be used:
+
+- **Sentiment detection**: "The user seems frustrated" is not a reliable signal
+  and leads to premature escalation
+- **Self-confidence**: "I'm not sure about this" correlates poorly with actual
+  error rates — agents are often wrong when confident and right when uncertain
+
+Build escalation into the task definition ("if you encounter X, stop and ask")
+rather than relying on the agent's real-time judgment about when to escalate.
 
 ---
 

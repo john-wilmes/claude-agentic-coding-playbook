@@ -168,7 +168,50 @@ test("12. Malformed JSON input -> exits 0 with {}", (env) => {
   assert.deepStrictEqual(result.json, {});
 });
 
-test("13. Route event writes JSONL log entry", (env) => {
+test("13. Agent tool name -> intercepted like Task", (env) => {
+  const result = runHook(MODEL_ROUTER, {
+    tool_name: "Agent",
+    tool_input: {
+      subagent_type: "general-purpose",
+      prompt: "Find all TypeScript files in the project",
+    },
+  }, { HOME: env.home, USERPROFILE: env.home });
+
+  assert.strictEqual(result.status, 0);
+  assert.ok(result.json.hookSpecificOutput, "Should produce hookSpecificOutput for Agent tool");
+  assert.ok(result.json.hookSpecificOutput.updatedInput.model, "Should inject a model");
+});
+
+test("14. allowed-tools >10 items (array) -> tool count advisory", (env) => {
+  const manyTools = ["Bash","Read","Write","Edit","Glob","Grep","Task","WebFetch","WebSearch","Bash2","ExtraOne"];
+  assert.ok(manyTools.length > 10, "Fixture must have >10 tools");
+
+  const result = runRouter({
+    subagent_type: "general-purpose",
+    prompt: "Search the codebase for API definitions",
+    "allowed-tools": manyTools,
+  }, env);
+
+  assert.ok(result.json.hookSpecificOutput, "Should have hookSpecificOutput");
+  const ctx = result.json.hookSpecificOutput.additionalContext;
+  assert.ok(ctx.includes("tool selection degrades above 10 tools"), `Advisory missing. Got: ${ctx}`);
+  assert.ok(ctx.includes(`found ${manyTools.length}`), `Count missing. Got: ${ctx}`);
+});
+
+test("15. allowed-tools ≤10 items (string) -> no tool count advisory", (env) => {
+  const fewTools = "Bash,Read,Write,Edit,Glob";
+  const result = runRouter({
+    subagent_type: "general-purpose",
+    prompt: "Search the codebase for API definitions",
+    "allowed-tools": fewTools,
+  }, env);
+
+  assert.ok(result.json.hookSpecificOutput, "Should have hookSpecificOutput");
+  const ctx = result.json.hookSpecificOutput.additionalContext;
+  assert.ok(!ctx.includes("tool selection degrades"), `Unexpected advisory present. Got: ${ctx}`);
+});
+
+test("16. Route event writes JSONL log entry", (env) => {
   const result = runRouter({
     subagent_type: "Explore",
     prompt: "Find all TypeScript files",

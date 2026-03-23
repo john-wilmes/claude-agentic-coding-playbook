@@ -151,6 +151,21 @@ do_uninstall() {
     done
   fi
 
+  # Rules: remove rule files installed from this repo's profiles/combined/rules/
+  echo ""
+  echo "--- Removing rules ---"
+  if [ -d "$PROFILE_DIR_UNINSTALL/rules" ]; then
+    for rule_file in "$PROFILE_DIR_UNINSTALL/rules"/*.md; do
+      [ -f "$rule_file" ] || continue
+      rule_name=$(basename "$rule_file")
+      rule_dest="$CLAUDE_DIR/rules/$rule_name"
+      if [ -f "$rule_dest" ]; then
+        rm -f "$rule_dest"
+        echo "REMOVED: $rule_dest"
+      fi
+    done
+  fi
+
   # CLI symlinks: remove only if symlink target is inside SCRIPT_DIR
   echo ""
   echo "--- Removing CLI script symlinks ---"
@@ -479,6 +494,20 @@ for skill_dir in "$PROFILE_DIR/skills"/*/; do
   skill_name=$(basename "$skill_dir")
   install_skill "$skill_name"
 done
+
+echo ""
+echo "--- Installing rules ---"
+RULES_SRC="$PROFILE_DIR/rules"
+RULES_DEST="$CLAUDE_DIR/rules"
+if [ -d "$RULES_SRC" ]; then
+  for rule_file in "$RULES_SRC"/*.md; do
+    [ -f "$rule_file" ] || continue
+    rule_name=$(basename "$rule_file")
+    install_file "$rule_file" "$RULES_DEST/$rule_name" "rule: $rule_name"
+  done
+else
+  echo "SKIPPED: rules/ (not found in profile)"
+fi
 
 echo ""
 echo "--- Installing templates ---"
@@ -1727,6 +1756,7 @@ for skill_dir in "$PROFILE_DIR/skills"/*/; do
 done
 echo "  CLI scripts      -> $LOCAL_BIN/ (q, qa, claude-loop, knowledge-consolidate)"
 echo "  Session hooks    -> $CLAUDE_DIR/hooks/ (auto-run on session start/end)"
+echo "  Rules            -> $CLAUDE_DIR/rules/ (path-specific coding conventions)"
 echo "  Templates        -> $CLAUDE_DIR/templates/"
 if [[ "$EXTRAS" == true ]]; then
   REGISTRY_FILE="$SCRIPT_DIR/templates/registry/mcp-servers.json"

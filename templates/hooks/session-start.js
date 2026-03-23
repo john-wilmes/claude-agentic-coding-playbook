@@ -164,12 +164,13 @@ function getRelevantKnowledge(cwd, maxEntries = 5, extraTerms = []) {
     const queryTerms = [...projectContext.tools, ...projectContext.tags, projectContext.projectName, ...extraTerms]
       .filter(Boolean);
 
-    const entries = knowledgeDb.queryRelevant(db, {
+    const result = knowledgeDb.queryRelevant(db, {
       projectTool: projectContext.tools,
       sourceProject: projectContext.projectName,
       queryTerms,
       cwd,
     }, maxEntries);
+    const entries = result.results || [];
 
     // Map DB results to the format expected by the output formatter
     return entries.map(e => ({

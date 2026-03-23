@@ -188,11 +188,11 @@ function insertEntry(db, entry) {
  * @param {string} [opts.cwd] - Current working directory
  * @param {string} [opts.repoUrl] - Current repo URL (for staleness check)
  * @param {number} [limit=5] - Max results to return
- * @returns {object[]} Sorted entry objects
+ * @returns {{ results: object[], status: "ok"|"error", error?: string }}
  */
 function queryRelevant(db, opts = {}, limit = 5) {
   try {
-    if (!db) return [];
+    if (!db) return { results: [], status: "error", error: "database unavailable" };
 
     const projectTools = Array.isArray(opts.projectTool)
       ? opts.projectTool.map(t => t.toLowerCase())
@@ -347,9 +347,9 @@ function queryRelevant(db, opts = {}, limit = 5) {
       } catch {}
     }
 
-    return results;
-  } catch {
-    return [];
+    return { results, status: "ok" };
+  } catch (e) {
+    return { results: [], status: "error", error: (e && e.message) || "query failed" };
   }
 }
 
