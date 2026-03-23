@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+
 - `--status-json` flag for claude-loop programmatic status checks
 - Implicit task completion in claude-loop (exit 0 + uncommitted changes = success)
 - `--version` flag, `--report` task queue section, and `[FAIL]` recovery for claude-loop
@@ -19,8 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Read-once deduplication hook for 38-40% file-read context savings
 - Block 6 additional credential directories per Trail of Bits recommendations
 - Close readiness gaps: --uninstall flag, Node v18+ version check, session-end tests, analyze-logs tests, sanitize tests
+- Sycophancy-detector PostToolUse hook with three behavioral signals
+- Session timeline (`--timeline`) and aggregate metrics (`--aggregate`) for analyze-logs
 
 ### Fixed
+
 - Leading dash in CWD path encoding for project memory lookup
 - Auto-send initial prompt in claude-loop interactive mode
 - Knowledge scoring category bias removed
@@ -28,11 +32,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Correct 5 misattributed citations, add 5 orphan citations, fix model routing advice
 - MCP registry test count mismatch
 
-## [0.1.0] - 2026-02-24
+## [1.0.0] - 2026-02-24
 
 Initial public release.
 
 ### Added
+
 - Evidence-based best practices guide with 54 verified citations
 - 25 hooks for safety, quality, and resource management
 - 6 skills: /checkpoint, /create-project, /playbook, /learn, /promote, /investigate
