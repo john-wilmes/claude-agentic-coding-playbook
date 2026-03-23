@@ -256,7 +256,7 @@ process.stdin.on("end", () => {
       // Check MEMORY.md size — warn before silent truncation
       const memLineCount = memoryContent.split("\n").length;
       if (memLineCount > 120) {
-        memorySizeWarning = `\u26a0 MEMORY.md is ${memLineCount} lines (limit: 150, truncation: 200). Run /checkpoint to split topic files.`;
+        memorySizeWarning = `\u26a0 MEMORY.md is ${memLineCount} lines (limit: 150, truncation: 200). Invoke /checkpoint to split topic files.`;
       }
     } catch {
       // No memory file for this project -- that's fine

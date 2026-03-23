@@ -246,8 +246,9 @@ process.stdin.on("end", () => {
         hookSpecificOutput: {
           hookEventName: "PostToolUse",
           additionalContext:
-            `CRITICAL: ${pct}% context used ${ctx.stats}. Run /checkpoint NOW to save state and exit. ` +
-            `Do not read new files or start new work. Your next action must be /checkpoint.`,
+            `CRITICAL: ${pct}% context used ${ctx.stats}. ` +
+            `Invoke the /checkpoint skill NOW — do not ask the user, do not read new files, do not start new work. ` +
+            `After checkpoint completes, stop all output immediately.`,
         },
       };
     } else if (ctx.ratio >= WARN_THRESHOLD && !state.warned) {
@@ -267,7 +268,7 @@ process.stdin.on("end", () => {
           hookEventName: "PostToolUse",
           additionalContext:
             `Context warning: ${pct}% used ${ctx.stats}. ` +
-            `Finish current subtask, externalize state, then run /checkpoint.` + perCallWarning,
+            `Finish your current subtask, then invoke /checkpoint automatically — do not ask the user.` + perCallWarning,
         },
       };
     } else if (ctx.ratio >= SUBAGENT_THRESHOLD && !state.subagentWarned) {

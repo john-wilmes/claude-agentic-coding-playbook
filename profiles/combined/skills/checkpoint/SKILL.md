@@ -110,10 +110,10 @@ Checkpoint complete. Session will restart with fresh context.
 
 Then STOP. Do not make any more tool calls or produce any more output.
 
-**If neither is set (standalone session, no claude-loop):** Tell the user:
+**If neither is set (standalone session, no claude-loop):** Print exactly:
 
 ```text
-Checkpoint complete. Run `/exit` to start a fresh session.
+Checkpoint complete. Exiting session.
 ```
 
-Then STOP. Do not make any more tool calls or produce any more output.
+Then STOP. Do not make any more tool calls or produce any more output. The session is over.

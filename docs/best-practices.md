@@ -2332,7 +2332,7 @@ differently can fail or succeed depending on phrasing, not semantics.
 
 - Place rationale clauses alongside instructions: compliance improves ~30% when the
   agent understands why a rule exists [58].
-- Make block messages directive, not explanatory. "BLOCKED. Run /checkpoint now."
+- Make block messages directive, not explanatory. "BLOCKED. Invoke /checkpoint now."
   is more reliable than a paragraph explaining context degradation.
 - Accept that any workflow behavior requiring >90% reliability must be enforced
   architecturally. "Guidelines live in prompts, fail-safes live in code" reflects
