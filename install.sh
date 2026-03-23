@@ -10,6 +10,7 @@ FORCE=false
 DRY_RUN=false
 KNOWLEDGE_REPO=""
 EXTRAS=false
+UNINSTALL=false
 
 usage() {
   cat <<EOF
@@ -25,6 +26,7 @@ Options:
   --dry-run                  Show what would be installed without making changes
   --knowledge-repo <url>     Clone (or pull) a git repo into <root>/.claude/knowledge
   --extras                   Install advanced features (fleet index, MCP registry, managed repos)
+  --uninstall                Remove files installed by this script
   -h, --help                 Show this help message
 
 Examples:
@@ -34,6 +36,7 @@ Examples:
   ./install.sh --force                  # Overwrite everything
   ./install.sh --dry-run                # Preview what would be installed
   ./install.sh --knowledge-repo https://github.com/org/knowledge
+  ./install.sh --uninstall              # Remove installed files
 EOF
   exit 0
 }
@@ -55,6 +58,7 @@ while [[ "$#" -gt 0 ]]; do
       fi
       KNOWLEDGE_REPO="$2"; shift ;;
     --extras) EXTRAS=true ;;
+    --uninstall) UNINSTALL=true ;;
     -h|--help) usage ;;
     *) echo "Unknown parameter: $1"; usage ;;
   esac
@@ -78,6 +82,113 @@ esac
 INSTALL_ROOT="$(cd "$INSTALL_ROOT" 2>/dev/null && pwd || echo "$INSTALL_ROOT")"
 GLOBAL_CLAUDE_DIR="$HOME/.claude"
 CLAUDE_DIR="$GLOBAL_CLAUDE_DIR"
+LOCAL_BIN_EARLY="$HOME/.local/bin"
+
+# --- Uninstall ---
+
+do_uninstall() {
+  echo "=== Agentic Coding Playbook Uninstaller ==="
+  echo "Removing files installed by this script."
+  echo ""
+
+  # Hook files: remove if the source file exists in templates/hooks/
+  echo "--- Removing Claude session hooks ---"
+  for src in "$SCRIPT_DIR/templates/hooks"/*.js; do
+    [ -f "$src" ] || continue
+    hook_name=$(basename "$src")
+    dest="$CLAUDE_DIR/hooks/$hook_name"
+    if [ -f "$dest" ]; then
+      rm -f "$dest"
+      echo "REMOVED: $dest"
+    fi
+  done
+
+  # Settings.json: strip all hook entries whose command references this repo's hooks dir
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  if [ -f "$SETTINGS_FILE" ]; then
+    echo ""
+    echo "--- Removing hook entries from settings.json ---"
+    node -e "
+      const fs = require('fs');
+      const settingsPath = process.argv[1];
+      const hooksDir = process.argv[2];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      let removed = 0;
+      if (settings.hooks) {
+        for (const event of Object.keys(settings.hooks)) {
+          const before = settings.hooks[event].length;
+          settings.hooks[event] = settings.hooks[event].filter(entry => {
+            if (!entry.hooks) return true;
+            return !entry.hooks.some(h => h.command && h.command.includes(hooksDir));
+          });
+          removed += before - settings.hooks[event].length;
+          if (settings.hooks[event].length === 0) {
+            delete settings.hooks[event];
+          }
+        }
+        if (Object.keys(settings.hooks).length === 0) {
+          delete settings.hooks;
+        }
+      }
+      fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      console.log('UPDATED: settings.json (' + removed + ' hook entries removed)');
+    " "$SETTINGS_FILE" "$CLAUDE_DIR/hooks"
+  fi
+
+  # Skills: remove skill directories installed from this repo's profiles/combined/skills/
+  echo ""
+  echo "--- Removing skills ---"
+  PROFILE_DIR_UNINSTALL="$SCRIPT_DIR/profiles/combined"
+  if [ -d "$PROFILE_DIR_UNINSTALL/skills" ]; then
+    for skill_src in "$PROFILE_DIR_UNINSTALL/skills"/*/; do
+      [ -d "$skill_src" ] || continue
+      skill_name=$(basename "$skill_src")
+      skill_dest="$CLAUDE_DIR/skills/$skill_name"
+      if [ -d "$skill_dest" ]; then
+        rm -rf "$skill_dest"
+        echo "REMOVED: $skill_dest"
+      fi
+    done
+  fi
+
+  # CLI symlinks: remove only if symlink target is inside SCRIPT_DIR
+  echo ""
+  echo "--- Removing CLI script symlinks ---"
+  for link_name in q qa claude-loop knowledge-consolidate repo-fleet-index; do
+    link_path="$LOCAL_BIN_EARLY/$link_name"
+    if [ -L "$link_path" ]; then
+      target=$(readlink "$link_path")
+      if [[ "$target" == "$SCRIPT_DIR"* ]]; then
+        rm -f "$link_path"
+        echo "REMOVED: $link_path -> $target"
+      else
+        echo "SKIPPED: $link_path (points to $target, not this repo)"
+      fi
+    fi
+  done
+
+  # Skill helper scripts symlink
+  skills_link="$CLAUDE_DIR/scripts/skills"
+  if [ -L "$skills_link" ]; then
+    target=$(readlink "$skills_link")
+    if [[ "$target" == "$SCRIPT_DIR"* ]]; then
+      rm -f "$skills_link"
+      echo "REMOVED: $skills_link -> $target"
+    else
+      echo "SKIPPED: $skills_link (points to $target, not this repo)"
+    fi
+  fi
+
+  echo ""
+  echo "=== Uninstall complete ==="
+  echo "Not removed: CLAUDE.md, settings.json (structure), ~/.claude/ directory"
+  echo "Not removed: MCP server entries from --extras (remove manually if needed)"
+}
+
+if [ "$UNINSTALL" = true ]; then
+  do_uninstall
+  exit 0
+fi
 
 PROFILE_DIR="$SCRIPT_DIR/profiles/combined"
 if [ ! -d "$PROFILE_DIR" ]; then
@@ -180,6 +291,16 @@ missing=0
 ensure_command git || missing=1
 ensure_command node || missing=1
 ensure_command python3 || missing=1
+
+if command -v node &>/dev/null; then
+  node_version=$(node --version)  # e.g. "v20.11.0"
+  node_major=${node_version%%.*}  # "v20"
+  node_major=${node_major#v}      # "20"
+  if [ "$node_major" -lt 18 ]; then
+    echo "Error: Node.js v18+ required, found ${node_version}"
+    missing=1
+  fi
+fi
 
 if [ "$missing" -eq 1 ]; then
   echo ""
