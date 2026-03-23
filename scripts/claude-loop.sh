@@ -48,6 +48,8 @@ Options:
   --task-queue FILE    Markdown checklist file to drive tasks
   --max-sessions N     Stop after N sessions (default: unlimited)
   --status             Print current loop status and exit
+  --status-json        Print current loop status as JSON and exit
+  --log-file FILE      Override log file path (default: ~/.claude/logs/claude-loop-YYYY-MM-DD.jsonl)
   --report             Summarize today's log and exit
   --dry-run            Show what would be done without running claude
   --version            Print version and exit
@@ -100,6 +102,14 @@ while [[ $# -gt 0 ]]; do
     --status-json)
       STATUS_JSON_MODE=true
       shift
+      ;;
+    --log-file)
+      if [[ $# -lt 2 || "$2" == --* ]]; then
+        echo "claude-loop: --log-file requires a FILE argument" >&2
+        exit 1
+      fi
+      LOG_FILE="$2"
+      shift 2
       ;;
     --report)
       REPORT_MODE=true
