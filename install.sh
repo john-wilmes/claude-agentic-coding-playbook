@@ -915,6 +915,52 @@ if [ -f "$SCRIPT_DIR/templates/hooks/context-guard.js" ]; then
   fi
 fi
 
+# Sycophancy detector hook (PostToolUse all tools -- detects sycophantic patterns)
+if [ -f "$SCRIPT_DIR/templates/hooks/sycophancy-detector.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/sycophancy-detector.js" "$CLAUDE_DIR/hooks/sycophancy-detector.js" "sycophancy detector: sycophancy-detector.js"
+
+  echo ""
+  echo "--- Configuring sycophancy-detector in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  SYCO_CMD="node $CLAUDE_DIR/hooks/sycophancy-detector.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add sycophancy-detector PostToolUse hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    # PostToolUse entry: no matcher (fires on ALL tools).
+    node -e "
+      const fs = require('fs');
+      const path = require('path');
+      const settingsPath = path.resolve(process.argv[1]);
+      const hookCmd = process.argv[2];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.hooks) settings.hooks = {};
+      if (!settings.hooks.PostToolUse) settings.hooks.PostToolUse = [];
+      // Check if a no-matcher sycophancy-detector entry already exists
+      const hasNoMatcher = settings.hooks.PostToolUse.some(e =>
+        !e.matcher && e.hooks && e.hooks.some(h => h.command && h.command.includes('sycophancy-detector'))
+      );
+      if (!hasNoMatcher) {
+        // Remove any old matcher-constrained sycophancy-detector entries
+        settings.hooks.PostToolUse = settings.hooks.PostToolUse.filter(e =>
+          !(e.hooks && e.hooks.some(h => h.command && h.command.includes('sycophancy-detector')))
+        );
+        settings.hooks.PostToolUse.push({
+          hooks: [{ type: 'command', command: hookCmd, timeout: 3 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+        console.log('CONFIGURED: sycophancy-detector PostToolUse hook (no matcher, all tools)');
+      } else {
+        console.log('ALREADY CONFIGURED: sycophancy-detector PostToolUse hook in settings.json');
+      }
+    " "$SETTINGS_FILE" "$SYCO_CMD"
+  fi
+fi
+
 # Pre-compact snapshot hook (PreCompact -- saves emergency MEMORY.md snapshot before compaction)
 if [ -f "$SCRIPT_DIR/templates/hooks/pre-compact.js" ]; then
   install_file "$SCRIPT_DIR/templates/hooks/pre-compact.js" "$CLAUDE_DIR/hooks/pre-compact.js" "pre-compact hook: pre-compact.js"

@@ -203,6 +203,23 @@ Detects repetition loops by hashing tool name + input. Maintains a sliding windo
 - **Example output:** `{"decision": "warn", "message": "Same action repeated 3 times. Try a different approach."}`
 - **State files:** `/tmp/claude-stuck-detector/`
 
+#### `sycophancy-detector.js` — PostToolUse (no matcher — fires on all tools)
+
+Detects sycophantic behavioral patterns by tracking tool usage sequences within a session. Three signals are monitored:
+
+| Signal | Description | Warn | Escalate |
+|---|---|---|---|
+| **quick-edit** | Read → Edit same file without investigation steps in between | 3 occurrences | 5 occurrences |
+| **compliance run** | Consecutive modification actions (Edit/Write/Bash) without any reads | 5 in a row | 8 in a row |
+| **session ratio** | More than 80% of all actions are modifications (after 15+ total actions) | >80% | — |
+
+On each pattern transition (new signal or threshold crossed), logs the score to the session JSONL and stages a knowledge candidate via `knowledge-capture.js` for later review.
+
+- **Configuration:** Works out of the box.
+- **Thresholds:** quick-edit warn at 3/escalate at 5; compliance run warn at 5/escalate at 8; ratio warn at >80% after 15+ actions.
+- **Integration:** Logs scores to the shared JSONL log; stages knowledge candidates on pattern transitions.
+- **State files:** `/tmp/claude-sycophancy-detector/` — per-session state with 4h TTL. Path persists across `claude-loop` restarts via `CLAUDE_LOOP_PID`.
+
 ---
 
 ### Resource Management

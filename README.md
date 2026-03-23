@@ -137,6 +137,7 @@ CLAUDE.md rules are advisory (~50-90% compliance). Hooks are deterministic (>95%
 - **PR review guard** -- Enforces code review before merging. Blocks `gh pr merge` until CodeRabbit has reviewed the PR.
 - **Context guard** -- Dual-mode context window monitoring. Warns at 35%/50%, advisory block at 60% (informational, not hard-blocking), failsafe sentinel at 75%.
 - **Stuck detector** -- Detects and breaks agent loops when the same action repeats.
+- **Sycophancy detector** -- Detects behavioral patterns indicating sycophancy — rubber-stamping, compliance without investigation, shallow reviews. Warns via PostToolUse advisory.
 
 **Resource management:**
 - **Model router** -- Auto-selects Haiku/Sonnet/Opus for Task and Agent tool calls based on prompt signals. Warns when allowed-tools exceeds 10.

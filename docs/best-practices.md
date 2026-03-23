@@ -1189,6 +1189,8 @@ generation [56].
 5. **Early termination.** Stop when genuine consensus is reached rather than
    padding to a round count.
 
+The `sycophancy-detector` hook provides automated enforcement of this pattern. It tracks quick-edit sequences (Read → Edit without investigation), compliance runs (consecutive modifications without reads), and session-level modification ratios, and warns when the agent's behavior drifts toward rubber-stamping rather than genuine review.
+
 ### Pre-commit hooks for mechanical enforcement
 
 Some rules should not depend on the agent following instructions. A pre-commit

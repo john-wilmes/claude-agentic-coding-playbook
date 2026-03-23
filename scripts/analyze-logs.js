@@ -176,6 +176,62 @@ function printStuckDetector(entries) {
   console.log();
 }
 
+function printSycophancyDetector(entries) {
+  const sd = entries.filter(e => e.hook === "sycophancy-detector");
+  console.log("=== Sycophancy-Detector ===");
+  if (sd.length === 0) {
+    console.log("No sycophancy-detector entries.");
+    console.log();
+    return;
+  }
+
+  const warnings = sd.filter(e => e.event === "warn");
+  const escalations = sd.filter(e => e.event === "escalate");
+  const scores = sd.filter(e => e.event === "score");
+
+  console.log(`Total warnings:    ${warnings.length}`);
+  console.log(`Total escalations: ${escalations.length}`);
+
+  // Breakdown by warning reason type
+  const reasonCounts = {};
+  for (const entry of [...warnings, ...escalations]) {
+    const reason = (entry.context && entry.context.reason) || entry.details || "unknown";
+    reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+  }
+  if (Object.keys(reasonCounts).length > 0) {
+    console.log("  Breakdown by reason:");
+    const sorted = Object.entries(reasonCounts).sort((a, b) => b[1] - a[1]);
+    for (const [reason, count] of sorted) {
+      console.log(`    ${reason}: ${count}`);
+    }
+  }
+
+  // Average session metrics from score events
+  if (scores.length > 0) {
+    const quickEdits = scores.map(e => e.context && e.context.quick_edits).filter(v => v != null);
+    const complianceRuns = scores.map(e => e.context && e.context.compliance_run).filter(v => v != null);
+    const ratios = scores.map(e => e.context && e.context.ratio).filter(v => v != null);
+
+    if (quickEdits.length > 0 || complianceRuns.length > 0 || ratios.length > 0) {
+      console.log("  Avg session metrics (from score events):");
+      if (quickEdits.length > 0) {
+        const avg = quickEdits.reduce((a, b) => a + b, 0) / quickEdits.length;
+        console.log(`    avg quick_edits:     ${avg.toFixed(2)}`);
+      }
+      if (complianceRuns.length > 0) {
+        const avg = complianceRuns.reduce((a, b) => a + b, 0) / complianceRuns.length;
+        console.log(`    avg compliance_run:  ${avg.toFixed(2)}`);
+      }
+      if (ratios.length > 0) {
+        const avg = ratios.reduce((a, b) => a + b, 0) / ratios.length;
+        console.log(`    avg ratio:           ${avg.toFixed(3)}`);
+      }
+    }
+  }
+
+  console.log();
+}
+
 function printModelRouter(entries) {
   const mr = entries.filter(e => e.hook === "model-router" && e.event === "route");
   console.log("=== Model-Router Distribution ===");
@@ -348,6 +404,7 @@ const entries = loadEntries(args);
 printSummary(entries);
 printContextGuard(entries);
 printStuckDetector(entries);
+printSycophancyDetector(entries);
 printModelRouter(entries);
 printInjectionGuard(entries);
 if (args.retrievalMisses) {
