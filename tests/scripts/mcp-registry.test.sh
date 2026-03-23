@@ -78,16 +78,16 @@ test_registry_server_count() {
     const r = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
     console.log(Object.keys(r).length);
   " "$REGISTRY_FILE")
-  [[ "$count" -eq 21 ]] || { echo "Expected 21 servers, got $count"; return 1; }
+  [[ "$count" -eq 20 ]] || { echo "Expected 20 servers, got $count"; return 1; }
 }
-run_test "Registry contains 21 servers" test_registry_server_count
+run_test "Registry contains 20 servers" test_registry_server_count
 
 # ─── Test 3: github is enabled, others disabled ─────────────────────────────
 
 test_github_enabled() {
   node -e "
     const r = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
-    const ENABLED = new Set(['github', 'fleet-index', 'serena', 'mma']);
+    const ENABLED = new Set(['github', 'fleet-index', 'serena']);
     for (const [name, entry] of Object.entries(r)) {
       const shouldBeEnabled = ENABLED.has(name);
       if (shouldBeEnabled && entry.config.disabled !== false) { console.error(name + ' should be enabled'); process.exit(1); }
@@ -128,7 +128,7 @@ test_fresh_install() {
   result=$(merge_registry "$REGISTRY_FILE" "$tmpdir/settings.json")
   local added=${result%%:*}
   local skipped=${result##*:}
-  [[ "$added" -eq 21 ]] || { echo "Expected 21 added, got $added"; return 1; }
+  [[ "$added" -eq 20 ]] || { echo "Expected 20 added, got $added"; return 1; }
   [[ "$skipped" -eq 0 ]] || { echo "Expected 0 skipped, got $skipped"; return 1; }
 
   # Verify github is in the output
@@ -138,7 +138,7 @@ test_fresh_install() {
     if (s.mcpServers.github.disabled !== false) { console.error('github should be enabled'); process.exit(1); }
   " "$tmpdir/settings.json"
 }
-run_test "Fresh install adds all 15 servers" test_fresh_install
+run_test "Fresh install adds all 20 servers" test_fresh_install
 
 # ─── Test 6: Idempotent — running twice doesn't duplicate ───────────────────
 
@@ -155,7 +155,7 @@ test_idempotent() {
   local added=${result%%:*}
   local skipped=${result##*:}
   [[ "$added" -eq 0 ]] || { echo "Expected 0 added on second run, got $added"; return 1; }
-  [[ "$skipped" -eq 21 ]] || { echo "Expected 21 skipped on second run, got $skipped"; return 1; }
+  [[ "$skipped" -eq 20 ]] || { echo "Expected 20 skipped on second run, got $skipped"; return 1; }
 }
 run_test "Idempotent — second run adds nothing" test_idempotent
 
