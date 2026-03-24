@@ -343,7 +343,12 @@ has_new_files_in_dir() {
   local ref_file epoch_secs
   ref_file="$(mktemp)"
   epoch_secs="$(( epoch_ms / 1000 ))"
-  python3 -c "import os; os.utime('${ref_file}', (${epoch_secs}, ${epoch_secs}))" 2>/dev/null || {
+  # Set ref_file mtime to epoch — use date -r (BSD/macOS) or date -d (GNU/Linux)
+  local touch_ts
+  touch_ts="$(date -r "${epoch_secs}" '+%Y%m%d%H%M.%S' 2>/dev/null || date -d "@${epoch_secs}" '+%Y%m%d%H%M.%S' 2>/dev/null)" || {
+    rm -f "${ref_file}"; return 1
+  }
+  touch -t "${touch_ts}" "${ref_file}" 2>/dev/null || {
     rm -f "${ref_file}"; return 1
   }
   local found
@@ -366,7 +371,12 @@ transcript_matches_pattern() {
   local ref_file epoch_secs
   ref_file="$(mktemp)"
   epoch_secs="$(( epoch_ms / 1000 ))"
-  python3 -c "import os; os.utime('${ref_file}', (${epoch_secs}, ${epoch_secs}))" 2>/dev/null || {
+  # Set ref_file mtime to epoch — use date -r (BSD/macOS) or date -d (GNU/Linux)
+  local touch_ts
+  touch_ts="$(date -r "${epoch_secs}" '+%Y%m%d%H%M.%S' 2>/dev/null || date -d "@${epoch_secs}" '+%Y%m%d%H%M.%S' 2>/dev/null)" || {
+    rm -f "${ref_file}"; return 1
+  }
+  touch -t "${touch_ts}" "${ref_file}" 2>/dev/null || {
     rm -f "${ref_file}"; return 1
   }
   local matched=false
@@ -705,6 +715,9 @@ fi
 
 # PID-file lock (flock is Linux-only; this works on macOS and Linux).
 # If a stale lock exists (process gone), remove it before claiming.
+# Note: there is a small race window between the kill -0 check and writing
+# our PID. This is acceptable for a single-user CLI tool; stale locks are
+# self-healing via _lock_is_held().
 if [[ -f "${LOCK_FILE}" ]]; then
   _existing_pid="$(cat "${LOCK_FILE}" 2>/dev/null)"
   if [[ -n "${_existing_pid}" ]] && kill -0 "${_existing_pid}" 2>/dev/null; then
@@ -791,6 +804,7 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
   # Run claude in foreground via subshell + exec (preserves terminal access, records PID)
   EXIT_CODE=0
   (
+    # $PPID in sh = this subshell's PID (equivalent to $BASHPID, but portable)
     sh -c 'echo $PPID' > "${CLAUDE_PID_FILE}"
     export CLAUDE_LOOP_PID=$$
     export CLAUDE_LOOP_SENTINEL="${SENTINEL_FILE}"
