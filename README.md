@@ -28,7 +28,7 @@ Full details with citations: [docs/best-practices.md](docs/best-practices.md)
 Most Claude Code setups rely on CLAUDE.md instructions alone. Instructions are advisory — compliance ranges from ~50-90% in our testing (published research reports lower rates for complex instruction sets). This playbook takes a different approach:
 
 - **Designed for bypass mode.** The biggest productivity gains come from running Claude Code autonomously (`--dangerously-skip-permissions` or `bypassPermissions` in settings). Without guardrails, bypass mode means no safety net — destructive commands, runaway file creation, and context exhaustion go unchecked. With this playbook's hooks, you get deterministic enforcement of safety rules even when the agent has full permissions: prompt injection is blocked, context limits are enforced, destructive git operations are caught, and PII is redacted — all without permission prompts interrupting flow.
-- **Hooks enforce rules deterministically.** 22 hooks run on every tool call, catching context exhaustion, prompt injection, sycophantic compliance patterns, and file bloat before they cause problems. Hooks achieve near-100% enforcement for deny rules and >95% for advisory rules — where instructions alone cannot.
+- **Hooks enforce rules deterministically.** 26 hooks run on every tool call, catching context exhaustion, prompt injection, sycophantic compliance patterns, and file bloat before they cause problems. Hooks achieve near-100% enforcement for deny rules and >95% for advisory rules — where instructions alone cannot.
 - **Structured logging makes agent behavior observable.** Every hook decision is logged to JSONL. Analysis tools (`analyze-logs.js`) report context usage, stuck loops, model routing, and hook effectiveness per session — so you can measure what's working and what isn't.
 - **Practices are validated by running them.** The playbook is [dogfooded](docs/dogfooding.md) against real codebases with a 100-task framework. Bugs found during dogfooding (context guard effectiveness, task queue edge cases, implicit completion detection) feed directly back into the hooks and scripts.
 - **Zero npm dependencies.** All hooks use Node.js stdlib only. No `node_modules`, no build step, no supply chain risk.
@@ -97,7 +97,7 @@ chmod +x install.sh
     learn/SKILL.md                    #   /learn - capture knowledge entries
     playbook/SKILL.md                 #   /playbook - analyze and improve config
     promote/SKILL.md                  #   /promote - promote lessons to global scope
-  hooks/                               #   22 hooks — safety, quality, resource management (see docs/hooks.md)
+  hooks/                               #   26 hooks — safety, quality, resource management (see docs/hooks.md)
   rules/
     hooks.md                          #   Hook development conventions (globs: templates/hooks/**)
     testing.md                        #   Test conventions (globs: tests/**)
@@ -155,6 +155,12 @@ CLAUDE.md rules are advisory (~50-90% compliance in our testing; published resea
 - **Bloat guard** -- Detects runaway file creation and flags unexpected project growth.
 - **Markdown size guard** -- Warns when CLAUDE.md or MEMORY.md approach size thresholds.
 - **Read-once dedup** -- Blocks re-reads of unchanged files (38-40% context savings, observed in author testing).
+
+**Enforcement:**
+- **Checkpoint gate** -- Enforces checkpoint-exit and context-critical boundaries. Blocks sessions from continuing past failsafe thresholds without checkpointing.
+- **Multi-image guard** -- Blocks reading 2+ image files per session, guiding to subagent delegation for bulk image work.
+- **Orphan file guard** -- Blocks creating new files not referenced by any existing file. Prevents file bloat.
+- **MCP server guard** -- Advisory warning when `enableAllProjectMcpServers: true` in global settings. Warns once per session.
 
 **Knowledge:**
 - **Knowledge capture** -- Extracts reusable lessons from session activity for the knowledge database.
@@ -307,9 +313,9 @@ See [docs/swe-bench-methodology.md](docs/swe-bench-methodology.md) for task sele
 ## Limitations
 
 - **Claude Code only**: All hooks, skills, and scripts target Claude Code. The principles in `best-practices.md` are conceptually portable to Cursor, Copilot, etc., but the tooling is not.
-- **Hook startup overhead**: 22 hooks are installed, but not all fire on every call — active hooks add ~50-100ms per tool call. Negligible for most workflows, noticeable in rapid-fire operations.
+- **Hook startup overhead**: 26 hooks are installed, but not all fire on every call — active hooks add ~50-100ms per tool call. Negligible for most workflows, noticeable in rapid-fire operations.
 - **CLAUDE.md budget**: The combined profile's CLAUDE.md consumes instruction budget. Projects with large existing CLAUDE.md files may hit the ~150-200 instruction line ceiling.
-- **Node.js 18+ required**: Hooks use modern Node.js APIs (`structuredClone`, etc.).
+- **Node.js 18+ required**: Hooks use modern Node.js APIs (ESM-style imports, `fs.promises`, etc.).
 - **Single maintainer**: This is a personal project, not backed by a company or large team.
 
 ## Contributing

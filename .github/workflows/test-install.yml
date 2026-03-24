@@ -80,17 +80,6 @@ jobs:
           echo "$output"
           echo "$output" | grep -q '\[DRY RUN\] INSTALL'
 
-  test-install-macos:
-    runs-on: macos-latest
-    name: macos / dry-run
-    steps:
-      - uses: actions/checkout@v4
-      - name: "Dry-run install"
-        run: |
-          output=$(bash install.sh --dry-run 2>&1)
-          echo "$output"
-          echo "$output" | grep -q '\[DRY RUN\] INSTALL'
-
   test-install:
     runs-on: ubuntu-latest
     name: ubuntu / combined

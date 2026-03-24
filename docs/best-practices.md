@@ -1650,11 +1650,11 @@ on the first error. The playbook's `fleet-index-server.js` implements this patte
 ### Tool count guidance
 
 Tool selection quality degrades as the number of available tools increases.
-Benchmarks show optimal performance at **4-5 tools per agent**, with measurable
-degradation above 10 and significant degradation above 18 [37].
+Agent performance degrades as tool count increases. Per-agent toolsets should be
+kept small, with dynamic tool selection for larger inventories [37].
 
 Practical guidelines:
-- **Per-agent sweet spot**: 4-5 tools. Each tool should be clearly differentiated
+- **Per-agent guideline**: Keep toolsets small. Each tool should be clearly differentiated
   in its description.
 - **Warning zone**: 10-18 tools. The agent starts making suboptimal selections.
   Consider splitting into specialized subagents.
@@ -2512,7 +2512,7 @@ how unreliable that is in agentic scenarios.
 |-------|-----------|-------------|---------|
 | 1. Pure instruction | CLAUDE.md text | 30-80% | "Use plan mode for multi-file changes" |
 | 2. Hybrid (instruction + soft signal) | Hook injects warning at decision point | 60-90% | Context-guard 60% warning |
-| 3. Hard enforcement | Hook blocks execution | >95% | Context-guard 70% block |
+| 3. Hard enforcement | Hook blocks execution | >95% | Context-guard 60% block |
 | 4. Architectural | System structure prevents violation | ~100% | claude-loop task queue, flock |
 
 #### Research findings
@@ -2529,7 +2529,7 @@ smaller ones. System prompt vs user prompt separation provides weak enforcement 
 the separation is a convention, not a barrier.
 
 **Instruction ceiling** (HumanLayer 2025): uniform compliance degradation begins
-around 150-200 instructions [50]. Claude Code's built-in system prompt uses
+around 150-200 instructions [5]. Claude Code's built-in system prompt uses
 approximately 50 of that budget, leaving ~100-150 for user-defined rules before
 degradation begins.
 
@@ -2745,8 +2745,6 @@ Last updated: 2026-03-23
 
 37. **Speakeasy -- How We Reduced Token Usage by 100x: Dynamic Toolsets.** https://www.speakeasy.com/blog/how-we-reduced-token-usage-by-100x-dynamic-toolsets-v2 -- Three-tool pattern (search/describe/execute) replacing static MCP tool schemas; benchmarks showing 91-97% input token reduction at 40-400 tools; tradeoff analysis (2-3x more calls, ~50% longer execution).
 
-54. **Chroma Research -- Context Rot.** https://research.trychroma.com/context-rot -- Non-linear performance degradation across 18 frontier models at controlled fill levels; practical ceiling at 60-70% of advertised maximum; coherent content degrades faster than shuffled haystacks.
-
 38. **JetBrains Research -- Agent Observation Token Analysis (arXiv:2508.21433).** https://arxiv.org/abs/2508.21433 -- Tool observations comprise 84% of agent context tokens in SWE-bench runs; observation masking achieves 52.7% cost reduction with +1.4% solve rate.
 
 39. **Liu et al. -- Lost in the Middle: How Language Models Use Long Contexts (Stanford, TACL 2024).** https://arxiv.org/abs/2307.03172 -- U-shaped retrieval performance curve; 15-30% degradation for mid-context information; recency-only bias above 50% fill; basis for NUMA-style context engineering frameworks.
@@ -2771,20 +2769,20 @@ Last updated: 2026-03-23
 
 49. **Sclar et al. -- Prompt Format Sensitivity (ICLR 2024).** https://arxiv.org/abs/2310.11324 -- Up to 76 percentage point accuracy variation across semantically equivalent prompt formats; sensitivity persists across model sizes and instruction tuning.
 
-50. **HumanLayer -- Instruction Ceiling.** https://www.humanlayer.dev/blog/writing-a-good-claude-md -- Uniform compliance degradation begins around 150-200 instructions; Claude Code's system prompt consumes ~50 of that budget. (See also [5].)
-
 51. **AgentSpec -- Hook-Based Agent Enforcement (arXiv:2503.18666, ICSE 2026).** https://arxiv.org/abs/2503.18666 -- Prevents >90% of unsafe agent executions with millisecond overhead; hook-based enforcement framework; specification-driven safety guarantees.
 
 52. **Conikee -- NUMA-Aware Context Engineering (Substack 2025).** https://substack.com/@conikee -- Framework treating LLM context windows as Non-Uniform Memory Access; causal masking and RoPE position encoding create position-dependent attention; anchor critical facts at front and end, compress the middle.
 
 53. **Serena -- LSP-Powered Code Navigation MCP Server.** https://github.com/oraios/serena -- Symbol-level find, reference lookup, and scoped editing via Language Server Protocol; `--context claude-code` disables tools that duplicate built-ins; `--project-from-cwd` for automatic project detection.
 
-55. **Huang et al. -- Large Language Models Cannot Self-Correct Reasoning Yet.** https://arxiv.org/abs/2310.01848 -- ICLR 2024; intrinsic self-correction without external feedback degrades output quality; verification tasks must be grounded in external signal to be effective.
+54. **Chroma Research -- Context Rot.** https://research.trychroma.com/context-rot -- Non-linear performance degradation across 18 frontier models at controlled fill levels; practical ceiling at 60-70% of advertised maximum; coherent content degrades faster than shuffled haystacks.
 
-56. **Kamoi et al. -- When Can LLMs Actually Correct Their Prior Output? (TACL 2025).** https://arxiv.org/abs/2406.06585 -- Verification-based correction is effective when the verification task is easier than the generation task; TACL 2025; structured external checks outperform open-ended reflection.
+55. **Huang et al. -- Large Language Models Cannot Self-Correct Reasoning Yet.** https://arxiv.org/abs/2310.01798 -- ICLR 2024; intrinsic self-correction without external feedback degrades output quality; verification tasks must be grounded in external signal to be effective.
+
+56. **Kamoi et al. -- When Can LLMs Actually Correct Their Prior Output? (TACL 2025).** https://arxiv.org/abs/2406.01297 -- Verification-based correction is effective when the verification task is easier than the generation task; TACL 2025; structured external checks outperform open-ended reflection.
 
 57. **Shinn et al. -- Reflexion: Language Agents with Verbal Reinforcement Learning.** https://arxiv.org/abs/2303.11366 -- NeurIPS 2023; diminishing returns past round 1 of reflection; rounds 3+ yield single-digit-percent improvement at up to 50x the token cost of a single pass.
 
-58. **BRICS Economic Research -- Rationale Clauses and Instruction Compliance (2024).** No URL available. Rationale clauses alongside instructions improve compliance ~30% when the agent understands why a rule exists; structured explanations outperform bare imperatives.
+58. **BRICS Economic Research -- Rationale Clauses and Instruction Compliance (2024).** No public URL available; cited via secondary reference. Claim (~30% compliance improvement from rationale clauses) should be treated as approximate.
 
 59. **Cline -- Proactive Session Handoff at 50% Context Fill.** https://github.com/cline/cline -- Production finding: handoff at 50% fill rather than 80% avoids the degraded zone; waiting for the model-enforced threshold means the agent is already degraded when handoff occurs.
