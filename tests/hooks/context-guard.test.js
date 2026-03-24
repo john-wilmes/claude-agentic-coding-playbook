@@ -650,6 +650,35 @@ test("32. Combined per-call large-output + threshold warning in same invocation"
   }
 });
 
+// Test 33: 50% warning re-fires every 5 tool calls instead of once
+test("33. 50% warning re-fires every 5 calls after first", () => {
+  const sessionId = newSessionId();
+  const transcript = createFakeTranscript([makeAssistantMessage(100000)]); // 50%
+  try {
+    // Call 1: fires (first warning)
+    const r1 = runGuard(sessionId, { transcriptPath: transcript });
+    assert.ok(r1.json.hookSpecificOutput, "Call 1 should fire warning");
+    assert.ok(r1.json.hookSpecificOutput.additionalContext.includes("Context warning"), "Call 1: context warning");
+
+    // Calls 2-5: should NOT fire (interval=5, so next fire at call 6)
+    for (let i = 2; i <= 5; i++) {
+      const r = runGuard(sessionId, { transcriptPath: transcript });
+      const hasWarning = r.json.hookSpecificOutput &&
+        r.json.hookSpecificOutput.additionalContext &&
+        r.json.hookSpecificOutput.additionalContext.includes("Context warning");
+      assert.ok(!hasWarning, `Call ${i} should NOT fire context warning`);
+    }
+
+    // Call 6: should re-fire (5 calls after first)
+    const r6 = runGuard(sessionId, { transcriptPath: transcript });
+    assert.ok(r6.json.hookSpecificOutput, "Call 6 should fire warning");
+    assert.ok(r6.json.hookSpecificOutput.additionalContext.includes("Context warning"), "Call 6: re-fired context warning");
+  } finally {
+    cleanupSession(sessionId);
+    try { fs.rmSync(transcript); } catch {}
+  }
+});
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
 console.log(`\n${"─".repeat(60)}`);

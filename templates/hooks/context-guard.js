@@ -42,11 +42,12 @@ function loadState(stateFile) {
     return {
       subagentWarned: raw.subagentWarned || false,
       warned: raw.warned || false,
+      warnedAtCall: raw.warnedAtCall || 0,
       cumulativeEstimatedTokens: raw.cumulativeEstimatedTokens || 0,
       toolCalls: raw.toolCalls || 0,
     };
   } catch {
-    return { subagentWarned: false, warned: false, cumulativeEstimatedTokens: 0, toolCalls: 0 };
+    return { subagentWarned: false, warned: false, warnedAtCall: 0, cumulativeEstimatedTokens: 0, toolCalls: 0 };
   }
 }
 
@@ -251,26 +252,39 @@ process.stdin.on("end", () => {
             `After checkpoint completes, stop all output immediately.`,
         },
       };
-    } else if (ctx.ratio >= WARN_THRESHOLD && !state.warned) {
-      state.warned = true;
+    } else if (ctx.ratio >= WARN_THRESHOLD) {
+      // Re-fire every WARN_REFIRE_INTERVAL calls after first warning to maintain pressure.
+      // One-shot warnings have 0% effectiveness — agents ignore and forget them.
+      const WARN_REFIRE_INTERVAL = 5;
+      const shouldFire = !state.warned || (state.toolCalls - (state.warnedAtCall || 0)) % WARN_REFIRE_INTERVAL === 0;
+      if (!state.warned) {
+        state.warned = true;
+        state.warnedAtCall = state.toolCalls;
+      }
       state.subagentWarned = true; // 50% implies 35% already passed
-      log.writeLog({
-        hook: "context-guard",
-        event: "warn",
-        session_id: hookInput.session_id,
-        tool_use_id: hookInput.tool_use_id,
-        details: `PostToolUse warn: ${pct}% context used`,
-        project: hookInput.cwd,
-        context: { mode: "post", ratio: ctx.ratio, pct, tokens: ctx.tokens },
-      });
-      output = {
-        hookSpecificOutput: {
-          hookEventName: "PostToolUse",
-          additionalContext:
-            `Context warning: ${pct}% used ${ctx.stats}. ` +
-            `Finish your current subtask, then invoke /checkpoint automatically — do not ask the user.` + perCallWarning,
-        },
-      };
+      if (shouldFire) {
+        log.writeLog({
+          hook: "context-guard",
+          event: "warn",
+          session_id: hookInput.session_id,
+          tool_use_id: hookInput.tool_use_id,
+          details: `PostToolUse warn: ${pct}% context used`,
+          project: hookInput.cwd,
+          context: { mode: "post", ratio: ctx.ratio, pct, tokens: ctx.tokens },
+        });
+        output = {
+          hookSpecificOutput: {
+            hookEventName: "PostToolUse",
+            additionalContext:
+              `Context warning: ${pct}% used ${ctx.stats}. ` +
+              `Finish your current subtask, then invoke /checkpoint automatically — do not ask the user.` + perCallWarning,
+          },
+        };
+      } else {
+        output = perCallWarning ? {
+          hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: `Context note:${perCallWarning}` },
+        } : {};
+      }
     } else if (ctx.ratio >= SUBAGENT_THRESHOLD && !state.subagentWarned) {
       state.subagentWarned = true;
       log.writeLog({
