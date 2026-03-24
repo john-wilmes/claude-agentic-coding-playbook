@@ -136,7 +136,7 @@ effective agentic coding.
 flowchart LR
     E[Explore] --> P[Plan] --> C[Code] --> V[Verify] --> Co[Commit]
     V -->|tests fail| C
-    T[Trivial change] -.->|skip| C
+    T[Trivial fix] -.->|skip Explore+Plan| C
 
     style E fill:#e8f4fd,stroke:#2196f3
     style P fill:#e8f4fd,stroke:#2196f3
@@ -1046,6 +1046,9 @@ explaining impact; the Macroscope benchmark focused on self-contained runtime bu
 Teams should run their own evaluations on their own codebases with their own
 configurations.
 
+More broadly, readers should note that most studies in this space are funded by
+organizations with commercial interests in the outcomes.
+
 ### AI code review at scale: Microsoft
 
 Microsoft's internal AI review system demonstrates enterprise-scale feasibility
@@ -1272,8 +1275,8 @@ Apiiro's enterprise study of AI-assisted development teams found [23]:
 
 - **10x more security findings** per month (10,000+ by June 2025, up from
   ~1,000 in December 2024)
-- **322% increase** in privilege escalation paths
-- **153% spike** in architectural design flaws
+- **322% increase** in privilege escalation paths (relative to pre-AI-adoption baselines)
+- **153% spike** in architectural design flaws (relative to pre-AI-adoption baselines)
 - Azure credentials exposed nearly 2x more often
 - Fewer, larger PRs concentrate risk in each merge
 
@@ -2452,8 +2455,10 @@ target. The techniques below are ranked by token savings and performance impact.
 |-----------|--------------|-------------------|--------|--------|
 | Observation masking (replace old tool outputs with summary placeholders) | ~50% cost reduction (52.7% for Qwen3-Coder 480B) | +1.4% solve rate (improved) | JetBrains [38] | Blocked — requires agent-level history modification before API submission; not implementable via Claude Code hooks |
 | Read-once deduplication (block re-reads of unchanged files) | 38-40% file-read savings | Neutral | Community PreToolUse hook | Supported |
-| Verbatim compaction (preserve exact text, drop redundancy) | 50-70% compression | 98% retention (vendor-reported, not independently verified) | Morph [40] | Blocked — Claude Code compaction is internal, not hookable |
+| Verbatim compaction† (preserve exact text, drop redundancy) | 50-70% compression | 98% retention (vendor-reported, not independently verified) | Morph [40] | Blocked — Claude Code compaction is internal, not hookable |
 | LLM summarization (Claude Code auto-compact at ~80%) | 80-90% compression | 37% multi-session retention (vendor-reported) | Morph [40] | Built-in |
+
+† Verbatim/deletion-based compaction (not LLM summarization): Morph drops redundant content while preserving exact text. Claude Code's `/compact` uses LLM summarization, not this approach.
 
 The counterintuitive finding: LLM summarization — the method Claude Code uses at
 auto-compaction — is the worst-performing approach for coding agents. It
@@ -2540,7 +2545,7 @@ differently can fail or succeed depending on phrasing, not semantics.
   is more reliable than a paragraph explaining context degradation.
 - Accept that any workflow behavior requiring >90% reliability must be enforced
   architecturally. "Guidelines live in prompts, fail-safes live in code" reflects
-  industry consensus as of 2025-2026.
+  industry consensus as of early 2026 (drawing on 2024-2025 research).
 - AgentSpec (arXiv:2503.18666, ICSE 2026) provides a hook-based enforcement
   framework that prevents >90% of unsafe agent executions with millisecond overhead
   [51]. The context-guard hook in this playbook implements the same pattern,
@@ -2686,7 +2691,7 @@ Last updated: 2026-03-23
 
 10. **Qodo -- State of AI Code Quality.** https://www.qodo.ai/reports/state-of-ai-code-quality/ -- 81% quality improvement with AI review (vs 55% among fast-shipping teams without); 80% of PRs need zero human comments; 82% daily/weekly AI usage; 65% context issues during refactoring.
 
-11. **CodeRabbit -- State of AI vs Human Code Generation.** https://www.coderabbit.ai/blog/state-of-ai-vs-human-code-generation-report -- 1.7x more issues in AI PRs (10.83 vs 6.45); 75% more logic errors; 2.74x security issues; 8x excessive I/O; 470 PRs analyzed.
+11. **CodeRabbit -- State of AI vs Human Code Generation.** https://www.coderabbit.ai/blog/state-of-ai-vs-human-code-generation-report -- 1.7x more issues in AI PRs (10.83 vs 6.45); 75% more logic errors; 2.74x security issues; 8x excessive I/O; 470 PRs analyzed (all metrics from same 470-PR dataset).
 
 12. **Greptile -- AI Code Review Benchmark.** https://www.greptile.com/benchmarks -- Detection rates: Greptile 82%, Cursor 58%, Copilot 54%, CodeRabbit 44%, Graphite 6%; 50 real bugs across 5 languages; July 2025.
 
@@ -2710,7 +2715,7 @@ Last updated: 2026-03-23
 
 22. **Trail of Bits -- claude-code-config.** https://github.com/trailofbits/claude-code-config -- Hardened Claude Code configuration: credential directory denial (~/.ssh, ~/.aws, ~/.gnupg, etc.), project MCP disabled by default, hook-based guardrails, shell config protection.
 
-23. **Apiiro -- AI Coding Vulnerability Study.** https://apiiro.com/blog/4x-velocity-10x-vulnerabilities-ai-coding-assistants-are-shipping-more-risks/ -- 10x more security findings; 322% privilege escalation increase; 153% architectural flaw spike; Azure credentials 2x more exposed; enterprise-scale telemetry data.
+23. **Apiiro -- AI Coding Vulnerability Study.** https://apiiro.com/blog/4x-velocity-10x-vulnerabilities-ai-coding-assistants-are-shipping-more-risks/ -- 10x more security findings; 322% privilege escalation increase; 153% architectural flaw spike; Azure credentials 2x more exposed; enterprise telemetry; baseline is pre-AI-adoption period at participating organizations.
 
 24. **IDEsaster -- 30+ CVEs in AI IDEs.** https://thehackernews.com/2025/12/researchers-uncover-30-flaws-in-ai.html -- 30+ vulnerabilities, 24 CVEs, 10+ affected platforms; prompt injection via JSON schema poisoning; autonomous agent actions; configuration manipulation for code execution.
 

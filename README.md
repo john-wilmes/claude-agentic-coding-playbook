@@ -70,7 +70,7 @@ chmod +x install.sh
 ### Prerequisites
 
 - **Bash on Linux or macOS** (Windows requires [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) — native CMD/PowerShell is not supported. The install script, hooks, and test suite all assume a POSIX environment.)
-- **Node.js 18+** (for hooks and test scripts)
+- **Node.js 18+** (18 reaches EOL April 2025; 20+ recommended) (for hooks and test scripts)
 - **git** (for version control and install script)
 
 ### Install Options
@@ -267,7 +267,7 @@ The wizard will:
 
 ## Documentation
 
-- **[Best Practices Guide](docs/best-practices.md)** -- the full evidence-backed guide with 59 citations (58 with direct links)
+- **[Best Practices Guide](docs/best-practices.md)** -- the full evidence-backed guide with 59 citations (58 with direct links, 1 via indirect reference)
 - **[Project CLAUDE.md Template](templates/project-CLAUDE.md)** -- starting point for per-project instructions
 - **[Dogfooding Guide](docs/dogfooding.md)** -- how to design and run a sustained dogfood campaign against real codebases, with a 100-task worked example
 - **[Dogfood Playbook](docs/dogfood-playbook.md)** -- manual interactive testing checklist for verifying the full user experience
