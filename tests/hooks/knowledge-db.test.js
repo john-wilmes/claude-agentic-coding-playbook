@@ -18,6 +18,7 @@ const { createTempHome } = require("./test-helpers");
 
 const {
   openDb,
+  hasFts5,
   insertEntry,
   queryRelevant,
   captureProvenance,
@@ -104,11 +105,13 @@ test("1. openDb creates database and schema (tables exist)", () => {
   ).get();
   assert.ok(stagedRow, "staged_candidates table should exist");
 
-  // Verify FTS table exists
-  const ftsRow = db.prepare(
-    `SELECT name FROM sqlite_master WHERE type='table' AND name='knowledge_fts'`
-  ).get();
-  assert.ok(ftsRow, "knowledge_fts FTS table should exist");
+  // Verify FTS table exists (only when FTS5 is available in this Node build)
+  if (hasFts5) {
+    const ftsRow = db.prepare(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name='knowledge_fts'`
+    ).get();
+    assert.ok(ftsRow, "knowledge_fts FTS table should exist");
+  }
 });
 
 // Test 2: openDb is idempotent (calling twice doesn't error)

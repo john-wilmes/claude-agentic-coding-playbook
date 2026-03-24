@@ -20,11 +20,26 @@ try {
   DatabaseSync = null;
 }
 
+// Detect FTS5 support at module load time (node:sqlite may lack it)
+let hasFts5 = false;
+if (DatabaseSync) {
+  let _probe;
+  try {
+    _probe = new DatabaseSync(":memory:");
+    _probe.exec("CREATE VIRTUAL TABLE _fts5_probe USING fts5(x);");
+    hasFts5 = true;
+  } catch {
+    hasFts5 = false;
+  } finally {
+    try { if (_probe) _probe.close(); } catch {}
+  }
+}
+
 const DEFAULT_DB_PATH = path.join(os.homedir(), ".claude", "knowledge", "knowledge.db");
 
 // ─── Schema ──────────────────────────────────────────────────────────────────
 
-const SCHEMA_SQL = `
+const CORE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS entries (
   id             TEXT PRIMARY KEY,
   created        TEXT NOT NULL,
@@ -46,6 +61,22 @@ CREATE TABLE IF NOT EXISTS entries (
   branch         TEXT DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS staged_candidates (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts              TEXT NOT NULL,
+  session_id      TEXT NOT NULL,
+  trigger         TEXT DEFAULT '',
+  tool            TEXT DEFAULT '',
+  category        TEXT DEFAULT '',
+  confidence      TEXT DEFAULT 'medium',
+  summary         TEXT DEFAULT '',
+  context_snippet TEXT DEFAULT '',
+  source_project  TEXT DEFAULT '',
+  cwd             TEXT DEFAULT ''
+);
+`;
+
+const FTS5_SCHEMA_SQL = `
 CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts USING fts5(
   entry_id UNINDEXED,
   context_text, fix_text, evidence_text, tags,
@@ -69,20 +100,6 @@ CREATE TRIGGER IF NOT EXISTS entries_au AFTER UPDATE ON entries BEGIN
   INSERT INTO knowledge_fts(rowid, entry_id, context_text, fix_text, evidence_text, tags)
   VALUES (new.rowid, new.id, new.context_text, new.fix_text, new.evidence_text, new.tags);
 END;
-
-CREATE TABLE IF NOT EXISTS staged_candidates (
-  id              INTEGER PRIMARY KEY AUTOINCREMENT,
-  ts              TEXT NOT NULL,
-  session_id      TEXT NOT NULL,
-  trigger         TEXT DEFAULT '',
-  tool            TEXT DEFAULT '',
-  category        TEXT DEFAULT '',
-  confidence      TEXT DEFAULT 'medium',
-  summary         TEXT DEFAULT '',
-  context_snippet TEXT DEFAULT '',
-  source_project  TEXT DEFAULT '',
-  cwd             TEXT DEFAULT ''
-);
 `;
 
 // ─── openDb ──────────────────────────────────────────────────────────────────
@@ -111,8 +128,11 @@ function openDb(dbPath) {
     db.exec("PRAGMA synchronous=NORMAL;");
     db.exec("PRAGMA foreign_keys=ON;");
 
-    // Create schema (idempotent — uses IF NOT EXISTS)
-    db.exec(SCHEMA_SQL);
+    // Create core schema (idempotent — uses IF NOT EXISTS)
+    db.exec(CORE_SCHEMA_SQL);
+
+    // FTS5 is optional — node:sqlite may not include it
+    try { db.exec(FTS5_SCHEMA_SQL); } catch { /* FTS5 unavailable, search falls back to full scan */ }
 
     // Schema migration: add access tracking columns if they don't exist yet
     try { db.exec("ALTER TABLE entries ADD COLUMN last_accessed TEXT"); } catch {}
@@ -776,6 +796,7 @@ if (require.main === module) {
 
 module.exports = {
   DEFAULT_DB_PATH,
+  hasFts5,
   openDb,
   insertEntry,
   queryRelevant,
