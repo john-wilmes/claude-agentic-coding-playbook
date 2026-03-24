@@ -303,9 +303,8 @@ t_lock_prevents_double_run() {
   cwd_hash="$(echo "${tmpdir}" | md5sum | cut -c1-8)"
   local lock_file="/tmp/claude-loop-${cwd_hash}.lock"
 
-  # Open lock file on fd 8 and hold it for the duration of this subshell.
-  exec 8>"${lock_file}"
-  flock -x 8
+  # Simulate a held lock by writing our own PID to the lock file.
+  echo $$ > "${lock_file}"
 
   # Stub claude so it won't actually run.
   cat > "${tmpbin}/claude" <<'EOF'
@@ -317,8 +316,7 @@ EOF
   local out rc=0
   out="$(cd "${tmpdir}" && PATH="${tmpbin}:${PATH}" bash "${SCRIPT}" 2>&1)" || rc=$?
 
-  # Release lock and clean up
-  exec 8>&-
+  # Clean up
   rm -f "${lock_file}"
   rm -rf "${tmpbin}" "${tmpdir}"
 
@@ -567,7 +565,8 @@ EOF
   cat > "${tmpbin}/claude" <<STUBEOF
 #!/usr/bin/env bash
 # Simulate agent checking off the task in the queue file
-sed -i 's/- \[ \] Build the widget/- [x] Build the widget/' "${tmpqueue}"
+# Use perl for portable in-place edit (macOS sed -i requires an extension)
+perl -i -pe 's/- \[ \] Build the widget/- [x] Build the widget/' "${tmpqueue}"
 exit 0
 STUBEOF
   chmod +x "${tmpbin}/claude"
@@ -968,22 +967,19 @@ run_test "--status-json not running: outputs valid JSON with running=false" t_st
 
 t_status_json_keys_when_running() {
   # When a loop holds the lock, --status-json should include lock_file and sentinel_file keys.
-  # Use a temp dir as CWD so the lock file is isolated, then hold it with flock.
+  # Use a temp dir as CWD so the lock file is isolated.
   local tmpdir
   tmpdir="$(mktemp -d)"
   local cwd_hash
   cwd_hash="$(echo "${tmpdir}" | md5sum | cut -c1-8)"
   local lock_file="/tmp/claude-loop-${cwd_hash}.lock"
 
-  # Acquire lock; it will be released when this subshell exits (fd 8 closes)
-  exec 8>"${lock_file}"
-  flock -x 8
+  # Simulate a held lock by writing our own PID to the lock file.
+  echo $$ > "${lock_file}"
 
   local out rc=0
   out="$(cd "${tmpdir}" && bash "${SCRIPT}" --status-json 2>&1)" || rc=$?
 
-  flock -u 8
-  exec 8>&-
   rm -f "${lock_file}"
   rm -rf "${tmpdir}"
 

@@ -343,7 +343,7 @@ has_new_files_in_dir() {
   local ref_file epoch_secs
   ref_file="$(mktemp)"
   epoch_secs="$(( epoch_ms / 1000 ))"
-  touch -d "@${epoch_secs}" "${ref_file}" 2>/dev/null || {
+  python3 -c "import os; os.utime('${ref_file}', (${epoch_secs}, ${epoch_secs}))" 2>/dev/null || {
     rm -f "${ref_file}"; return 1
   }
   local found
@@ -366,7 +366,7 @@ transcript_matches_pattern() {
   local ref_file epoch_secs
   ref_file="$(mktemp)"
   epoch_secs="$(( epoch_ms / 1000 ))"
-  touch -d "@${epoch_secs}" "${ref_file}" 2>/dev/null || {
+  python3 -c "import os; os.utime('${ref_file}', (${epoch_secs}, ${epoch_secs}))" 2>/dev/null || {
     rm -f "${ref_file}"; return 1
   }
   local matched=false
@@ -405,6 +405,16 @@ _start_sentinel_watcher() {
   WATCHER_PID=$!
 }
 
+# ─── Lock helpers ─────────────────────────────────────────────────────────────
+
+# Returns 0 (true) if the lock file exists and its recorded PID is still alive.
+# Works on macOS and Linux (flock is Linux-only).
+_lock_is_held() {
+  local _pid
+  _pid="$(cat "${LOCK_FILE}" 2>/dev/null)"
+  [[ -n "${_pid}" ]] && kill -0 "${_pid}" 2>/dev/null
+}
+
 # ─── Status mode ──────────────────────────────────────────────────────────────
 
 show_status() {
@@ -412,11 +422,10 @@ show_status() {
   echo "  Lock file : ${LOCK_FILE}"
 
   if [[ -f "${LOCK_FILE}" ]]; then
-    # flock lock file exists; check if any process holds it
-    if flock -n "${LOCK_FILE}" true 2>/dev/null; then
-      echo "  Running   : no (lock file present but not held)"
-    else
+    if _lock_is_held; then
       echo "  Running   : yes"
+    else
+      echo "  Running   : no (lock file present but not held)"
     fi
   else
     echo "  Running   : no"
@@ -495,10 +504,8 @@ show_status_json() {
   local running=false
   local pid=""
   if [[ -f "${LOCK_FILE}" ]]; then
-    if ! flock -n "${LOCK_FILE}" true 2>/dev/null; then
+    if _lock_is_held; then
       running=true
-      # Extract PID from lock file name: claude-loop-<hash>.lock
-      # The PID of the holding process is not in the file; report the lock file only.
     fi
   fi
   if [[ "${running}" == "true" ]]; then
@@ -696,13 +703,18 @@ fi
 
 # ─── Acquire lock ─────────────────────────────────────────────────────────────
 
-# Open the lock file on fd 9 and attempt a non-blocking exclusive lock.
-# The file descriptor stays open for the lifetime of this process.
-exec 9>"${LOCK_FILE}"
-if ! flock -n 9; then
-  echo "claude-loop: another loop is already running in this directory (lock: ${LOCK_FILE})" >&2
-  exit 1
+# PID-file lock (flock is Linux-only; this works on macOS and Linux).
+# If a stale lock exists (process gone), remove it before claiming.
+if [[ -f "${LOCK_FILE}" ]]; then
+  _existing_pid="$(cat "${LOCK_FILE}" 2>/dev/null)"
+  if [[ -n "${_existing_pid}" ]] && kill -0 "${_existing_pid}" 2>/dev/null; then
+    echo "claude-loop: another loop is already running in this directory (lock: ${LOCK_FILE})" >&2
+    exit 1
+  fi
+  rm -f "${LOCK_FILE}"
 fi
+echo $$ > "${LOCK_FILE}"
+trap 'rm -f "${LOCK_FILE}"' EXIT
 
 # ─── Main loop ────────────────────────────────────────────────────────────────
 
@@ -779,7 +791,7 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
   # Run claude in foreground via subshell + exec (preserves terminal access, records PID)
   EXIT_CODE=0
   (
-    echo $BASHPID > "${CLAUDE_PID_FILE}"
+    sh -c 'echo $PPID' > "${CLAUDE_PID_FILE}"
     export CLAUDE_LOOP_PID=$$
     export CLAUDE_LOOP_SENTINEL="${SENTINEL_FILE}"
     [[ -n "${TASK_QUEUE_FILE}" ]] && export CLAUDE_LOOP=1
