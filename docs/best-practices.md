@@ -613,7 +613,7 @@ new session picks up cleanly.
 
 ### /compact with custom focus instructions
 
-When auto-compaction triggers (at approximately 95% context capacity), the agent
+When auto-compaction triggers (at approximately ~80% context capacity, community-observed; Anthropic docs say "approaches the limit" without specifying), the agent
 summarizes what matters most -- code patterns, file states, key decisions. For
 more control:
 
@@ -643,7 +643,7 @@ including mid-turn calls, providing the granularity that instructions cannot.
 
 ### Post-compaction recovery
 
-After auto-compaction (~95% context), the agent loses awareness of task queues,
+After auto-compaction (~80%, community-observed; Anthropic docs say "approaches the limit" without specifying), the agent loses awareness of task queues,
 session state, and workflow context. Memory files survive on disk but the agent
 does not re-read them unprompted. The result: the agent "goes freelance,"
 working on whatever seems relevant rather than continuing its assigned task.
@@ -651,7 +651,7 @@ working on whatever seems relevant rather than continuing its assigned task.
 Mitigations:
 
 - **Checkpoint before compaction.** Exit and restart the session at ~70%
-  context rather than waiting for auto-compaction at ~95%. A fresh session with
+  context rather than waiting for auto-compaction at ~80%. A fresh session with
   memory files is cheaper and more coherent than a compacted session without
   them.
 - **Automated recovery.** Inject a memory re-read prompt after compaction is

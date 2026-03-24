@@ -35,6 +35,8 @@ DRY_RUN=false
 STATUS_MODE=false
 STATUS_JSON_MODE=false
 REPORT_MODE=false
+OUTPUT_DIR=""
+SUCCESS_PATTERN=""
 
 # ─── Argument parsing ─────────────────────────────────────────────────────────
 
@@ -50,6 +52,8 @@ Options:
   --status             Print current loop status and exit
   --status-json        Print current loop status as JSON and exit
   --log-file FILE      Override log file path (default: ~/.claude/logs/claude-loop-YYYY-MM-DD.jsonl)
+  --output-dir PATH    Mark task done if files in PATH were created during session
+  --success-pattern RE Mark task done if session transcript matches regex RE
   --report             Summarize today's log and exit
   --dry-run            Show what would be done without running claude
   --version            Print version and exit
@@ -109,6 +113,22 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       LOG_FILE="$2"
+      shift 2
+      ;;
+    --output-dir)
+      if [[ $# -lt 2 || "$2" == --* ]]; then
+        echo "claude-loop: --output-dir requires a PATH argument" >&2
+        exit 1
+      fi
+      OUTPUT_DIR="$2"
+      shift 2
+      ;;
+    --success-pattern)
+      if [[ $# -lt 2 || "$2" == --* ]]; then
+        echo "claude-loop: --success-pattern requires a REGEX argument" >&2
+        exit 1
+      fi
+      SUCCESS_PATTERN="$2"
       shift 2
       ;;
     --report)
@@ -311,6 +331,54 @@ has_new_commits_since() {
   local commits
   commits="$(git log --oneline --after="@${epoch_secs}" 2>/dev/null | head -1)"
   [[ -n "${commits}" ]]
+}
+
+# has_new_files_in_dir DIR EPOCH_MS
+# Returns 0 if any file under DIR was modified at or after EPOCH_MS.
+# Returns 1 if DIR missing, empty, or no files modified since epoch.
+has_new_files_in_dir() {
+  local dir="$1"
+  local epoch_ms="$2"
+  [[ -d "${dir}" ]] || return 1
+  local ref_file epoch_secs
+  ref_file="$(mktemp)"
+  epoch_secs="$(( epoch_ms / 1000 ))"
+  touch -d "@${epoch_secs}" "${ref_file}" 2>/dev/null || {
+    rm -f "${ref_file}"; return 1
+  }
+  local found
+  found="$(find "${dir}" -newer "${ref_file}" -type f 2>/dev/null | head -1)"
+  rm -f "${ref_file}"
+  [[ -n "${found}" ]]
+}
+
+# transcript_matches_pattern EPOCH_MS PATTERN
+# Returns 0 if any Claude session file written after EPOCH_MS contains PATTERN.
+# Searches the project session directory (~/.claude/projects/<cwd-encoded>/).
+# Returns 1 if no match or no session files found.
+transcript_matches_pattern() {
+  local epoch_ms="$1"
+  local pattern="$2"
+  local cwd_encoded
+  cwd_encoded="$(pwd | sed 's|^/||; s|/|-|g')"
+  local session_dir="${HOME}/.claude/projects/${cwd_encoded}"
+  [[ -d "${session_dir}" ]] || return 1
+  local ref_file epoch_secs
+  ref_file="$(mktemp)"
+  epoch_secs="$(( epoch_ms / 1000 ))"
+  touch -d "@${epoch_secs}" "${ref_file}" 2>/dev/null || {
+    rm -f "${ref_file}"; return 1
+  }
+  local matched=false
+  local session_file
+  while IFS= read -r session_file; do
+    if grep -qE "${pattern}" "${session_file}" 2>/dev/null; then
+      matched=true
+      break
+    fi
+  done < <(find "${session_dir}" -newer "${ref_file}" -name "*.jsonl" -type f 2>/dev/null)
+  rm -f "${ref_file}"
+  [[ "${matched}" == "true" ]]
 }
 
 # ─── Sentinel watcher ─────────────────────────────────────────────────────────
@@ -571,6 +639,12 @@ dry_run_show() {
   echo "  Sentinel file : ${SENTINEL_FILE}"
   echo "  Log file      : ${LOG_FILE}"
   echo "  Max sessions  : ${MAX_SESSIONS:-unlimited}"
+  if [[ -n "${OUTPUT_DIR}" ]]; then
+    echo "  Output dir    : ${OUTPUT_DIR}"
+  fi
+  if [[ -n "${SUCCESS_PATTERN}" ]]; then
+    echo "  Success pat.  : ${SUCCESS_PATTERN}"
+  fi
   if [[ -n "${TASK_QUEUE_FILE}" ]]; then
     echo "  Task queue    : ${TASK_QUEUE_FILE}"
     if [[ -f "${TASK_QUEUE_FILE}" ]]; then
@@ -787,6 +861,26 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
         mark_task_done "${TASK_QUEUE_FILE}" "${CURRENT_TASK}"
         log_event "event=task_advance" "task=${CURRENT_TASK}" "status=done_agent_committed"
         echo "claude-loop: task completed (exit 0 + agent committed): ${CURRENT_TASK}"
+        TASK_RESOLVED=true
+
+      # Check 4: exit 0 + files written to --output-dir during the session
+      elif [[ "${EXIT_CODE}" -eq 0 ]] && [[ -n "${OUTPUT_DIR}" ]] \
+           && has_new_files_in_dir "${OUTPUT_DIR}" "${SESSION_START_MS}"; then
+        RETRY_TASK=""
+        RETRY_ATTEMPT=0
+        mark_task_done "${TASK_QUEUE_FILE}" "${CURRENT_TASK}"
+        log_event "event=task_advance" "task=${CURRENT_TASK}" "status=done_output_dir"
+        echo "claude-loop: task completed (exit 0 + output in ${OUTPUT_DIR}): ${CURRENT_TASK}"
+        TASK_RESOLVED=true
+
+      # Check 5: exit 0 + session transcript matches --success-pattern
+      elif [[ "${EXIT_CODE}" -eq 0 ]] && [[ -n "${SUCCESS_PATTERN}" ]] \
+           && transcript_matches_pattern "${SESSION_START_MS}" "${SUCCESS_PATTERN}"; then
+        RETRY_TASK=""
+        RETRY_ATTEMPT=0
+        mark_task_done "${TASK_QUEUE_FILE}" "${CURRENT_TASK}"
+        log_event "event=task_advance" "task=${CURRENT_TASK}" "status=done_success_pattern"
+        echo "claude-loop: task completed (exit 0 + transcript matched '${SUCCESS_PATTERN}'): ${CURRENT_TASK}"
         TASK_RESOLVED=true
       fi
 

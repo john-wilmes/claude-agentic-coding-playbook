@@ -6,7 +6,7 @@ Evidence-based practices for LLM-assisted software development. Built for [Claud
 
 ## Why This Exists
 
-AI-assisted code contains 1.7x more issues than human-written code and introduces 10x more security findings in enterprise settings. Developer productivity gains range from -19% to +55% depending on how you measure and who is coding. The practices in this playbook are designed to capture the upside while mitigating the documented risks.
+AI-assisted code contains 1.7x more issues than human-written code and introduces 10x more security findings in enterprise settings. Developer productivity gains range from -19% (experienced OSS developers) to +55% (controlled tasks) depending on task type, tool, and developer experience. The practices in this playbook are designed to capture the upside while mitigating the documented risks.
 
 Key findings from the research:
 
@@ -25,9 +25,10 @@ Full details with citations: [docs/best-practices.md](docs/best-practices.md)
 
 ## How This Works
 
-Most Claude Code setups rely on CLAUDE.md instructions alone. Instructions are advisory — compliance ranges from 50-90% depending on context pressure. This playbook takes a different approach:
+Most Claude Code setups rely on CLAUDE.md instructions alone. Instructions are advisory — compliance ranges from ~50-90% in our testing (published research reports lower rates for complex instruction sets). This playbook takes a different approach:
 
-- **Hooks enforce rules deterministically.** 22 hooks run on every tool call, catching context exhaustion, prompt injection, sycophantic compliance patterns, and file bloat before they cause problems. Hooks achieve >95% enforcement where instructions cannot.
+- **Designed for bypass mode.** The biggest productivity gains come from running Claude Code autonomously (`--dangerously-skip-permissions` or `bypassPermissions` in settings). Without guardrails, bypass mode means no safety net — destructive commands, runaway file creation, and context exhaustion go unchecked. With this playbook's hooks, you get deterministic enforcement of safety rules even when the agent has full permissions: prompt injection is blocked, context limits are enforced, destructive git operations are caught, and PII is redacted — all without permission prompts interrupting flow.
+- **Hooks enforce rules deterministically.** 22 hooks run on every tool call, catching context exhaustion, prompt injection, sycophantic compliance patterns, and file bloat before they cause problems. Hooks achieve near-100% enforcement for deny rules and >95% for advisory rules — where instructions alone cannot.
 - **Structured logging makes agent behavior observable.** Every hook decision is logged to JSONL. Analysis tools (`analyze-logs.js`) report context usage, stuck loops, model routing, and hook effectiveness per session — so you can measure what's working and what isn't.
 - **Practices are validated by running them.** The playbook is [dogfooded](docs/dogfooding.md) against real codebases with a 100-task framework. Bugs found during dogfooding (context guard effectiveness, task queue edge cases, implicit completion detection) feed directly back into the hooks and scripts.
 - **Zero npm dependencies.** All hooks use Node.js stdlib only. No `node_modules`, no build step, no supply chain risk.
@@ -55,7 +56,7 @@ Then add to `~/.claude/settings.json`:
 }
 ```
 
-This gives you context window warnings after every tool call. The full install also registers `context-guard.js` on `SessionStart` and wires up the remaining 21 hooks.
+This gives you context window warnings after every tool call. The full install also registers `context-guard.js` on `SessionStart` and wires up the remaining hooks.
 
 ## Quick Install
 
@@ -128,7 +129,7 @@ The installer **will not overwrite** existing skills or configuration without pr
 
 ### Hooks
 
-CLAUDE.md rules are advisory (~50-90% compliance). Hooks are deterministic (>95%) — they run scripts at specific points in the agent's workflow, guaranteeing enforcement. See [Hook Reference](docs/hooks.md) for the full guide including configuration, customization, and the "why hooks" philosophy.
+CLAUDE.md rules are advisory (~50-90% compliance in our testing; published research reports lower rates for complex instruction sets). Hooks are deterministic (>95%) — they run scripts at specific points in the agent's workflow, guaranteeing enforcement. See [Hook Reference](docs/hooks.md) for the full guide including configuration, customization, and the "why hooks" philosophy.
 
 **Session lifecycle:**
 - **Session start** -- Injects memory, knowledge entries, and git context. Warns when MEMORY.md or CLAUDE.md exceed size thresholds.
@@ -137,7 +138,7 @@ CLAUDE.md rules are advisory (~50-90% compliance). Hooks are deterministic (>95%
 - **Post-compact** -- Re-injects memory and task context after auto-compaction.
 
 **Safety:**
-- **Prompt injection guard** -- Blocks high-confidence injection patterns in Bash commands (zero false positives by design).
+- **Prompt injection guard** -- Blocks high-confidence injection patterns in Bash commands (designed for zero false positives).
 - **Sanitize guard** -- Runtime PII/PHI detection and redaction. Scans tool output (PostToolUse) and blocks writes containing PII (PreToolUse). Opt-in per repo via `.claude/sanitize.yaml`.
 - **Skill guard** -- Validates skill invocations and prevents unauthorized skill execution.
 
@@ -153,7 +154,7 @@ CLAUDE.md rules are advisory (~50-90% compliance). Hooks are deterministic (>95%
 - **Filesize guard** -- Warns when reading or writing large files that waste context.
 - **Bloat guard** -- Detects runaway file creation and flags unexpected project growth.
 - **Markdown size guard** -- Warns when CLAUDE.md or MEMORY.md approach size thresholds.
-- **Read-once dedup** -- Blocks re-reads of unchanged files (38-40% context savings).
+- **Read-once dedup** -- Blocks re-reads of unchanged files (38-40% context savings, observed in author testing).
 
 **Knowledge:**
 - **Knowledge capture** -- Extracts reusable lessons from session activity for the knowledge database.
@@ -266,7 +267,7 @@ The wizard will:
 
 ## Documentation
 
-- **[Best Practices Guide](docs/best-practices.md)** -- the full evidence-backed guide with 59 verified citations
+- **[Best Practices Guide](docs/best-practices.md)** -- the full evidence-backed guide with 59 citations (58 with direct links)
 - **[Project CLAUDE.md Template](templates/project-CLAUDE.md)** -- starting point for per-project instructions
 - **[Dogfooding Guide](docs/dogfooding.md)** -- how to design and run a sustained dogfood campaign against real codebases, with a 100-task worked example
 - **[Dogfood Playbook](docs/dogfood-playbook.md)** -- manual interactive testing checklist for verifying the full user experience
@@ -306,7 +307,7 @@ See [docs/swe-bench-methodology.md](docs/swe-bench-methodology.md) for task sele
 ## Limitations
 
 - **Claude Code only**: All hooks, skills, and scripts target Claude Code. The principles in `best-practices.md` are conceptually portable to Cursor, Copilot, etc., but the tooling is not.
-- **Hook startup overhead**: 22 hooks add ~50-100ms per tool call. Negligible for most workflows, noticeable in rapid-fire operations.
+- **Hook startup overhead**: 22 hooks are installed, but not all fire on every call — active hooks add ~50-100ms per tool call. Negligible for most workflows, noticeable in rapid-fire operations.
 - **CLAUDE.md budget**: The combined profile's CLAUDE.md consumes instruction budget. Projects with large existing CLAUDE.md files may hit the ~150-200 instruction line ceiling.
 - **Node.js 18+ required**: Hooks use modern Node.js APIs (`structuredClone`, etc.).
 - **Single maintainer**: This is a personal project, not backed by a company or large team.
@@ -317,4 +318,4 @@ Issues and PRs welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for citation stan
 
 ## License
 
-MIT
+[MIT](LICENSE)

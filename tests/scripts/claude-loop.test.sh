@@ -56,6 +56,8 @@ _load_helpers() {
     /^# task_is_checked /,/^}$/ { print; next }
     /^# auto_commit_task /,/^}$/ { print; next }
     /^# has_new_commits_since /,/^}$/ { print; next }
+    /^# has_new_files_in_dir /,/^}$/ { print; next }
+    /^# transcript_matches_pattern /,/^}$/ { print; next }
   ' "${SCRIPT}")"
   eval "${src}"
 }
@@ -1140,6 +1142,242 @@ t_has_new_commits_since_no() {
   [[ ${rc} -ne 0 ]] || { echo "has_new_commits_since should return 1 when no new commits"; return 1; }
 }
 run_test "has_new_commits_since returns 1 when no new commits" t_has_new_commits_since_no
+
+# ─── Test: --help lists --output-dir and --success-pattern ────────────────
+
+t_help_new_flags() {
+  local out
+  out="$(bash "${SCRIPT}" --help 2>&1)"
+  echo "${out}" | grep -q "\-\-output-dir" \
+    || { echo "--help did not contain --output-dir"; return 1; }
+  echo "${out}" | grep -q "\-\-success-pattern" \
+    || { echo "--help did not contain --success-pattern"; return 1; }
+}
+run_test "--help lists --output-dir and --success-pattern" t_help_new_flags
+
+# ─── Test: has_new_files_in_dir detects new file ─────────────────────────
+
+t_has_new_files_yes() {
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+
+  local before_ms
+  before_ms="$(python3 -c "import time; print(int(time.time() * 1000))")"
+  sleep 1
+  echo "output" > "${tmpdir}/result.txt"
+
+  (
+    _load_helpers
+    has_new_files_in_dir "${tmpdir}" "${before_ms}"
+  ) || { rm -rf "${tmpdir}"; echo "should detect new file"; return 1; }
+
+  rm -rf "${tmpdir}"
+}
+run_test "has_new_files_in_dir detects new file" t_has_new_files_yes
+
+# ─── Test: has_new_files_in_dir ignores stale file ───────────────────────
+
+t_has_new_files_stale() {
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  echo "old" > "${tmpdir}/stale.txt"
+  sleep 1
+
+  local after_ms
+  after_ms="$(python3 -c "import time; print(int(time.time() * 1000))")"
+
+  local rc=0
+  (
+    _load_helpers
+    has_new_files_in_dir "${tmpdir}" "${after_ms}"
+  ) || rc=$?
+
+  rm -rf "${tmpdir}"
+  [[ ${rc} -ne 0 ]] || { echo "should not detect stale file"; return 1; }
+}
+run_test "has_new_files_in_dir ignores stale file" t_has_new_files_stale
+
+# ─── Test: has_new_files_in_dir returns 1 for missing dir ────────────────
+
+t_has_new_files_missing_dir() {
+  local rc=0
+  (
+    _load_helpers
+    has_new_files_in_dir "/nonexistent/path/$$" "$(python3 -c "import time; print(int(time.time() * 1000))")"
+  ) || rc=$?
+
+  [[ ${rc} -ne 0 ]] || { echo "should return 1 for missing dir"; return 1; }
+}
+run_test "has_new_files_in_dir returns 1 for missing dir" t_has_new_files_missing_dir
+
+# ─── Test: transcript_matches_pattern finds pattern in session file ──────
+
+t_transcript_matches_yes() {
+  local tmpdir session_dir
+  tmpdir="$(mktemp -d)"
+
+  # Derive encoded CWD the same way the helper does
+  local cwd_encoded
+  cwd_encoded="$(echo "${tmpdir}" | sed 's|^/||; s|/|-|g')"
+  session_dir="${HOME}/.claude/projects/${cwd_encoded}"
+  mkdir -p "${session_dir}"
+
+  local before_ms
+  before_ms="$(python3 -c "import time; print(int(time.time() * 1000))")"
+  sleep 1
+
+  # Write a fake session JSONL after the epoch
+  echo '{"type":"assistant","message":"TASK_COMPLETED successfully"}' > "${session_dir}/test-session.jsonl"
+
+  (
+    cd "${tmpdir}"
+    _load_helpers
+    transcript_matches_pattern "${before_ms}" "TASK_COMPLETED"
+  ) || { rm -rf "${tmpdir}" "${session_dir}"; echo "should match pattern in transcript"; return 1; }
+
+  rm -rf "${tmpdir}" "${session_dir}"
+}
+run_test "transcript_matches_pattern finds pattern in session file" t_transcript_matches_yes
+
+# ─── Test: transcript_matches_pattern returns 1 when no match ────────────
+
+t_transcript_matches_no() {
+  local tmpdir session_dir
+  tmpdir="$(mktemp -d)"
+
+  local cwd_encoded
+  cwd_encoded="$(echo "${tmpdir}" | sed 's|^/||; s|/|-|g')"
+  session_dir="${HOME}/.claude/projects/${cwd_encoded}"
+  mkdir -p "${session_dir}"
+
+  local before_ms
+  before_ms="$(python3 -c "import time; print(int(time.time() * 1000))")"
+  sleep 1
+
+  echo '{"type":"assistant","message":"did some work"}' > "${session_dir}/test-session.jsonl"
+
+  local rc=0
+  (
+    cd "${tmpdir}"
+    _load_helpers
+    transcript_matches_pattern "${before_ms}" "NEVER_MATCHES_THIS"
+  ) || rc=$?
+
+  rm -rf "${tmpdir}" "${session_dir}"
+  [[ ${rc} -ne 0 ]] || { echo "should not match absent pattern"; return 1; }
+}
+run_test "transcript_matches_pattern returns 1 when no match" t_transcript_matches_no
+
+# ─── Test: --output-dir integration — files created → task done ──────────
+
+t_output_dir_completes_task() {
+  local tmpbin tmpdir tmpqueue tmpoutdir
+  tmpbin="$(mktemp -d)"
+  tmpdir="$(mktemp -d)"
+  tmpqueue="$(mktemp)"
+  tmpoutdir="$(mktemp -d)"
+
+  git -C "${tmpdir}" init -q
+  git -C "${tmpdir}" config user.email "test@test.com"
+  git -C "${tmpdir}" config user.name "Test"
+  touch "${tmpdir}/initial.txt"
+  git -C "${tmpdir}" add -A
+  git -C "${tmpdir}" commit -q -m "initial"
+  sleep 1
+
+  cat > "${tmpqueue}" <<'EOF'
+- [ ] Write output externally
+EOF
+
+  # Stub claude: writes to output dir but not to git working tree
+  cat > "${tmpbin}/claude" <<STUBEOF
+#!/usr/bin/env bash
+echo "result data" > "${tmpoutdir}/output.txt"
+exit 0
+STUBEOF
+  chmod +x "${tmpbin}/claude"
+
+  local out rc=0
+  out="$(cd "${tmpdir}" && PATH="${tmpbin}:${PATH}" \
+    bash "${SCRIPT}" --task-queue "${tmpqueue}" --output-dir "${tmpoutdir}" --max-sessions 2 2>&1)" || rc=$?
+
+  local content
+  content="$(cat "${tmpqueue}")"
+  rm -rf "${tmpbin}" "${tmpdir}" "${tmpqueue}" "${tmpoutdir}"
+
+  echo "${out}" | grep -q "output in" \
+    || { echo "Expected 'output in' message; output: ${out}"; return 1; }
+
+  echo "${content}" | grep -q "\[x\] Write output externally" \
+    || { echo "Task not marked done; queue: ${content}"; return 1; }
+}
+run_test "--output-dir: files created during session → task done" t_output_dir_completes_task
+
+# ─── Test: --output-dir no files → task fails ────────────────────────────
+
+t_output_dir_no_files_fails() {
+  local tmpbin tmpdir tmpqueue tmpoutdir
+  tmpbin="$(mktemp -d)"
+  tmpdir="$(mktemp -d)"
+  tmpqueue="$(mktemp)"
+  tmpoutdir="$(mktemp -d)"
+
+  git -C "${tmpdir}" init -q
+  git -C "${tmpdir}" config user.email "test@test.com"
+  git -C "${tmpdir}" config user.name "Test"
+  touch "${tmpdir}/initial.txt"
+  git -C "${tmpdir}" add -A
+  git -C "${tmpdir}" commit -q -m "initial"
+  sleep 1
+
+  cat > "${tmpqueue}" <<'EOF'
+- [ ] No output task
+EOF
+
+  # Stub claude: exits 0 but writes nothing
+  cat > "${tmpbin}/claude" <<'STUBEOF'
+#!/usr/bin/env bash
+exit 0
+STUBEOF
+  chmod +x "${tmpbin}/claude"
+
+  local out rc=0
+  out="$(cd "${tmpdir}" && PATH="${tmpbin}:${PATH}" \
+    bash "${SCRIPT}" --task-queue "${tmpqueue}" --output-dir "${tmpoutdir}" --max-sessions 3 2>&1)" || rc=$?
+
+  local content
+  content="$(cat "${tmpqueue}")"
+  rm -rf "${tmpbin}" "${tmpdir}" "${tmpqueue}" "${tmpoutdir}"
+
+  if echo "${out}" | grep -q "output in"; then
+    echo "Should not complete with no output files; output: ${out}"; return 1
+  fi
+
+  echo "${content}" | grep -q "\[FAIL\] No output task" \
+    || { echo "Task should be [FAIL]; queue: ${content}"; return 1; }
+}
+run_test "--output-dir: no files created → task fails" t_output_dir_no_files_fails
+
+# ─── Test: --dry-run shows output-dir and success-pattern ────────────────
+
+t_dry_run_new_flags() {
+  local tmpqueue
+  tmpqueue="$(mktemp)"
+  cat > "${tmpqueue}" <<'EOF'
+- [ ] Some task
+EOF
+
+  local out
+  out="$(bash "${SCRIPT}" --dry-run --task-queue "${tmpqueue}" \
+    --output-dir /tmp/test-out --success-pattern "DONE" 2>&1)"
+  rm -f "${tmpqueue}"
+
+  echo "${out}" | grep -qF "Output dir" \
+    || { echo "dry-run did not show output dir; output: ${out}"; return 1; }
+  echo "${out}" | grep -qF "Success pat" \
+    || { echo "dry-run did not show success pattern; output: ${out}"; return 1; }
+}
+run_test "--dry-run shows --output-dir and --success-pattern" t_dry_run_new_flags
 
 # ─── Summary ──────────────────────────────────────────────────────────────────
 
