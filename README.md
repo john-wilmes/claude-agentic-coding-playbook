@@ -23,6 +23,15 @@ Key findings from the research:
 
 Full details with citations: [docs/best-practices.md](docs/best-practices.md)
 
+## How This Works
+
+Most Claude Code setups rely on CLAUDE.md instructions alone. Instructions are advisory — compliance ranges from 50-90% depending on context pressure. This playbook takes a different approach:
+
+- **Hooks enforce rules deterministically.** 22 hooks run on every tool call, catching context exhaustion, prompt injection, sycophantic compliance patterns, and file bloat before they cause problems. Hooks achieve >95% enforcement where instructions cannot.
+- **Structured logging makes agent behavior observable.** Every hook decision is logged to JSONL. Analysis tools (`analyze-logs.js`) report context usage, stuck loops, model routing, and hook effectiveness per session — so you can measure what's working and what isn't.
+- **Practices are validated by running them.** The playbook is [dogfooded](docs/dogfooding.md) against real codebases with a 100-task framework. Bugs found during dogfooding (context guard effectiveness, task queue edge cases, implicit completion detection) feed directly back into the hooks and scripts.
+- **Zero npm dependencies.** All hooks use Node.js stdlib only. No `node_modules`, no build step, no supply chain risk.
+
 ## Try a Single Hook
 
 Want to test the waters before a full install? Copy `context-guard.js` (context window monitoring) and its logger dependency:
