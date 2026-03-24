@@ -68,7 +68,7 @@ assert_file_not_contains() {
 make_temp_file() {
   local content="$1"
   local tmp
-  tmp="$(mktemp /tmp/sanitize-test-XXXXX.txt)"
+  tmp="$(mktemp /tmp/sanitize-test-XXXXXXXX)"
   printf '%s\n' "${content}" > "${tmp}"
   echo "${tmp}"
 }
