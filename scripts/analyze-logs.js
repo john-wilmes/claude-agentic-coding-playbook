@@ -27,7 +27,7 @@ try {
 const MISS_THRESHOLD = 5.0;
 
 function parseArgs(argv) {
-  const args = { since: null, session: null, hook: null, excludeTests: false, project: null, retrievalMisses: false, timeline: null, projectDir: null, aggregate: false };
+  const args = { since: null, session: null, hook: null, excludeTests: false, project: null, retrievalMisses: false, timeline: null, projectDir: null, aggregate: false, provenance: null, failureChains: null };
   for (let i = 2; i < argv.length; i++) {
     if (argv[i] === "--since" && argv[i + 1]) { args.since = argv[++i]; }
     else if (argv[i] === "--session" && argv[i + 1]) { args.session = argv[++i]; }
@@ -38,19 +38,23 @@ function parseArgs(argv) {
     else if (argv[i] === "--timeline" && argv[i + 1]) { args.timeline = argv[++i]; }
     else if (argv[i] === "--project-dir" && argv[i + 1]) { args.projectDir = argv[++i]; }
     else if (argv[i] === "--aggregate") { args.aggregate = true; }
+    else if (argv[i] === "--provenance" && argv[i + 1]) { args.provenance = argv[++i]; }
+    else if (argv[i] === "--failure-chains" && argv[i + 1]) { args.failureChains = argv[++i]; }
     else if (argv[i] === "--help") {
       console.log("Usage: node scripts/analyze-logs.js [OPTIONS]");
       console.log("");
       console.log("Options:");
-      console.log("  --since YYYY-MM-DD     Filter entries after date");
-      console.log("  --session PREFIX       Filter by session ID prefix");
-      console.log("  --hook NAME            Filter by hook name");
-      console.log("  --exclude-tests        Exclude test-sourced entries");
-      console.log("  --project NAME         Filter by project name substring");
-      console.log("  --retrieval-misses     Show BM25 retrieval miss analysis");
-      console.log("  --timeline SESSION_ID  Show session timeline (requires --project-dir)");
-      console.log("  --project-dir PATH     Project working directory for transcript lookup");
-      console.log("  --aggregate            Show cross-session aggregate metrics");
+      console.log("  --since YYYY-MM-DD          Filter entries after date");
+      console.log("  --session PREFIX             Filter by session ID prefix");
+      console.log("  --hook NAME                  Filter by hook name");
+      console.log("  --exclude-tests              Exclude test-sourced entries");
+      console.log("  --project NAME               Filter by project name substring");
+      console.log("  --retrieval-misses           Show BM25 retrieval miss analysis");
+      console.log("  --timeline SESSION_ID        Show session timeline (requires --project-dir)");
+      console.log("  --project-dir PATH           Project working directory for transcript lookup");
+      console.log("  --aggregate                  Show cross-session aggregate metrics");
+      console.log("  --provenance SESSION_ID      Show decision provenance for hook warnings (requires --project-dir)");
+      console.log("  --failure-chains SESSION_ID  Show failure chain analysis for a session (requires --project-dir)");
       process.exit(0);
     }
   }
@@ -415,20 +419,28 @@ function printRetrievalMisses() {
   console.log();
 }
 
-function printTimeline(sessionId, projectDir, hookEntries) {
-  console.log(`=== Session Timeline: ${sessionId} ===`);
-
+/**
+ * Build a merged timeline of tool calls (from transcript) and hook events (from log entries)
+ * for a given session. Returns { timeline, toolResultMap, fallbackUsed }.
+ *
+ * timeline: array of events sorted by timestamp:
+ *   - type "tool": { ts, sortKey, type, tool, summary, id }
+ *   - type "hook": { ts, sortKey, type, icon, hook, event, detail }
+ * toolResultMap: Map<tool_use_id, { is_error, content }>
+ * fallbackUsed: true if the most-recent session was used instead of the requested one
+ */
+function buildTimeline(sessionId, projectDir, hookEntries) {
   // Load transcript entries if project dir provided
   let transcriptEntries = [];
+  let fallbackUsed = false;
   if (projectDir) {
     const sessionFile = transcriptParser.findSessionFile(sessionId, projectDir);
     if (sessionFile) {
       transcriptEntries = transcriptParser.parseSessionFile(sessionFile);
     } else {
-      // Try most recent session if exact match fails
       const recent = transcriptParser.findMostRecentSession(projectDir);
       if (recent) {
-        console.log(`  (session file not found for "${sessionId}", showing most recent)`);
+        fallbackUsed = true;
         transcriptEntries = transcriptParser.parseSessionFile(recent);
       }
     }
@@ -495,7 +507,24 @@ function printTimeline(sessionId, projectDir, hookEntries) {
       hook,
       event,
       detail,
+      // keep original entry for provenance analysis
+      _entry: entry,
     });
+  }
+
+  // Sort by timestamp
+  timeline.sort((a, b) => (a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0));
+
+  return { timeline, toolResultMap, fallbackUsed };
+}
+
+function printTimeline(sessionId, projectDir, hookEntries) {
+  console.log(`=== Session Timeline: ${sessionId} ===`);
+
+  const { timeline, toolResultMap, fallbackUsed } = buildTimeline(sessionId, projectDir, hookEntries);
+
+  if (fallbackUsed) {
+    console.log(`  (session file not found for "${sessionId}", showing most recent)`);
   }
 
   if (timeline.length === 0) {
@@ -506,9 +535,6 @@ function printTimeline(sessionId, projectDir, hookEntries) {
     console.log();
     return;
   }
-
-  // Sort by timestamp
-  timeline.sort((a, b) => (a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0));
 
   // Render
   for (const evt of timeline) {
@@ -534,6 +560,312 @@ function printTimeline(sessionId, projectDir, hookEntries) {
   console.log();
   console.log(`  Summary: ${toolCount} tool calls, ${errors} errors, ${hookCount} hook events (${warns} warn, ${blocks} block/escalate)`);
   console.log();
+}
+
+function printProvenance(sessionId, projectDir, hookEntries) {
+  console.log(`=== Decision Provenance: ${sessionId} ===`);
+
+  const { timeline, toolResultMap, fallbackUsed } = buildTimeline(sessionId, projectDir, hookEntries);
+
+  if (fallbackUsed) {
+    console.log("  Warning: exact session transcript not found — tool call data may not match hook events.");
+    console.log("  Use --timeline to verify transcript alignment first.");
+    console.log();
+  }
+
+  if (timeline.length === 0) {
+    console.log("  No timeline events found.");
+    if (!projectDir) {
+      console.log("  Tip: use --project-dir <path> to include transcript tool calls.");
+    }
+    console.log();
+    return;
+  }
+
+  // Walk the timeline and classify agent response to each hook warn/block/escalate
+  const classifications = []; // { ts, hook, event, detail, triggerTool, nextTool, nextSummary, outcome }
+
+  for (let i = 0; i < timeline.length; i++) {
+    const evt = timeline[i];
+    if (evt.type !== "hook") continue;
+    if (evt.event !== "warn" && evt.event !== "block" && evt.event !== "escalate") continue;
+
+    // Find the next tool event after this hook event
+    let nextToolEvt = null;
+    for (let j = i + 1; j < timeline.length; j++) {
+      if (timeline[j].type === "tool") {
+        nextToolEvt = timeline[j];
+        break;
+      }
+    }
+
+    // Determine what tool triggered the hook (if any — from detail or context)
+    const hookEntry = evt._entry || {};
+    const triggerTool = (hookEntry.context && hookEntry.context.tool) || evt.detail || null;
+
+    let outcome;
+    if (!nextToolEvt) {
+      outcome = "end_of_session";
+    } else {
+      const nextTool = nextToolEvt.tool;
+      if (evt.hook === "stuck-detector") {
+        // triggerTool is the repeated tool; if next call is same → ignored
+        if (triggerTool && nextTool === triggerTool) {
+          outcome = "ignored";
+        } else {
+          outcome = "changed";
+        }
+      } else if (evt.hook === "context-guard") {
+        // Look for checkpoint/compact signals: Skill tool or any tool related to wrapping up
+        const isWrapUp =
+          nextTool === "Skill" ||
+          (nextTool === "Bash" && nextToolEvt.summary && /git commit|checkpoint|compact/i.test(nextToolEvt.summary));
+        outcome = isWrapUp ? "changed" : "ignored";
+      } else if (evt.hook === "prompt-injection-guard") {
+        // triggerTool is the blocked command; if next call is different → changed
+        if (triggerTool && nextTool === triggerTool) {
+          outcome = "ignored";
+        } else {
+          outcome = "changed";
+        }
+      } else {
+        // Generic: if next tool differs from the triggering tool → changed
+        if (triggerTool && nextTool === triggerTool) {
+          outcome = "ignored";
+        } else {
+          outcome = "changed";
+        }
+      }
+    }
+
+    // Format display detail for the hook event
+    let hookDisplay = evt.detail || "";
+    if (evt.hook === "stuck-detector" && triggerTool) hookDisplay = triggerTool;
+    else if (evt.hook === "context-guard" && hookEntry.context && hookEntry.context.pct != null) {
+      hookDisplay = `${hookEntry.context.pct.toFixed(1)}%`;
+    }
+
+    const nextDesc = nextToolEvt
+      ? `${nextToolEvt.tool}${nextToolEvt.summary ? ` (${nextToolEvt.summary})` : ""}`
+      : "(none)";
+
+    classifications.push({
+      ts: evt.ts,
+      hook: evt.hook,
+      event: evt.event,
+      hookDisplay,
+      nextDesc,
+      outcome,
+    });
+  }
+
+  if (classifications.length === 0) {
+    console.log("  No warn/block/escalate hook events found in this session.");
+    console.log();
+    return;
+  }
+
+  for (const c of classifications) {
+    const time = formatTime(c.ts);
+    const outcomeLabel = c.outcome === "changed" ? "CHANGED" : c.outcome === "ignored" ? "IGNORED" : "END_OF_SESSION";
+    const hookLabel = c.hookDisplay ? ` (${c.hookDisplay})` : "";
+    console.log(`  [${time}] ${c.hook} ${c.event}${hookLabel} → next: ${c.nextDesc} → ${outcomeLabel}`);
+  }
+
+  // Summary stats
+  const withNextTool = classifications.filter(c => c.outcome !== "end_of_session");
+  const changed = withNextTool.filter(c => c.outcome === "changed").length;
+  const total = withNextTool.length;
+  const pct = total > 0 ? ((changed / total) * 100).toFixed(1) : "0.0";
+  console.log();
+  console.log(`  Hook effectiveness: ${changed}/${total} warnings led to course changes (${pct}%)`);
+
+  // By-hook breakdown
+  const byHook = {};
+  for (const c of withNextTool) {
+    if (!byHook[c.hook]) byHook[c.hook] = { changed: 0, total: 0 };
+    byHook[c.hook].total++;
+    if (c.outcome === "changed") byHook[c.hook].changed++;
+  }
+  if (Object.keys(byHook).length > 0) {
+    console.log("  By hook:");
+    const maxLen = Math.max(...Object.keys(byHook).map(k => k.length));
+    for (const [hook, stats] of Object.entries(byHook)) {
+      const hookPct = stats.total > 0 ? ((stats.changed / stats.total) * 100).toFixed(1) : "0.0";
+      console.log(`    ${hook.padEnd(maxLen + 2)} ${stats.changed}/${stats.total} (${hookPct}%)`);
+    }
+  }
+  console.log();
+}
+
+function printFailureChains(sessionId, projectDir, hookEntries) {
+  console.log(`=== Failure Chains: ${sessionId} ===`);
+
+  const { timeline, toolResultMap, fallbackUsed } = buildTimeline(sessionId, projectDir, hookEntries);
+
+  if (fallbackUsed) {
+    console.log("  Warning: exact session transcript not found — tool call data may not match hook events.");
+    console.log();
+  }
+
+  if (timeline.length === 0) {
+    console.log("  No timeline events found.");
+    if (!projectDir) {
+      console.log("  Tip: use --project-dir <path> to include transcript tool calls.");
+    }
+    console.log();
+    return;
+  }
+
+  // Group consecutive tool errors into episodes
+  const episodes = [];
+  let currentEpisode = null;
+
+  for (const evt of timeline) {
+    if (evt.type === "tool") {
+      const result = toolResultMap.get(evt.id);
+      const isError = result && result.is_error === true;
+
+      if (isError) {
+        if (!currentEpisode) {
+          currentEpisode = {
+            start_ts: evt.ts,
+            end_ts: evt.ts,
+            error_tools: [],
+            recovery_tool: null,
+            hook_interventions: [],
+            recovered: false,
+          };
+        }
+        currentEpisode.end_ts = evt.ts;
+        currentEpisode.error_tools.push({ tool: evt.tool, summary: evt.summary });
+      } else {
+        if (currentEpisode) {
+          // This success is the recovery
+          currentEpisode.recovery_tool = { tool: evt.tool, summary: evt.summary };
+          currentEpisode.recovered = true;
+          currentEpisode.end_ts = evt.ts;
+          episodes.push(currentEpisode);
+          currentEpisode = null;
+        }
+      }
+    } else if (evt.type === "hook" && currentEpisode) {
+      // Record hook interventions that occur during an episode
+      currentEpisode.hook_interventions.push({ ts: evt.ts, hook: evt.hook, event: evt.event, detail: evt.detail });
+    }
+  }
+
+  // If episode was never recovered, push it as unrecovered
+  if (currentEpisode) {
+    episodes.push(currentEpisode);
+  }
+
+  if (episodes.length === 0) {
+    console.log("  No failure episodes found.");
+    console.log();
+    return;
+  }
+
+  // Render episodes
+  for (let i = 0; i < episodes.length; i++) {
+    const ep = episodes[i];
+    const startTime = formatTime(ep.start_ts);
+    const endTime = formatTime(ep.end_ts);
+    const durationMs = computeDurationMs(ep.start_ts, ep.end_ts);
+    const durationLabel = durationMs != null ? `${Math.round(durationMs / 1000)}s` : "?s";
+    const recoveryLabel = ep.recovered ? "recovered" : "unrecovered";
+
+    console.log(`  Episode ${i + 1} [${startTime} — ${endTime}] (${durationLabel}, ${recoveryLabel})`);
+
+    // Interleave error tools with hook interventions in chronological order
+    // Build a flat list sorted by ts
+    const items = [];
+    for (let j = 0; j < ep.error_tools.length; j++) {
+      items.push({ kind: "error", ...ep.error_tools[j] });
+    }
+    for (const h of ep.hook_interventions) {
+      items.push({ kind: "hook", ...h });
+    }
+    // We don't have ts on error_tools individually (only the episode start/end),
+    // so just print errors first, hooks inline at the end of the errors section.
+    // Actually, hooks ARE in the episode.hook_interventions as added in-order,
+    // so we can interleave using the order they were encountered in the timeline.
+    // Since we built ep.error_tools and ep.hook_interventions in timeline-walk order,
+    // we reconstruct the interleaved order from the original timeline.
+    const episodeItems = [];
+    let errorIdx = 0;
+    for (const evt of timeline) {
+      if (evt.type === "tool") {
+        const result = toolResultMap.get(evt.id);
+        if (result && result.is_error) {
+          // Check if this belongs to this episode (simple heuristic: match tool + summary order)
+          if (errorIdx < ep.error_tools.length &&
+              ep.error_tools[errorIdx].tool === evt.tool &&
+              ep.error_tools[errorIdx].summary === evt.summary) {
+            episodeItems.push({ kind: "error", tool: evt.tool, summary: evt.summary });
+            errorIdx++;
+          }
+        } else if (ep.recovered && ep.recovery_tool &&
+                   evt.tool === ep.recovery_tool.tool && evt.summary === ep.recovery_tool.summary &&
+                   errorIdx === ep.error_tools.length) {
+          episodeItems.push({ kind: "recovery", tool: evt.tool, summary: evt.summary });
+        }
+      } else if (evt.type === "hook") {
+        // Include hook events that are in this episode's hook_interventions
+        const isInEpisode = ep.hook_interventions.some(h => h.ts === evt.ts && h.hook === evt.hook && h.event === evt.event);
+        if (isInEpisode && errorIdx > 0) {
+          episodeItems.push({ kind: "hook", ts: evt.ts, hook: evt.hook, event: evt.event, detail: evt.detail });
+        }
+      }
+    }
+
+    for (const item of episodeItems) {
+      if (item.kind === "error") {
+        const summaryLabel = item.summary ? `: ${item.summary}` : "";
+        console.log(`    ✗ ${item.tool}${summaryLabel}`);
+      } else if (item.kind === "hook") {
+        const icon = item.event === "block" || item.event === "escalate" ? "!!!" : "<!>";
+        const detailLabel = item.detail ? ` — ${item.detail}` : "";
+        console.log(`      ${icon} ${item.hook}: ${item.event}${detailLabel}`);
+      } else if (item.kind === "recovery") {
+        const summaryLabel = item.summary ? ` (${item.summary})` : "";
+        console.log(`    ✓ ${item.tool}${summaryLabel} (recovery)`);
+      }
+    }
+  }
+
+  // Summary
+  const recovered = episodes.filter(e => e.recovered).length;
+  const unrecovered = episodes.length - recovered;
+  const recoveredEpisodes = episodes.filter(e => e.recovered);
+  let avgRecoveryLabel = "";
+  if (recoveredEpisodes.length > 0) {
+    const durations = recoveredEpisodes
+      .map(e => computeDurationMs(e.start_ts, e.end_ts))
+      .filter(d => d != null);
+    if (durations.length > 0) {
+      const avg = durations.reduce((a, b) => a + b, 0) / durations.length;
+      avgRecoveryLabel = `, avg recovery time: ${Math.round(avg / 1000)}s`;
+    }
+  }
+
+  console.log();
+  console.log(`  Summary: ${episodes.length} failure episode${episodes.length !== 1 ? "s" : ""}, ${recovered} recovered${avgRecoveryLabel}`);
+  console.log();
+}
+
+/**
+ * Parse two ISO timestamps and return duration in milliseconds, or null if unparseable.
+ */
+function computeDurationMs(startTs, endTs) {
+  try {
+    const start = new Date(startTs).getTime();
+    const end = new Date(endTs).getTime();
+    if (isNaN(start) || isNaN(end)) return null;
+    return Math.max(0, end - start);
+  } catch (_) {
+    return null;
+  }
 }
 
 function formatToolSummary(toolName, input) {
@@ -658,6 +990,10 @@ if (require.main === module) {
 
   if (args.timeline) {
     printTimeline(args.timeline, args.projectDir, entries);
+  } else if (args.provenance) {
+    printProvenance(args.provenance, args.projectDir, entries);
+  } else if (args.failureChains) {
+    printFailureChains(args.failureChains, args.projectDir, entries);
   } else {
     printSummary(entries);
     printContextGuard(entries);
@@ -677,7 +1013,10 @@ if (require.main === module) {
 module.exports = {
   parseArgs,
   loadEntries,
+  buildTimeline,
   printTimeline,
+  printProvenance,
+  printFailureChains,
   printAggregate,
   printSummary,
   formatTime,
