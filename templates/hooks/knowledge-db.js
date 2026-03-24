@@ -23,13 +23,15 @@ try {
 // Detect FTS5 support at module load time (node:sqlite may lack it)
 let hasFts5 = false;
 if (DatabaseSync) {
+  let _probe;
   try {
-    const _probe = new DatabaseSync(":memory:");
+    _probe = new DatabaseSync(":memory:");
     _probe.exec("CREATE VIRTUAL TABLE _fts5_probe USING fts5(x);");
-    _probe.close();
     hasFts5 = true;
   } catch {
     hasFts5 = false;
+  } finally {
+    try { if (_probe) _probe.close(); } catch {}
   }
 }
 
