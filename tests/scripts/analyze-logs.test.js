@@ -79,7 +79,7 @@ function createTempHome() {
 // Mirrors the logic in analyze-logs.js without running side effects.
 
 function parseArgs(argv) {
-  const args = { since: null, session: null, hook: null, excludeTests: false, project: null, retrievalMisses: false };
+  const args = { since: null, session: null, hook: null, excludeTests: false, project: null, retrievalMisses: false, sycophancy: false };
   for (let i = 2; i < argv.length; i++) {
     if (argv[i] === "--since" && argv[i + 1]) { args.since = argv[++i]; }
     else if (argv[i] === "--session" && argv[i + 1]) { args.session = argv[++i]; }
@@ -87,6 +87,7 @@ function parseArgs(argv) {
     else if (argv[i] === "--exclude-tests") { args.excludeTests = true; }
     else if (argv[i] === "--project" && argv[i + 1]) { args.project = argv[++i]; }
     else if (argv[i] === "--retrieval-misses") { args.retrievalMisses = true; }
+    else if (argv[i] === "--sycophancy") { args.sycophancy = true; }
   }
   return args;
 }
@@ -376,6 +377,42 @@ test("22. Loads entries from multiple JSONL files", () => {
     const entries = loadEntries(logDir, {});
     assert.strictEqual(entries.length, 3);
   } finally { cleanup(); }
+});
+
+// ─── Tests: --sycophancy flag ─────────────────────────────────────────────────
+
+console.log("\nanalyze-logs — --sycophancy:");
+
+test("23. --sycophancy with no sycophancy data prints no-data message", () => {
+  // Use a future --since so no real entries load, and run --sycophancy
+  const { status, stdout } = run(["--sycophancy", "--since", "2099-01-01"]);
+  assert.strictEqual(status, 0);
+  assert.ok(
+    stdout.includes("Sycophancy Analysis"),
+    `Expected 'Sycophancy Analysis' header in: ${stdout.slice(0, 400)}`
+  );
+  assert.ok(
+    stdout.includes("No sycophancy-detector data found"),
+    `Expected no-data message in: ${stdout.slice(0, 400)}`
+  );
+});
+
+test("24. --help mentions --sycophancy flag", () => {
+  const { stdout } = run(["--help"]);
+  assert.ok(
+    stdout.includes("--sycophancy"),
+    `Expected '--sycophancy' in help output, got: ${stdout.slice(0, 400)}`
+  );
+});
+
+test("25. parseArgs --sycophancy sets sycophancy flag", () => {
+  const args = parseArgs(["node", "analyze-logs.js", "--sycophancy"]);
+  assert.strictEqual(args.sycophancy, true);
+});
+
+test("26. parseArgs defaults sycophancy to false", () => {
+  const args = parseArgs(["node", "analyze-logs.js"]);
+  assert.strictEqual(args.sycophancy, false);
 });
 
 // ─── Summary ──────────────────────────────────────────────────────────────────

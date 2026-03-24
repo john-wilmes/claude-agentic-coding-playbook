@@ -115,19 +115,20 @@ test("2. Investigation tools (Read, Grep, Bash) return {} with no warning", () =
   }
 });
 
-// Test 3: Quick-edit detection — 3 Read→Edit pairs trigger "warn" at threshold
-test("3. Quick-edit: 3 same-file Read→Edit pairs trigger warn", () => {
+// Test 3: Quick-edit detection — 4 Read→Edit pairs trigger "warn" at threshold
+test("3. Quick-edit: 4 same-file Read→Edit pairs trigger warn", () => {
   const sessionId = newSessionId();
   try {
-    // First two Read→Edit pairs (below threshold)
+    // First three Read→Edit pairs (below threshold QUICK_EDIT_WARN=4)
     readThenEdit(sessionId, "/src/a.js");
-    const r2 = readThenEdit(sessionId, "/src/b.js");
-    assert.strictEqual(r2.json.hookSpecificOutput, undefined, "Second quick-edit should not warn");
-
-    // Third Read→Edit (at threshold QUICK_EDIT_WARN=3)
+    readThenEdit(sessionId, "/src/b.js");
     const r3 = readThenEdit(sessionId, "/src/c.js");
-    assert.ok(r3.json.hookSpecificOutput, "Third quick-edit should produce a warning");
-    const ctx = r3.json.hookSpecificOutput.additionalContext;
+    assert.strictEqual(r3.json.hookSpecificOutput, undefined, "Third quick-edit should not warn");
+
+    // Fourth Read→Edit (at threshold QUICK_EDIT_WARN=4)
+    const r4 = readThenEdit(sessionId, "/src/d.js");
+    assert.ok(r4.json.hookSpecificOutput, "Fourth quick-edit should produce a warning");
+    const ctx = r4.json.hookSpecificOutput.additionalContext;
     assert.ok(ctx.includes("warn") || ctx.includes("Sycophancy"), "Warning should be present");
     assert.ok(!ctx.includes("escalate"), "Should be warn level, not escalate");
   } finally {
@@ -135,57 +136,60 @@ test("3. Quick-edit: 3 same-file Read→Edit pairs trigger warn", () => {
   }
 });
 
-// Test 4: Compliance run — 5 consecutive Edits trigger "warn" at threshold
-test("4. Compliance run: 5 consecutive Edits (no investigation) trigger warn", () => {
+// Test 4: Compliance run — 6 consecutive Edits trigger "warn" at threshold
+test("4. Compliance run: 6 consecutive Edits (no investigation) trigger warn", () => {
   const sessionId = newSessionId();
   try {
-    // 4 consecutive Edits — below threshold COMPLIANCE_RUN_WARN=5
-    for (let i = 0; i < 4; i++) {
+    // 5 consecutive Edits — below threshold COMPLIANCE_RUN_WARN=6
+    for (let i = 0; i < 5; i++) {
       const r = runDetector(sessionId, "Edit", { file_path: `/src/file${i}.js` });
       assert.strictEqual(r.json.hookSpecificOutput, undefined, `Edit ${i + 1} should not warn`);
     }
-    // 5th Edit — at threshold
-    const r5 = runDetector(sessionId, "Edit", { file_path: "/src/file4.js" });
-    assert.ok(r5.json.hookSpecificOutput, "5th consecutive Edit should warn");
-    const ctx = r5.json.hookSpecificOutput.additionalContext;
-    assert.ok(ctx.includes("5"), "Warning should mention the compliance run length");
+    // 6th Edit — at threshold
+    const r6 = runDetector(sessionId, "Edit", { file_path: "/src/file5.js" });
+    assert.ok(r6.json.hookSpecificOutput, "6th consecutive Edit should warn");
+    const ctx = r6.json.hookSpecificOutput.additionalContext;
+    assert.ok(ctx.includes("6"), "Warning should mention the compliance run length");
   } finally {
     cleanupSession(sessionId);
   }
 });
 
-// Test 5: Compliance run escalation — 8+ consecutive Edits trigger "escalate"
-test("5. Compliance run escalation: 8 consecutive Edits trigger escalate", () => {
+// Test 5: Compliance run escalation — 10+ consecutive Edits trigger "escalate"
+test("5. Compliance run escalation: 10 consecutive Edits trigger escalate", () => {
   const sessionId = newSessionId();
   try {
-    for (let i = 0; i < 7; i++) {
+    // 9 consecutive Edits — below COMPLIANCE_RUN_ESCALATE=10
+    for (let i = 0; i < 9; i++) {
       runDetector(sessionId, "Edit", { file_path: `/src/file${i}.js` });
     }
-    // 8th Edit — at escalation threshold COMPLIANCE_RUN_ESCALATE=8
-    const r8 = runDetector(sessionId, "Edit", { file_path: "/src/file7.js" });
-    assert.ok(r8.json.hookSpecificOutput, "8th consecutive Edit should warn");
-    const ctx = r8.json.hookSpecificOutput.additionalContext;
+    // 10th Edit — at escalation threshold COMPLIANCE_RUN_ESCALATE=10
+    const r10 = runDetector(sessionId, "Edit", { file_path: "/src/file9.js" });
+    assert.ok(r10.json.hookSpecificOutput, "10th consecutive Edit should warn");
+    const ctx = r10.json.hookSpecificOutput.additionalContext;
     assert.ok(ctx.includes("escalate"), "Should be escalate level");
   } finally {
     cleanupSession(sessionId);
   }
 });
 
-// Test 6: Quick-edit escalation — 5 quick-edits trigger "escalate"
-test("6. Quick-edit escalation: 5 quick-edit pairs trigger escalate", () => {
+// Test 6: Quick-edit escalation — 7 quick-edits trigger "escalate"
+test("6. Quick-edit escalation: 7 quick-edit pairs trigger escalate", () => {
   const sessionId = newSessionId();
   try {
-    // 4 quick-edits: third triggers warn, 4th still warns
+    // 6 quick-edits: 4th triggers warn, 5th and 6th still warn
     readThenEdit(sessionId, "/src/a.js");
     readThenEdit(sessionId, "/src/b.js");
     readThenEdit(sessionId, "/src/c.js");
     readThenEdit(sessionId, "/src/d.js");
+    readThenEdit(sessionId, "/src/e.js");
+    readThenEdit(sessionId, "/src/f.js");
 
-    // 5th quick-edit — at QUICK_EDIT_ESCALATE=5
-    const r5 = readThenEdit(sessionId, "/src/e.js");
-    assert.ok(r5.json.hookSpecificOutput, "5th quick-edit should produce output");
-    const ctx = r5.json.hookSpecificOutput.additionalContext;
-    assert.ok(ctx.includes("escalate"), "5th quick-edit should escalate");
+    // 7th quick-edit — at QUICK_EDIT_ESCALATE=7
+    const r7 = readThenEdit(sessionId, "/src/g.js");
+    assert.ok(r7.json.hookSpecificOutput, "7th quick-edit should produce output");
+    const ctx = r7.json.hookSpecificOutput.additionalContext;
+    assert.ok(ctx.includes("escalate"), "7th quick-edit should escalate");
   } finally {
     cleanupSession(sessionId);
   }
@@ -252,27 +256,29 @@ test("9. Meta tools return {} and do not affect compliance run counts", () => {
     runDetector(sessionId, "Edit", { file_path: "/src/c.js" });
     const r4 = runDetector(sessionId, "Edit", { file_path: "/src/d.js" });
     assert.strictEqual(r4.json.hookSpecificOutput, undefined,
-      "4 Edits with meta tools interleaved should not reach warn threshold of 5");
+      "4 Edits with meta tools interleaved should not reach warn threshold of 6");
   } finally {
     cleanupSession(sessionId);
   }
 });
 
-// Test 10: Session ratio warning — after 15+ actions with >80% modifications, warn
-test("10. Session ratio: >80% modifications over 15+ actions triggers warn", () => {
+// Test 10: Session ratio warning — after 20+ actions with >=75% modifications, warn
+test("10. Session ratio: >=75% modifications over 20+ actions triggers warn", () => {
   const sessionId = newSessionId();
   try {
-    // Strategy: keep compliance run < 5 and quick-edits < 3 so neither threshold fires,
-    // but drive modification ratio well above 80% over 15+ total actions.
+    // Strategy: keep compliance run < 6 and quick-edits < 4 so neither threshold fires,
+    // but drive modification ratio well above 75% over 20+ total actions.
     //
     // Pattern: 4 Writes (no prior Read on those files → no quick-edit), then 1 Read
     // of a fresh file (breaks compliance run, adds 1 investigation to ratio).
     // Write never has a file_path match from a prior Read, so no quick-edit counted.
-    // After 4 rounds: 16 Writes + 4 Reads = 20 actions, ratio = 80%.
-    // One more Write: 17/21 = 81% → triggers ratio warn.
+    // After 4 rounds: 16 Writes + 4 Reads = 20 actions, ratio = 80% (>= 75%).
+    // But MIN_ACTIONS_FOR_RATIO=20: 20 actions = exactly at min threshold.
+    // One more Write: 17/21 = 81% >= 75% → triggers ratio warn.
     //
     // Compliance run after last Read = 1 (or 0 if last is Write at threshold boundary).
     // We emit 4 Writes then 1 Read per round: compliance run resets to 0 at each Read.
+    // 4 consecutive Writes is below COMPLIANCE_RUN_WARN=6, so no compliance run warning.
 
     for (let round = 0; round < 4; round++) {
       for (let i = 0; i < 4; i++) {
@@ -307,8 +313,8 @@ test("11. Malformed JSON input returns {} gracefully", () => {
 test("12. Pattern resolution: investigation after warning clears wasWarned", () => {
   const sessionId = newSessionId();
   try {
-    // Trigger a compliance run warning (5 consecutive Edits)
-    for (let i = 0; i < 5; i++) {
+    // Trigger a compliance run warning (6 consecutive Edits at COMPLIANCE_RUN_WARN=6)
+    for (let i = 0; i < 6; i++) {
       runDetector(sessionId, "Edit", { file_path: `/src/file${i}.js` });
     }
 
@@ -325,6 +331,36 @@ test("12. Pattern resolution: investigation after warning clears wasWarned", () 
     const stateAfterInvestigation = JSON.parse(fs.readFileSync(getStateFile(sessionId), "utf8"));
     assert.strictEqual(stateAfterInvestigation.wasWarned, false,
       "wasWarned should be cleared after investigation tool clears it");
+  } finally {
+    cleanupSession(sessionId);
+  }
+});
+
+// Test 13: Investigation actions never trigger warnings even with high scores
+test("13. Investigation actions never trigger warnings even with high scores", () => {
+  const sessionId = newSessionId();
+  try {
+    // Build up quick-edit count above QUICK_EDIT_WARN=4 by doing 5 Read→Edit pairs
+    readThenEdit(sessionId, "/src/a.js");
+    readThenEdit(sessionId, "/src/b.js");
+    readThenEdit(sessionId, "/src/c.js");
+    readThenEdit(sessionId, "/src/d.js");
+    readThenEdit(sessionId, "/src/e.js");
+    // At this point quickEditCount >= 4, so a modification would warn.
+    // But a Read (investigation) must NOT produce a warning — investigation actions
+    // are exempt from warnings even when scores exceed thresholds.
+    const rRead = runDetector(sessionId, "Read", { file_path: "/src/f.js" });
+    assert.strictEqual(rRead.json.hookSpecificOutput, undefined,
+      "Investigation action (Read) should never warn even when quick-edit count is high");
+
+    // Likewise, Grep and Bash should not warn
+    const rGrep = runDetector(sessionId, "Grep", { pattern: "TODO", path: "/src" });
+    assert.strictEqual(rGrep.json.hookSpecificOutput, undefined,
+      "Grep (investigation) should never warn");
+
+    const rBash = runDetector(sessionId, "Bash", { command: "ls /src" });
+    assert.strictEqual(rBash.json.hookSpecificOutput, undefined,
+      "Bash (investigation) should never warn");
   } finally {
     cleanupSession(sessionId);
   }

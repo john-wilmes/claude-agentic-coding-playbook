@@ -27,7 +27,7 @@ try {
 const MISS_THRESHOLD = 5.0;
 
 function parseArgs(argv) {
-  const args = { since: null, session: null, hook: null, excludeTests: false, project: null, retrievalMisses: false, timeline: null, projectDir: null, aggregate: false, provenance: null, failureChains: null };
+  const args = { since: null, session: null, hook: null, excludeTests: false, project: null, retrievalMisses: false, timeline: null, projectDir: null, aggregate: false, provenance: null, failureChains: null, sycophancy: false };
   for (let i = 2; i < argv.length; i++) {
     if (argv[i] === "--since" && argv[i + 1]) { args.since = argv[++i]; }
     else if (argv[i] === "--session" && argv[i + 1]) { args.session = argv[++i]; }
@@ -40,6 +40,7 @@ function parseArgs(argv) {
     else if (argv[i] === "--aggregate") { args.aggregate = true; }
     else if (argv[i] === "--provenance" && argv[i + 1]) { args.provenance = argv[++i]; }
     else if (argv[i] === "--failure-chains" && argv[i + 1]) { args.failureChains = argv[++i]; }
+    else if (argv[i] === "--sycophancy") { args.sycophancy = true; }
     else if (argv[i] === "--help") {
       console.log("Usage: node scripts/analyze-logs.js [OPTIONS]");
       console.log("");
@@ -55,6 +56,7 @@ function parseArgs(argv) {
       console.log("  --aggregate                  Show cross-session aggregate metrics");
       console.log("  --provenance SESSION_ID      Show decision provenance for hook warnings (requires --project-dir)");
       console.log("  --failure-chains SESSION_ID  Show failure chain analysis for a session (requires --project-dir)");
+      console.log("  --sycophancy                 Show sycophancy detector analysis across all sessions");
       process.exit(0);
     }
   }
@@ -295,6 +297,100 @@ function printInjectionGuard(entries) {
     const details = entry.details || "(no details)";
     console.log(`  [${ts}] ${details}`);
   }
+  console.log();
+}
+
+function printSycophancy(entries) {
+  const sd = entries.filter(e => e.hook === "sycophancy-detector");
+  console.log("=== Sycophancy Analysis ===");
+  if (sd.length === 0) {
+    console.log("No sycophancy-detector data found.");
+    console.log();
+    return;
+  }
+
+  // Group by session
+  const bySession = {};
+  for (const entry of sd) {
+    const sid = entry.session_id || "unknown";
+    if (!bySession[sid]) bySession[sid] = [];
+    bySession[sid].push(entry);
+  }
+
+  // Per-session metrics
+  console.log("Per-session summary:");
+  const header = "  Session           actions  max_qe  max_cr  peak_ratio  warns  escs";
+  console.log(header);
+
+  let totalWarnings = 0;
+  let totalEscalations = 0;
+  let allPeakRatios = [];
+  let sessionsWithWarnings = 0;
+
+  const sessionIds = Object.keys(bySession).sort();
+  for (const sid of sessionIds) {
+    const sessionEntries = bySession[sid];
+    const warns = sessionEntries.filter(e => e.event === "warn").length;
+    const escs = sessionEntries.filter(e => e.event === "escalate").length;
+
+    // Collect metrics from score events
+    const scores = sessionEntries.filter(e => e.event === "score");
+    const totalActions = scores.reduce((max, e) => Math.max(max, (e.context && e.context.total_actions) || 0), 0);
+    const maxQuickEdits = scores.reduce((max, e) => Math.max(max, (e.context && e.context.quick_edits) || 0), 0);
+    const maxComplianceRun = scores.reduce((max, e) => Math.max(max, (e.context && e.context.compliance_run) || 0), 0);
+    const ratios = scores.map(e => e.context && e.context.ratio).filter(v => v != null);
+    const peakRatio = ratios.length > 0 ? Math.max(...ratios) : null;
+
+    totalWarnings += warns;
+    totalEscalations += escs;
+    if (peakRatio != null) allPeakRatios.push(peakRatio);
+    if (warns > 0 || escs > 0) sessionsWithWarnings++;
+
+    const short = sid.length > 16 ? sid.slice(0, 14) + ".." : sid.padEnd(16);
+    const ratioLabel = peakRatio != null ? peakRatio.toFixed(3) : "  n/a ";
+    console.log(`  ${short}  ${String(totalActions).padStart(7)}  ${String(maxQuickEdits).padStart(6)}  ${String(maxComplianceRun).padStart(6)}  ${ratioLabel.padStart(10)}  ${String(warns).padStart(5)}  ${String(escs).padStart(4)}`);
+  }
+
+  // Overall statistics
+  console.log();
+  console.log("Overall statistics:");
+  console.log(`  Total warnings:       ${totalWarnings}`);
+  console.log(`  Total escalations:    ${totalEscalations}`);
+  if (allPeakRatios.length > 0) {
+    const meanRatio = allPeakRatios.reduce((a, b) => a + b, 0) / allPeakRatios.length;
+    const maxRatio = Math.max(...allPeakRatios);
+    console.log(`  Mean peak ratio:      ${meanRatio.toFixed(3)}`);
+    console.log(`  Max peak ratio:       ${maxRatio.toFixed(3)}`);
+  }
+  const totalSessions = sessionIds.length;
+  console.log(`  Sessions with warnings: ${sessionsWithWarnings}/${totalSessions}`);
+
+  // Warning distribution by type
+  const allWarnEsc = sd.filter(e => e.event === "warn" || e.event === "escalate");
+  if (allWarnEsc.length > 0) {
+    const typeCounts = { "quick-edit": 0, "compliance-run": 0, "ratio": 0, "unknown": 0 };
+    for (const entry of allWarnEsc) {
+      const ctx = entry.context || {};
+      // Classify by which counter triggered the warning
+      if (ctx.quick_edits != null && ctx.quick_edits > 0 && ctx.compliance_run === 0) {
+        typeCounts["quick-edit"]++;
+      } else if (ctx.compliance_run != null && ctx.compliance_run > 0 && ctx.quick_edits === 0) {
+        typeCounts["compliance-run"]++;
+      } else if (ctx.ratio != null) {
+        typeCounts["ratio"]++;
+      } else {
+        typeCounts["unknown"]++;
+      }
+    }
+
+    console.log();
+    console.log("Warning distribution by type:");
+    for (const [type, count] of Object.entries(typeCounts)) {
+      if (count === 0 && type === "unknown") continue;
+      console.log(`  ${type.padEnd(20)} ${count}`);
+    }
+  }
+
   console.log();
 }
 
@@ -994,6 +1090,8 @@ if (require.main === module) {
     printProvenance(args.provenance, args.projectDir, entries);
   } else if (args.failureChains) {
     printFailureChains(args.failureChains, args.projectDir, entries);
+  } else if (args.sycophancy) {
+    printSycophancy(entries);
   } else {
     printSummary(entries);
     printContextGuard(entries);
@@ -1019,6 +1117,7 @@ module.exports = {
   printFailureChains,
   printAggregate,
   printSummary,
+  printSycophancy,
   formatTime,
   formatToolSummary,
 };

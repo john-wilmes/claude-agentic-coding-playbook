@@ -13,9 +13,11 @@
 //    ratio after enough actions suggests shallow engagement.
 //
 // Thresholds:
-//   Quick-edits: warn at 3 in window, escalate at 5
-//   Compliance run: warn at 5, escalate at 8
-//   Session ratio: warn when modifications > 80% after 15+ actions
+//   Quick-edits: warn at 4 in window, escalate at 7
+//   Compliance run: warn at 6, escalate at 10
+//   Session ratio: warn when modifications >= 75% after 20+ actions
+//
+// Warnings only fire on modification actions — investigation actions are never warned.
 //
 // Integration:
 //   - Logs all scores to JSONL via log.js for analyze-logs.js consumption
@@ -36,16 +38,16 @@ try { capture = require("./knowledge-capture"); } catch { capture = null; }
 const WINDOW_SIZE = 30;
 
 // Quick-edit thresholds (Read → Edit same file with no investigation between)
-const QUICK_EDIT_WARN = 3;
-const QUICK_EDIT_ESCALATE = 5;
+const QUICK_EDIT_WARN = 4;
+const QUICK_EDIT_ESCALATE = 7;
 
 // Compliance run thresholds (consecutive Edit/Write with no investigation)
-const COMPLIANCE_RUN_WARN = 5;
-const COMPLIANCE_RUN_ESCALATE = 8;
+const COMPLIANCE_RUN_WARN = 6;
+const COMPLIANCE_RUN_ESCALATE = 10;
 
 // Session ratio threshold (modifications / total after MIN_ACTIONS actions)
-const RATIO_THRESHOLD = 0.80;
-const MIN_ACTIONS_FOR_RATIO = 15;
+const RATIO_THRESHOLD = 0.75;
+const MIN_ACTIONS_FOR_RATIO = 20;
 
 // State TTL: 4 hours (match stuck-detector)
 const STATE_TTL_MS = 4 * 60 * 60 * 1000;
@@ -234,11 +236,13 @@ process.stdin.on("end", () => {
       state.wasWarned = false;
     }
 
-    // Determine if we should warn
+    // Only warn on modification actions — investigation should not trigger warnings
     let warningLevel = null; // null, "warn", "escalate"
     let warningReason = "";
 
-    if (quickEdits >= QUICK_EDIT_ESCALATE) {
+    if (category !== "modify") {
+      // Skip warning checks — agent is investigating, not rubber-stamping
+    } else if (quickEdits >= QUICK_EDIT_ESCALATE) {
       warningLevel = "escalate";
       warningReason = `${quickEdits} files edited immediately after reading without investigation. ` +
         "You may be rubber-stamping changes. Read related code, check tests, or explore alternatives before editing.";
