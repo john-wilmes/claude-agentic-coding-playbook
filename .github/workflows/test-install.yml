@@ -596,8 +596,11 @@ jobs:
           echo "OK: session-end.js parses correctly"
 
   test-suites:
-    runs-on: ubuntu-latest
-    name: All test suites
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.os }} / test suites
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

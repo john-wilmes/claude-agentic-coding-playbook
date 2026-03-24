@@ -15,7 +15,7 @@ set -euo pipefail
 # ─── Constants ────────────────────────────────────────────────────────────────
 
 # Project-scoped hash: prevents cross-project collisions for lock file.
-_CWD_HASH="$(pwd | md5sum | cut -c1-8)"
+_CWD_HASH="$(pwd | (md5sum 2>/dev/null || md5) | cut -c1-8)"
 # Sentinel is PID-scoped (not CWD-scoped) because Claude Code overrides
 # CLAUDE_LOOP_SENTINEL after changing process.cwd() to the project directory.
 # PID is stable for the lifetime of this claude-loop instance.

@@ -30,7 +30,7 @@ CC_PATTERN='\b[0-9]{4}[\s\-]?[0-9]{4}[\s\-]?[0-9]{4}[\s\-]?[0-9]{4}\b'
 
 has_pii() {
   local file="$1"
-  grep -qP "$SSN_PATTERN|$EMAIL_PATTERN|$CC_PATTERN" "$file" 2>/dev/null
+  grep -qE "$SSN_PATTERN|$EMAIL_PATTERN|$CC_PATTERN" "$file" 2>/dev/null
 }
 
 redact_file() {
