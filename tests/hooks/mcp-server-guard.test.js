@@ -218,6 +218,31 @@ test("isProjectMcpEnabled detects setting correctly", () => {
   cleanup();
 });
 
+// --- Test: enabled=true with project .mcp.json still warns ---
+test("enabled=true with project .mcp.json still warns", () => {
+  const { home, claudeDir, cleanup } = createTempHome();
+  const sessionId = `test-mcp-${Date.now()}-6`;
+  cleanFlag(sessionId);
+
+  fs.writeFileSync(
+    path.join(claudeDir, "settings.json"),
+    JSON.stringify({ enableAllProjectMcpServers: true })
+  );
+
+  const projDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-proj-"));
+  fs.writeFileSync(path.join(projDir, ".mcp.json"), '{"servers": {}}');
+
+  const result = runHook(HOOK, {
+    tool_name: "Read", tool_input: {}, session_id: sessionId, cwd: projDir,
+  }, { HOME: home });
+
+  assert.ok(result.json.hookSpecificOutput);
+  assert.ok(result.json.hookSpecificOutput.additionalContext.includes("enableAllProjectMcpServers"));
+  cleanFlag(sessionId);
+  cleanup();
+  try { fs.rmSync(projDir, { recursive: true, force: true }); } catch {}
+});
+
 // --- Test: malformed JSON produces empty output ---
 test("malformed JSON produces empty output", () => {
   const { runHookRaw } = require("./test-helpers");

@@ -161,10 +161,10 @@ test("recognizes various image extensions", () => {
   assert.ok(isImagePath("/tmp/foo.png"));
   assert.ok(isImagePath("/tmp/foo.gif"));
   assert.ok(isImagePath("/tmp/foo.webp"));
-  assert.ok(isImagePath("/tmp/foo.svg"));
-  assert.ok(isImagePath("/tmp/foo.ico"));
   assert.ok(isImagePath("/tmp/foo.bmp"));
   assert.ok(isImagePath("/tmp/foo.tiff"));
+  assert.ok(!isImagePath("/tmp/foo.svg")); // SVG is text-readable, not multimodal
+  assert.ok(!isImagePath("/tmp/foo.ico")); // ICO excluded
   assert.ok(!isImagePath("/tmp/foo.js"));
   assert.ok(!isImagePath("/tmp/foo.pdf"));
   assert.ok(!isImagePath("/tmp/foo.md"));

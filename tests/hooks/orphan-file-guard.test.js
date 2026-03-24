@@ -116,18 +116,28 @@ test("files under .claude/ are exempt", () => {
   proj.cleanup();
 });
 
-// --- Test: files under tests/fixtures/ are exempt ---
-test("files under tests/fixtures/ are exempt", () => {
+// --- Test: files under tests/ are exempt ---
+test("files under tests/ are exempt", () => {
   const proj = createTempProject();
-  const fixtureDir = path.join(proj.dir, "tests", "fixtures");
-  fs.mkdirSync(fixtureDir, { recursive: true });
+  const testsDir = path.join(proj.dir, "tests", "hooks");
+  fs.mkdirSync(testsDir, { recursive: true });
 
   const result = runHook(HOOK, {
+    tool_name: "Write",
+    tool_input: { file_path: path.join(testsDir, "new-hook.test.js"), content: "// test" },
+    cwd: proj.dir,
+  });
+  assert.deepStrictEqual(result.json, {});
+
+  // Also test tests/fixtures/
+  const fixtureDir = path.join(proj.dir, "tests", "fixtures");
+  fs.mkdirSync(fixtureDir, { recursive: true });
+  const r2 = runHook(HOOK, {
     tool_name: "Write",
     tool_input: { file_path: path.join(fixtureDir, "sample.json"), content: "{}" },
     cwd: proj.dir,
   });
-  assert.deepStrictEqual(result.json, {});
+  assert.deepStrictEqual(r2.json, {});
   proj.cleanup();
 });
 
@@ -191,6 +201,7 @@ test("isExempt correctly identifies exempt paths", () => {
   assert.ok(isExempt("/some/path/.claude/config.json"));
   assert.ok(isExempt("/some/path/node_modules/pkg/index.js"));
   assert.ok(isExempt("/some/path/tests/fixtures/data.json"));
+  assert.ok(isExempt("/some/path/tests/hooks/new-hook.test.js"));
   assert.ok(!isExempt("/some/path/src/utils.js"));
   assert.ok(!isExempt("/some/path/new-feature.ts"));
 });

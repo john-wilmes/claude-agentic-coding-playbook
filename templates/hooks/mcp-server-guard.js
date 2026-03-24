@@ -80,39 +80,27 @@ process.stdin.on("end", () => {
 
     // Check if project MCP servers are enabled globally
     const enabled = isProjectMcpEnabled();
-    const cwd = event.cwd || "";
-    const hasConfig = hasProjectMcpConfig(cwd);
 
-    if (!enabled && !hasConfig) {
-      // No concern — mark as checked and move on
-      markWarned(sessionId);
-      process.stdout.write("{}");
-      process.exit(0);
-    }
-
-    // Mark warned so we don't repeat
+    // Mark warned so we don't repeat regardless of outcome
     markWarned(sessionId);
 
-    // Build advisory message
-    let warning = "";
-    if (enabled) {
-      warning =
-        "⚠ SECURITY: enableAllProjectMcpServers is TRUE in your global settings. " +
-        "CLAUDE.md recommends keeping this false to prevent supply chain injection. " +
-        "Project-level MCP servers should be explicitly approved per-project.";
-    }
-    if (hasConfig && !enabled) {
-      // Project has .mcp.json but global setting is off — this is fine, just informational
+    if (!enabled) {
+      // Setting is off — no concern
       process.stdout.write("{}");
       process.exit(0);
     }
+
+    const warning =
+      "⚠ SECURITY: enableAllProjectMcpServers is TRUE in your global settings. " +
+      "CLAUDE.md recommends keeping this false to prevent supply chain injection. " +
+      "Project-level MCP servers should be explicitly approved per-project.";
 
     log.writeLog({
       hook: "mcp-server-guard",
       event: "warn",
       session_id: sessionId,
       details: warning,
-      context: { enabled, hasConfig, cwd },
+      context: { enabled, cwd: event.cwd || "" },
     });
 
     // Advisory only — don't deny, just inform

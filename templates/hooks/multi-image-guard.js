@@ -21,9 +21,10 @@ const os = require("os");
 let log;
 try { log = require("./log"); } catch { log = { writeLog() {} }; }
 
-// Image extensions that Claude can read (multimodal)
+// Raster image extensions that consume multimodal tokens.
+// SVG and ICO are excluded — they're text-readable, not multimodal image input.
 const IMAGE_EXTENSIONS = new Set([
-  ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".ico", ".bmp", ".tiff", ".tif",
+  ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif",
 ]);
 
 /**

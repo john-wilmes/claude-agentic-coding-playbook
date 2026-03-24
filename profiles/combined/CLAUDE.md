@@ -52,7 +52,7 @@ Investigations live at `~/.claude/investigations/<id>/`. Use `/investigate` to m
 - Run `/compact` when context reaches ~70%. Use custom focus instructions (e.g., `/compact Focus on the API changes`).
 - Use subagents for exploration-heavy work to protect parent context size.
 - Delegate multi-file edits (3+ files) to subagents. Each Edit/Read returns file contents that consume parent context. A subagent editing 14 files keeps those results in its own context; the parent only sees the summary.
-- Never read multiple image files in the same turn -- use a subagent for bulk image examination.
+- Never read multiple image files in the same session -- use a subagent for bulk image examination.
 - Use `/rewind` or double-Escape to undo actions and roll back context.
 - The context-guard hook manages context warnings and session boundaries automatically.
 - SessionStart automatically injects memory and context at session start including Current Work and Next Steps from the previous session. No explicit skill invocation is needed — the injected context is sufficient for cold-start orientation.

@@ -21,7 +21,7 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { execSync } = require("child_process");
+const { execFileSync } = require("child_process");
 
 let log;
 try { log = require("./log"); } catch { log = { writeLog() {} }; }
@@ -39,7 +39,7 @@ const EXEMPT_BASENAMES = new Set([
 
 // Directory prefixes that are always exempt
 const EXEMPT_DIR_PATTERNS = [
-  ".claude/", ".git/", "node_modules/", "tests/fixtures/",
+  ".claude/", ".git/", "node_modules/", "tests/", "test/", "__tests__/",
 ];
 
 /**
@@ -81,18 +81,21 @@ function hasReference(basename, cwd) {
 
   try {
     // Use grep -rl for fast "exists" check. Exclude binary and common noise dirs.
-    const result = execSync(
-      `grep -rl --include='*.js' --include='*.ts' --include='*.tsx' --include='*.jsx' ` +
-      `--include='*.json' --include='*.md' --include='*.yaml' --include='*.yml' ` +
-      `--include='*.sh' --include='*.html' --include='*.css' --include='*.toml' ` +
-      `--exclude-dir=node_modules --exclude-dir=.git --exclude-dir=dist ` +
-      `-m 1 -- "${basename}" "${cwd}" 2>/dev/null`,
-      { encoding: "utf8", timeout: 5000 }
-    );
+    // execFileSync avoids shell injection via unsanitized basename.
+    const result = execFileSync("grep", [
+      "-rl",
+      "--include=*.js", "--include=*.ts", "--include=*.tsx", "--include=*.jsx",
+      "--include=*.json", "--include=*.md", "--include=*.yaml", "--include=*.yml",
+      "--include=*.sh", "--include=*.html", "--include=*.css", "--include=*.toml",
+      "--exclude-dir=node_modules", "--exclude-dir=.git", "--exclude-dir=dist",
+      "-m", "1", "--", basename, cwd,
+    ], { encoding: "utf8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] });
     return result.trim().length > 0;
-  } catch {
-    // grep exit 1 = no matches, timeout, or error — allow to avoid false blocks
-    return false;
+  } catch (err) {
+    // grep exit 1 = no matches found (expected, return false to trigger deny)
+    // Any other error (timeout, permission, etc.) — return true to avoid false blocks
+    if (err.status === 1) return false;
+    return true;
   }
 }
 
