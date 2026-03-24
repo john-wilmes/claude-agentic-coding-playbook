@@ -1007,6 +1007,131 @@ if [ -f "$SCRIPT_DIR/templates/hooks/sycophancy-detector.js" ]; then
   fi
 fi
 
+# Multi-image guard hook (PreToolUse Read -- blocks reading multiple images in one session)
+if [ -f "$SCRIPT_DIR/templates/hooks/multi-image-guard.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/multi-image-guard.js" "$CLAUDE_DIR/hooks/multi-image-guard.js" "multi-image guard: multi-image-guard.js"
+
+  echo ""
+  echo "--- Configuring multi-image-guard in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  MIG_CMD="node $CLAUDE_DIR/hooks/multi-image-guard.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add multi-image-guard PreToolUse hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    # PreToolUse entry: matcher=Read (only fires on Read tool).
+    node -e "
+      const fs = require('fs');
+      const path = require('path');
+      const settingsPath = path.resolve(process.argv[1]);
+      const hookCmd = process.argv[2];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.hooks) settings.hooks = {};
+      if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+      const exists = settings.hooks.PreToolUse.some(e =>
+        e.hooks && e.hooks.some(h => h.command && h.command.includes('multi-image-guard'))
+      );
+      if (!exists) {
+        settings.hooks.PreToolUse.push({
+          matcher: 'Read',
+          hooks: [{ type: 'command', command: hookCmd, timeout: 3 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+        console.log('CONFIGURED: multi-image-guard PreToolUse hook (matcher: Read)');
+      } else {
+        console.log('ALREADY CONFIGURED: multi-image-guard PreToolUse hook in settings.json');
+      }
+    " "$SETTINGS_FILE" "$MIG_CMD"
+  fi
+fi
+
+# Orphan file guard hook (PreToolUse Write -- blocks creating unreferenced files)
+if [ -f "$SCRIPT_DIR/templates/hooks/orphan-file-guard.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/orphan-file-guard.js" "$CLAUDE_DIR/hooks/orphan-file-guard.js" "orphan file guard: orphan-file-guard.js"
+
+  echo ""
+  echo "--- Configuring orphan-file-guard in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  OFG_CMD="node $CLAUDE_DIR/hooks/orphan-file-guard.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add orphan-file-guard PreToolUse hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    # PreToolUse entry: matcher=Write (only fires on Write tool).
+    node -e "
+      const fs = require('fs');
+      const path = require('path');
+      const settingsPath = path.resolve(process.argv[1]);
+      const hookCmd = process.argv[2];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.hooks) settings.hooks = {};
+      if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+      const exists = settings.hooks.PreToolUse.some(e =>
+        e.hooks && e.hooks.some(h => h.command && h.command.includes('orphan-file-guard'))
+      );
+      if (!exists) {
+        settings.hooks.PreToolUse.push({
+          matcher: 'Write',
+          hooks: [{ type: 'command', command: hookCmd, timeout: 8 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+        console.log('CONFIGURED: orphan-file-guard PreToolUse hook (matcher: Write)');
+      } else {
+        console.log('ALREADY CONFIGURED: orphan-file-guard PreToolUse hook in settings.json');
+      }
+    " "$SETTINGS_FILE" "$OFG_CMD"
+  fi
+fi
+
+# MCP server guard hook (PreToolUse all -- warns when project MCP servers are enabled globally)
+if [ -f "$SCRIPT_DIR/templates/hooks/mcp-server-guard.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/mcp-server-guard.js" "$CLAUDE_DIR/hooks/mcp-server-guard.js" "MCP server guard: mcp-server-guard.js"
+
+  echo ""
+  echo "--- Configuring mcp-server-guard in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  MSG_CMD="node $CLAUDE_DIR/hooks/mcp-server-guard.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add mcp-server-guard PreToolUse hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    # PreToolUse entry: no matcher (fires once per session on first tool call).
+    node -e "
+      const fs = require('fs');
+      const path = require('path');
+      const settingsPath = path.resolve(process.argv[1]);
+      const hookCmd = process.argv[2];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.hooks) settings.hooks = {};
+      if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+      const exists = settings.hooks.PreToolUse.some(e =>
+        e.hooks && e.hooks.some(h => h.command && h.command.includes('mcp-server-guard'))
+      );
+      if (!exists) {
+        settings.hooks.PreToolUse.push({
+          hooks: [{ type: 'command', command: hookCmd, timeout: 3 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+        console.log('CONFIGURED: mcp-server-guard PreToolUse hook (no matcher, all tools)');
+      } else {
+        console.log('ALREADY CONFIGURED: mcp-server-guard PreToolUse hook in settings.json');
+      }
+    " "$SETTINGS_FILE" "$MSG_CMD"
+  fi
+fi
+
 # Pre-compact snapshot hook (PreCompact -- saves emergency MEMORY.md snapshot before compaction)
 if [ -f "$SCRIPT_DIR/templates/hooks/pre-compact.js" ]; then
   install_file "$SCRIPT_DIR/templates/hooks/pre-compact.js" "$CLAUDE_DIR/hooks/pre-compact.js" "pre-compact hook: pre-compact.js"
