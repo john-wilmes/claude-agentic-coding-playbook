@@ -915,6 +915,52 @@ if [ -f "$SCRIPT_DIR/templates/hooks/context-guard.js" ]; then
   fi
 fi
 
+# Checkpoint gate hook (PreToolUse all tools -- blocks tool calls after checkpoint/context-critical)
+if [ -f "$SCRIPT_DIR/templates/hooks/checkpoint-gate.js" ]; then
+  install_file "$SCRIPT_DIR/templates/hooks/checkpoint-gate.js" "$CLAUDE_DIR/hooks/checkpoint-gate.js" "checkpoint gate: checkpoint-gate.js"
+
+  echo ""
+  echo "--- Configuring checkpoint-gate in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  CKGATE_CMD="node $CLAUDE_DIR/hooks/checkpoint-gate.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add checkpoint-gate PreToolUse hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    # PreToolUse entry: no matcher (fires on ALL tools).
+    node -e "
+      const fs = require('fs');
+      const path = require('path');
+      const settingsPath = path.resolve(process.argv[1]);
+      const hookCmd = process.argv[2];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.hooks) settings.hooks = {};
+      if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+      // Check if a no-matcher checkpoint-gate entry already exists
+      const hasNoMatcher = settings.hooks.PreToolUse.some(e =>
+        !e.matcher && e.hooks && e.hooks.some(h => h.command && h.command.includes('checkpoint-gate'))
+      );
+      if (!hasNoMatcher) {
+        // Remove any old matcher-constrained checkpoint-gate entries
+        settings.hooks.PreToolUse = settings.hooks.PreToolUse.filter(e =>
+          !(e.hooks && e.hooks.some(h => h.command && h.command.includes('checkpoint-gate')))
+        );
+        settings.hooks.PreToolUse.push({
+          hooks: [{ type: 'command', command: hookCmd, timeout: 5 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+        console.log('CONFIGURED: checkpoint-gate PreToolUse hook (no matcher, all tools)');
+      } else {
+        console.log('ALREADY CONFIGURED: checkpoint-gate PreToolUse hook in settings.json');
+      }
+    " "$SETTINGS_FILE" "$CKGATE_CMD"
+  fi
+fi
+
 # Sycophancy detector hook (PostToolUse all tools -- detects sycophantic patterns)
 if [ -f "$SCRIPT_DIR/templates/hooks/sycophancy-detector.js" ]; then
   install_file "$SCRIPT_DIR/templates/hooks/sycophancy-detector.js" "$CLAUDE_DIR/hooks/sycophancy-detector.js" "sycophancy detector: sycophancy-detector.js"

@@ -73,6 +73,21 @@ const DESTRUCTIVE_PATTERNS = [
     test(cmd) { return /\bDROP\s+(TABLE|DATABASE|SCHEMA)\b/i.test(cmd); },
     reason: "Destructive command: DROP TABLE/DATABASE/SCHEMA detected",
   },
+  // git commit/push --no-verify: bypasses safety hooks
+  {
+    test(cmd) { return /git\s+(commit|push)\s+.*--no-verify/i.test(cmd); },
+    reason: "Git discipline: --no-verify bypasses safety hooks and is not allowed",
+  },
+  // git commit --amend: requires explicit human approval
+  {
+    test(cmd) { return /git\s+commit\s+.*--amend/i.test(cmd); },
+    reason: "Git discipline: amending commits requires explicit human approval — create a new commit instead",
+  },
+  // gh repo create --public: repos must be private by default
+  {
+    test(cmd) { return /gh\s+repo\s+create\s+.*--public/i.test(cmd); },
+    reason: "Security: repos must be created with --private by default",
+  },
 ];
 
 let log;

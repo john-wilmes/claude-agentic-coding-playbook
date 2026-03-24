@@ -332,6 +332,56 @@ test("C8. python3 -c 'open(~/.kube/config)' -> block", (env) => {
   assert.strictEqual(result.json.hookSpecificOutput.permissionDecision, "deny");
 });
 
+// ─── Git discipline and security pattern tests ───────────────────────────────
+
+console.log("\nprompt-injection-guard.js (git discipline + security patterns):");
+
+test("G1. git commit --no-verify -> block", (env) => {
+  const result = runGuard('git commit --no-verify -m "skip hooks"', env);
+  assert.strictEqual(result.status, 0);
+  assert.strictEqual(result.json.hookSpecificOutput.permissionDecision, "deny");
+  assert.ok(result.json.hookSpecificOutput.permissionDecisionReason.includes("--no-verify"), `Reason was: ${result.json.hookSpecificOutput.permissionDecisionReason}`);
+});
+
+test("G2. git push --no-verify -> block", (env) => {
+  const result = runGuard("git push --no-verify origin main", env);
+  assert.strictEqual(result.status, 0);
+  assert.strictEqual(result.json.hookSpecificOutput.permissionDecision, "deny");
+  assert.ok(result.json.hookSpecificOutput.permissionDecisionReason.includes("--no-verify"), `Reason was: ${result.json.hookSpecificOutput.permissionDecisionReason}`);
+});
+
+test("G3. git commit --amend -> block", (env) => {
+  const result = runGuard('git commit --amend -m "updated message"', env);
+  assert.strictEqual(result.status, 0);
+  assert.strictEqual(result.json.hookSpecificOutput.permissionDecision, "deny");
+  assert.ok(result.json.hookSpecificOutput.permissionDecisionReason.includes("amend"), `Reason was: ${result.json.hookSpecificOutput.permissionDecisionReason}`);
+});
+
+test("G4. git commit -m 'msg' (no --amend) -> allow (no false positive)", (env) => {
+  const result = runGuard('git commit -m "add new feature"', env);
+  assert.strictEqual(result.status, 0);
+  assert.strictEqual(result.json.decision, undefined, "Plain git commit should be allowed");
+});
+
+test("G5. gh repo create myrepo --public -> block", (env) => {
+  const result = runGuard("gh repo create myrepo --public", env);
+  assert.strictEqual(result.status, 0);
+  assert.strictEqual(result.json.hookSpecificOutput.permissionDecision, "deny");
+  assert.ok(result.json.hookSpecificOutput.permissionDecisionReason.includes("--private"), `Reason was: ${result.json.hookSpecificOutput.permissionDecisionReason}`);
+});
+
+test("G6. gh repo create myrepo --private -> allow (no false positive)", (env) => {
+  const result = runGuard("gh repo create myrepo --private", env);
+  assert.strictEqual(result.status, 0);
+  assert.strictEqual(result.json.decision, undefined, "Private repo creation should be allowed");
+});
+
+test("G7. gh repo create myrepo (no visibility flag) -> allow", (env) => {
+  const result = runGuard("gh repo create myrepo", env);
+  assert.strictEqual(result.status, 0);
+  assert.strictEqual(result.json.decision, undefined, "Repo creation without visibility flag should be allowed");
+});
+
 // ─── Unit tests (checkCommand exported function) ──────────────────────────────
 
 console.log("\nprompt-injection-guard.js (checkCommand unit tests):");
