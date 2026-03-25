@@ -17,7 +17,7 @@
       "disabled": true
     },
     "env_required": ["DATADOG_API_KEY", "DATADOG_APP_KEY"],
-    "notes": "Official remote MCP also available at docs.datadoghq.com"
+    "notes": "Generic public server. On this machine, use the PHI-sanitizing custom server instead: PROJECTS/core/datadog-sanitizer/server.py via ~/.mcp/datadog-launch.sh (registered in ~/.claude.json). Strips PHI keys and redacts emails/phones/SSNs before output."
   },
   "snowflake": {
     "description": "Data warehouse queries and schema inspection",
@@ -182,7 +182,7 @@
       "disabled": true
     },
     "env_required": [],
-    "notes": "OAuth flow on first use. Official ClickUp MCP (Public Beta)."
+    "notes": "Generic OAuth server (Public Beta). On this machine, use the custom server instead: PROJECTS/core/clickup-mcp/server.js via ~/.mcp/clickup-launch.sh (registered in ~/.claude.json). Token stored in Keychain under service clickup-api."
   },
   "mongodb": {
     "description": "MongoDB queries and collection inspection",
@@ -192,7 +192,7 @@
       "disabled": true
     },
     "env_required": ["MDB_MCP_CONNECTION_STRING"],
-    "notes": "Read-only mode prevents mutations. Requires MongoDB connection string."
+    "notes": "Generic public server. On this machine, use the PHI-sanitizing custom server instead: PROJECTS/core/mongodb-sanitizer/server.js via ~/.mcp/mongodb-launch.sh (registered in ~/.claude.json). Read-only, strips PHI fields, 30s timeout. Credentials in Keychain under service itf-mongodb-mcp."
   },
   "presidio": {
     "description": "On-demand PII/PHI detection and anonymization",
