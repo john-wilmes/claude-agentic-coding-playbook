@@ -213,7 +213,8 @@ if [[ "${NO_LOG}" -eq 0 ]]; then
   mkdir -p "${LOG_DIR}"
 
   python3 -c "
-import json, sys, datetime
+import json, sys
+from datetime import datetime, timezone
 
 model       = sys.argv[1]
 prompt      = sys.argv[2]
@@ -238,7 +239,7 @@ for prefix, rates in COSTS.items():
 cost_usd = (in_tok / 1_000_000) * in_cost_per_m + (out_tok / 1_000_000) * out_cost_per_m
 
 record = {
-    'ts':           datetime.datetime.utcnow().isoformat() + 'Z',
+    'ts':           datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
     'model':        model,
     'prompt_head':  prompt[:100],
     'input_tokens': in_tok,

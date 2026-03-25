@@ -163,10 +163,11 @@ log_event() {
   local json
   # Build JSON manually; python3 is used to ensure proper escaping.
   json="$(python3 - "${pairs[@]}" <<'PYEOF'
-import json, sys, datetime
+import json, sys
+from datetime import datetime, timezone
 
 pairs = sys.argv[1:]
-record = {"ts": datetime.datetime.utcnow().isoformat() + "Z"}
+record = {"ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")}
 for pair in pairs:
     if "=" in pair:
         key, _, val = pair.partition("=")

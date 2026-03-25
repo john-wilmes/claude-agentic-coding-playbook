@@ -799,11 +799,12 @@ t_report_task_queue_section() {
 
   # Write log entries simulating a 3-task run: one done, one failed, one pending
   python3 - "${logfile}" <<'PYEOF'
-import json, sys, datetime
+import json, sys
+from datetime import datetime, timezone
 
 logfile = sys.argv[1]
 def entry(**kw):
-    kw["ts"] = datetime.datetime.utcnow().isoformat() + "Z"
+    kw["ts"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     return json.dumps(kw)
 
 lines = [
@@ -848,11 +849,12 @@ t_report_no_task_queue_section() {
 
   # Write log entries for an interactive (no task queue) run — empty task fields
   python3 - "${logfile}" <<'PYEOF'
-import json, sys, datetime
+import json, sys
+from datetime import datetime, timezone
 
 logfile = sys.argv[1]
 def entry(**kw):
-    kw["ts"] = datetime.datetime.utcnow().isoformat() + "Z"
+    kw["ts"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     return json.dumps(kw)
 
 lines = [
