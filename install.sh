@@ -399,6 +399,11 @@ install_symlink() {
     esac
   else
     mkdir -p "$(dirname "$dest")"
+    # Remove existing file/symlink before creating new symlink to prevent
+    # ln -sf from creating the symlink *inside* the destination if it's a directory.
+    if [[ -L "$dest" ]] || [[ -f "$dest" ]]; then
+      rm -f "$dest"
+    fi
     ln -sf "$src" "$dest"
     echo "INSTALLED: $label -> $dest (symlink)"
   fi

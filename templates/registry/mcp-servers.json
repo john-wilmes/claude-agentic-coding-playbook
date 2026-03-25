@@ -17,7 +17,7 @@
       "disabled": true
     },
     "env_required": ["DATADOG_API_KEY", "DATADOG_APP_KEY"],
-    "notes": "Generic public server. On this machine, use the PHI-sanitizing custom server instead: PROJECTS/core/datadog-sanitizer/server.py via ~/.mcp/datadog-launch.sh (registered in ~/.claude.json). Strips PHI keys and redacts emails/phones/SSNs before output."
+    "notes": "Generic public server. For PHI-sanitizing use, build a custom wrapper (e.g. /path/to/datadog-sanitizer/server.py) launched via /path/to/datadog-launch.sh and register it in ~/.claude.json. A custom server can strip PHI keys and redact emails/phones/SSNs before output."
   },
   "snowflake": {
     "description": "Data warehouse queries and schema inspection",
@@ -158,11 +158,11 @@
     "description": "Multi-repo fleet index — search, manifests, dependency topology",
     "config": {
       "command": "node",
-      "args": ["~/.claude/mcp/fleet-index-server.js"],
+      "args": ["/path/to/.claude/mcp/fleet-index-server.js"],
       "disabled": false
     },
     "env_required": [],
-    "notes": "Reads pre-built manifests from ~/.claude/fleet/. Run 'repo-fleet-index --build' first. Always enabled when fleet is indexed."
+    "notes": "Reads pre-built manifests from ~/.claude/fleet/. Run 'repo-fleet-index --build' first. Always enabled when fleet is indexed. Update the args path to point to your installed fleet-index-server.js."
   },
   "zendesk": {
     "description": "Zendesk tickets, users, organizations",
@@ -182,7 +182,7 @@
       "disabled": true
     },
     "env_required": [],
-    "notes": "Generic OAuth server (Public Beta). On this machine, use the custom server instead: PROJECTS/core/clickup-mcp/server.js via ~/.mcp/clickup-launch.sh (registered in ~/.claude.json). Token stored in Keychain under service clickup-api."
+    "notes": "Generic OAuth server (Public Beta). For a custom integration, build a wrapper (e.g. /path/to/clickup-mcp/server.js) launched via /path/to/clickup-launch.sh and register it in ~/.claude.json. Store the API token in your system keychain under a service name of your choice."
   },
   "mongodb": {
     "description": "MongoDB queries and collection inspection",
@@ -192,7 +192,7 @@
       "disabled": true
     },
     "env_required": ["MDB_MCP_CONNECTION_STRING"],
-    "notes": "Generic public server. On this machine, use the PHI-sanitizing custom server instead: PROJECTS/core/mongodb-sanitizer/server.js via ~/.mcp/mongodb-launch.sh (registered in ~/.claude.json). Read-only, strips PHI fields, 30s timeout. Credentials in Keychain under service itf-mongodb-mcp."
+    "notes": "Generic public server. For PHI-sanitizing use, build a custom wrapper (e.g. /path/to/mongodb-sanitizer/server.js) launched via /path/to/mongodb-launch.sh and register it in ~/.claude.json. A custom server can enforce read-only mode, strip PHI fields, and add a 30s timeout. Store credentials in your system keychain under a service name of your choice."
   },
   "presidio": {
     "description": "On-demand PII/PHI detection and anonymization",

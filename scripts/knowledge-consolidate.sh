@@ -92,7 +92,8 @@ fi
 
 GROUPS_JSON="$(node -e "
 const fs = require('fs');
-const lines = fs.readFileSync('${JSONL_TMP}', 'utf8').split('\n').filter(Boolean);
+const jsonlPath = process.argv[2];
+const lines = fs.readFileSync(jsonlPath, 'utf8').split('\n').filter(Boolean);
 const groups = {};
 for (const line of lines) {
   try {
@@ -103,7 +104,7 @@ for (const line of lines) {
   } catch {}
 }
 process.stdout.write(JSON.stringify(groups));
-")"
+" -- "${JSONL_TMP}")"
 
 log "Grouped into $(echo "${GROUPS_JSON}" | node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); process.stdout.write(String(Object.keys(d).length));") tool categories"
 
@@ -126,10 +127,11 @@ process.stdout.write(Object.keys(d).join('\n'));
 
 while IFS= read -r tool; do
   # Get entries for this tool
-  ENTRIES_JSON="$(echo "${GROUPS_JSON}" | node -e "
-const d = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
-process.stdout.write(JSON.stringify(d[$(node -e "process.stdout.write(JSON.stringify('${tool//\'/\\'}')")] || []));
-  ")"
+  ENTRIES_JSON="$(node -e "
+const d = JSON.parse(process.argv[2]);
+const tool = process.argv[3];
+process.stdout.write(JSON.stringify(d[tool] || []));
+" -- "${GROUPS_JSON}" "${tool}")"
 
   COUNT="$(echo "${ENTRIES_JSON}" | node -e "
 const arr = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));

@@ -202,7 +202,8 @@ function autoPromoteStagedCandidates(db, sessionId) {
       db.prepare(`DELETE FROM staged_candidates WHERE id IN (${placeholders})`).run(...promotedIds);
     }
     return promoted;
-  } catch {
+  } catch (e) {
+    process.stderr.write(`[session-end] auto-promote error: ${e && e.message}\n`);
     return 0;
   }
 }
@@ -217,6 +218,11 @@ function logEntry(msg) {
       fs.appendFileSync(LOG_FILE, line);
     }
   } catch {}
+}
+
+// Export helpers for unit testing (guarded so this file still works as a hook)
+if (typeof module !== "undefined") {
+  module.exports = { _mapStagedToEntry, _generateEntryId };
 }
 
 let input = "";
@@ -315,7 +321,9 @@ process.stdin.on("end", () => {
           if (promoted > 0) logEntry(`knowledge auto-promote: ${promoted} candidate(s) promoted`);
           promoteDb.close();
         }
-      } catch {}
+      } catch (e) {
+        process.stderr.write(`[session-end] auto-promote error: ${e && e.message}\n`);
+      }
     }
 
     // Run stale archive once per day
