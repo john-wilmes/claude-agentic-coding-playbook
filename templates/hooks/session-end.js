@@ -125,6 +125,88 @@ function detectRetrievalMisses(sessionId, cwd) {
   }
 }
 
+// ─── Auto-promote staged candidates ──────────────────────────────────────────
+
+function _generateEntryId(title) {
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, "")
+    .replace(/\s+/g, "-")
+    .slice(0, 40)
+    .replace(/-+$/, "");
+  return `${date}-${slug}`;
+}
+
+function _mapStagedToEntry(row) {
+  const summary = (row.summary || "").trim();
+  const snippet = (row.context_snippet || "").trim();
+  if (!summary && !snippet) return null;
+  if (!snippet) return null;
+  const title = summary ? summary.slice(0, 120) : snippet.slice(0, 120);
+  let body = snippet;
+  if (row.trigger) body = `Trigger: ${row.trigger}. ${body}`;
+  const tags = [];
+  if (row.category && row.category.trim()) tags.push(row.category.trim());
+  if (row.trigger && row.trigger.trim()) {
+    const t = row.trigger.trim();
+    if (!tags.includes(t)) tags.push(t);
+  }
+  if (row.confidence && row.confidence.trim() && row.confidence.trim() !== "medium") {
+    tags.push(row.confidence.trim());
+  }
+  return { title, body, tags, project: row.source_project || "", source: row.cwd || "", tool: row.tool || "", category: row.category || "pattern", confidence: row.confidence || "medium" };
+}
+
+function autoPromoteStagedCandidates(db, sessionId) {
+  try {
+    if (!db || !knowledgeDb) return 0;
+    const candidates = knowledgeDb.readStagedCandidates(db, sessionId);
+    if (!candidates || candidates.length === 0) return 0;
+    const existingTitles = new Set(
+      db.prepare("SELECT context_text FROM entries WHERE status = 'active'").all()
+        .map(r => (r.context_text || "").split("\n")[0])
+        .filter(Boolean)
+    );
+    let promoted = 0;
+    const promotedIds = [];
+    for (const row of candidates) {
+      const mapped = _mapStagedToEntry(row);
+      if (!mapped) continue;
+      const firstLine = mapped.title.split("\n")[0];
+      if (existingTitles.has(firstLine)) continue;
+      existingTitles.add(firstLine);
+      let id = _generateEntryId(mapped.title);
+      let suffix = 1;
+      while (db.prepare("SELECT id FROM entries WHERE id = ?").get(id)) {
+        id = `${_generateEntryId(mapped.title)}-${suffix++}`;
+      }
+      knowledgeDb.insertEntry(db, {
+        id,
+        created: new Date().toISOString(),
+        source_project: mapped.project,
+        tool: mapped.tool,
+        category: mapped.category,
+        tags: JSON.stringify(mapped.tags),
+        confidence: mapped.confidence,
+        visibility: "global",
+        status: "active",
+        context_text: `${mapped.title}\n\n${mapped.body}`,
+        evidence_text: mapped.source,
+      });
+      promotedIds.push(row.id);
+      promoted++;
+    }
+    if (promotedIds.length > 0) {
+      const placeholders = promotedIds.map(() => "?").join(", ");
+      db.prepare(`DELETE FROM staged_candidates WHERE id IN (${placeholders})`).run(...promotedIds);
+    }
+    return promoted;
+  } catch {
+    return 0;
+  }
+}
+
 function logEntry(msg) {
   try {
     if (logModule) {
@@ -222,6 +304,18 @@ process.stdin.on("end", () => {
     if (capture) {
       try { detectRetrievalMisses(sessionId, cwd); } catch {}
       try { capture.pruneStagedFiles(7); } catch {}
+    }
+
+    // Auto-promote staged knowledge candidates to entries
+    if (knowledgeDb) {
+      try {
+        const promoteDb = knowledgeDb.openDb();
+        if (promoteDb) {
+          const promoted = autoPromoteStagedCandidates(promoteDb, sessionId);
+          if (promoted > 0) logEntry(`knowledge auto-promote: ${promoted} candidate(s) promoted`);
+          promoteDb.close();
+        }
+      } catch {}
     }
 
     // Run stale archive once per day
