@@ -170,36 +170,43 @@ function autoPromoteStagedCandidates(db, sessionId) {
     );
     let promoted = 0;
     const promotedIds = [];
-    for (const row of candidates) {
-      const mapped = _mapStagedToEntry(row);
-      if (!mapped) continue;
-      const firstLine = mapped.title.split("\n")[0];
-      if (existingTitles.has(firstLine)) continue;
-      existingTitles.add(firstLine);
-      let id = _generateEntryId(mapped.title);
-      let suffix = 1;
-      while (db.prepare("SELECT id FROM entries WHERE id = ?").get(id)) {
-        id = `${_generateEntryId(mapped.title)}-${suffix++}`;
+    db.exec("BEGIN");
+    try {
+      for (const row of candidates) {
+        const mapped = _mapStagedToEntry(row);
+        if (!mapped) continue;
+        const firstLine = mapped.title.split("\n")[0];
+        if (existingTitles.has(firstLine)) continue;
+        existingTitles.add(firstLine);
+        let id = _generateEntryId(mapped.title);
+        let suffix = 1;
+        while (db.prepare("SELECT id FROM entries WHERE id = ?").get(id)) {
+          id = `${_generateEntryId(mapped.title)}-${suffix++}`;
+        }
+        knowledgeDb.insertEntry(db, {
+          id,
+          created: new Date().toISOString(),
+          source_project: mapped.project,
+          tool: mapped.tool,
+          category: mapped.category,
+          tags: JSON.stringify(mapped.tags),
+          confidence: mapped.confidence,
+          visibility: "global",
+          status: "active",
+          context_text: `${mapped.title}\n\n${mapped.body}`,
+          evidence_text: mapped.source,
+        });
+        promotedIds.push(row.id);
+        promoted++;
       }
-      knowledgeDb.insertEntry(db, {
-        id,
-        created: new Date().toISOString(),
-        source_project: mapped.project,
-        tool: mapped.tool,
-        category: mapped.category,
-        tags: JSON.stringify(mapped.tags),
-        confidence: mapped.confidence,
-        visibility: "global",
-        status: "active",
-        context_text: `${mapped.title}\n\n${mapped.body}`,
-        evidence_text: mapped.source,
-      });
-      promotedIds.push(row.id);
-      promoted++;
-    }
-    if (promotedIds.length > 0) {
-      const placeholders = promotedIds.map(() => "?").join(", ");
-      db.prepare(`DELETE FROM staged_candidates WHERE id IN (${placeholders})`).run(...promotedIds);
+      if (promotedIds.length > 0) {
+        const placeholders = promotedIds.map(() => "?").join(", ");
+        db.prepare(`DELETE FROM staged_candidates WHERE id IN (${placeholders})`).run(...promotedIds);
+      }
+      db.exec("COMMIT");
+    } catch (txErr) {
+      try { db.exec("ROLLBACK"); } catch {}
+      throw txErr;
     }
     return promoted;
   } catch (e) {

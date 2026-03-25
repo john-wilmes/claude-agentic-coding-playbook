@@ -157,7 +157,7 @@ for (const e of arr) {
 process.stdout.write(out);
   ")"
 
-  PROMPT="You are reviewing knowledge base entries for the tool '${tool}'. Identify pairs of entries that have HIGH overlap (>60% similar content) and could be merged or where one supersedes the other. For each high-overlap pair, output a line in this exact format:
+  PROMPT="You are reviewing knowledge base entries for the tool '${tool}'. Identify pairs of entries that have HIGH overlap (>60% similar content) and could be merged or where one supersedes the other. For each high-overlap pair, output a line in this exact format — id1 is the entry to KEEP, id2 is the entry to ARCHIVE:
 OVERLAP: <id1> <id2> REASON: <one sentence>
 If no high-overlap pairs exist, output: NO_OVERLAP
 
