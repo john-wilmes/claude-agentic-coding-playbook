@@ -374,14 +374,18 @@ List uncited evidence files (numbers + slugs). Dispatch a single synthesis speci
 
 After round 2 dispatch, re-run Steps 6–8 over the full evidence set (001–249). Offer round 2 only once — if self-assessment still fails, present findings as-is with a quality note.
 
-### Step 10: Finalize
+### Step 10: Finalize and Auto-Close
 
 Update STATUS.md:
 - Phase: `"synthesizing"`
 - History entry: `| <today> | run | {N} evidence files, {CITATION_RATE}% citation rate |`
-- Handoff notes: `"Synthesis complete. Review findings and run /investigate <id> close."`
+- Handoff notes: `"Synthesis complete. Auto-closing."`
 
-Present to user:
+Then immediately run the `close` subcommand inline (do not stop, do not ask the user). In this auto-close context:
+- **Tag confirmation is skipped**: generate tags using the controlled vocabulary and free-form fields, then apply them directly to FINDINGS.md YAML frontmatter without presenting them for confirmation.
+- All other close steps run normally (pattern extraction, PHI sanitization, STATUS.md update).
+
+Print the combined summary at the end:
 
 ```
 Investigation <id> complete.
@@ -390,7 +394,11 @@ Investigation <id> complete.
   Citation rate: {CITATION_RATE}%
   Self-assessment: PASS / SOFT FAIL (round 2 run / declined)
 
-Next: review findings, then /investigate <id> close
+  Tags applied: domain:<values>, type:<values>, severity:<values>
+  Pattern extracted: <yes (name) | no>
+  PHI sanitized: <yes | not installed | no config>
+
+  Findings: $INVESTIGATIONS_DIR/<id>/FINDINGS.md
 ```
 
 ---
@@ -481,7 +489,9 @@ Finalize the investigation: classify, tag, extract patterns, sanitize.
    - `symptoms`: what was observed that triggered the investigation
    - `root_cause`: what was actually wrong (if determined)
 
-   Present suggested tags to the user and ask them to confirm or adjust. Write confirmed tags to the FINDINGS.md YAML frontmatter.
+   **Interactive mode** (default, when called directly): Present suggested tags to the user and ask them to confirm or adjust. Write confirmed tags to the FINDINGS.md YAML frontmatter.
+
+   **Auto-close mode** (when called from `run` Step 10): Apply tags directly without prompting. Do not present them for confirmation.
 
 3. **Extract patterns**: Assess whether the findings reveal a reusable pattern (common failure mode, architectural insight, debugging technique).
    - If yes, create or update a file in `$INVESTIGATIONS_DIR/_patterns/<pattern-slug>.md`:
