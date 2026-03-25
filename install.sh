@@ -390,6 +390,7 @@ install_symlink() {
     read -r -p "  [s]kip, [o]verwrite? " choice
     case $choice in
       o|O)
+        [ -d "$dest" ] && rm -rf "$dest"
         ln -sf "$src" "$dest"
         echo "  -> Symlinked (overwritten)."
         ;;
@@ -401,6 +402,10 @@ install_symlink() {
     mkdir -p "$(dirname "$dest")"
     # Remove existing file/symlink before creating new symlink to prevent
     # ln -sf from creating the symlink *inside* the destination if it's a directory.
+    if [[ -d "$dest" ]] && [[ ! -L "$dest" ]]; then
+      echo "WARNING: $dest is a directory — skipping to avoid data loss. Remove manually and re-run."
+      return
+    fi
     if [[ -L "$dest" ]] || [[ -f "$dest" ]]; then
       rm -f "$dest"
     fi

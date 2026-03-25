@@ -141,7 +141,6 @@ function _generateEntryId(title) {
 function _mapStagedToEntry(row) {
   const summary = (row.summary || "").trim();
   const snippet = (row.context_snippet || "").trim();
-  if (!summary && !snippet) return null;
   if (!snippet) return null;
   const title = summary ? summary.slice(0, 120) : snippet.slice(0, 120);
   let body = snippet;
