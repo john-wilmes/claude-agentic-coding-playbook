@@ -97,7 +97,7 @@ do_uninstall() {
     [ -f "$src" ] || continue
     hook_name=$(basename "$src")
     dest="$CLAUDE_DIR/hooks/$hook_name"
-    if [ -f "$dest" ]; then
+    if [ -f "$dest" ] || [ -L "$dest" ]; then
       rm -f "$dest"
       echo "REMOVED: $dest"
     fi
@@ -371,6 +371,39 @@ install_file() {
   fi
 }
 
+install_symlink() {
+  local src="$1"
+  local dest="$2"
+  local label="$3"
+
+  if [ "$DRY_RUN" = true ]; then
+    if [ -e "$dest" ] || [ -L "$dest" ]; then
+      echo "[DRY RUN] CONFLICT: $label -> $dest (exists)"
+    else
+      echo "[DRY RUN] SYMLINK:  $label -> $dest"
+    fi
+    return
+  fi
+
+  if ([ -e "$dest" ] || [ -L "$dest" ]) && [ "$FORCE" != true ]; then
+    echo "EXISTS: $dest"
+    read -r -p "  [s]kip, [o]verwrite? " choice
+    case $choice in
+      o|O)
+        ln -sf "$src" "$dest"
+        echo "  -> Symlinked (overwritten)."
+        ;;
+      *)
+        echo "  -> Skipped."
+        ;;
+    esac
+  else
+    mkdir -p "$(dirname "$dest")"
+    ln -sf "$src" "$dest"
+    echo "INSTALLED: $label -> $dest (symlink)"
+  fi
+}
+
 copy_skill_subdirs() {
   local skill_name="$1"
   local dest_dir="$2"
@@ -571,28 +604,28 @@ fi
 
 # Shared logging module (installed first; hooks require it)
 if [ -f "$SCRIPT_DIR/templates/hooks/log.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/log.js" "$CLAUDE_DIR/hooks/log.js" "shared logging module: log.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/log.js" "$CLAUDE_DIR/hooks/log.js" "shared logging module: log.js"
 fi
 
 # BM25 search module (installed before knowledge-db which depends on it)
 if [ -f "$SCRIPT_DIR/templates/hooks/bm25.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/bm25.js" "$CLAUDE_DIR/hooks/bm25.js" "bm25 search module: bm25.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/bm25.js" "$CLAUDE_DIR/hooks/bm25.js" "bm25 search module: bm25.js"
 fi
 
 # Knowledge database module (installed before hooks that depend on it)
 if [ -f "$SCRIPT_DIR/templates/hooks/knowledge-db.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/knowledge-db.js" "$CLAUDE_DIR/hooks/knowledge-db.js" "knowledge database module: knowledge-db.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/knowledge-db.js" "$CLAUDE_DIR/hooks/knowledge-db.js" "knowledge database module: knowledge-db.js"
 fi
 
 # Knowledge capture module (installed before hooks that depend on it)
 if [ -f "$SCRIPT_DIR/templates/hooks/knowledge-capture.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/knowledge-capture.js" "$CLAUDE_DIR/hooks/knowledge-capture.js" "knowledge capture module: knowledge-capture.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/knowledge-capture.js" "$CLAUDE_DIR/hooks/knowledge-capture.js" "knowledge capture module: knowledge-capture.js"
 fi
 
 for hook_file in "$SCRIPT_DIR/templates/hooks"/session-*.js; do
   [ -f "$hook_file" ] || continue
   hook_name=$(basename "$hook_file")
-  install_file "$hook_file" "$CLAUDE_DIR/hooks/$hook_name" "session hook: $hook_name"
+  install_symlink "$hook_file" "$CLAUDE_DIR/hooks/$hook_name" "session hook: $hook_name"
 
   # Register session hooks in settings.json
   # Derive hook event from filename: session-start.js -> SessionStart
@@ -635,7 +668,7 @@ done
 
 # Model router hook (PreToolUse -- auto-selects model for Task tool calls)
 if [ -f "$SCRIPT_DIR/templates/hooks/model-router.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/model-router.js" "$CLAUDE_DIR/hooks/model-router.js" "model router hook: model-router.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/model-router.js" "$CLAUDE_DIR/hooks/model-router.js" "model router hook: model-router.js"
 
   # Merge PreToolUse hook entry into settings.json
   echo ""
@@ -678,7 +711,7 @@ fi
 
 # Prompt injection guard hook (PreToolUse -- blocks high-confidence injection patterns in Bash)
 if [ -f "$SCRIPT_DIR/templates/hooks/prompt-injection-guard.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/prompt-injection-guard.js" "$CLAUDE_DIR/hooks/prompt-injection-guard.js" "prompt injection guard: prompt-injection-guard.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/prompt-injection-guard.js" "$CLAUDE_DIR/hooks/prompt-injection-guard.js" "prompt injection guard: prompt-injection-guard.js"
 
   # Merge PreToolUse hook entry into settings.json
   echo ""
@@ -717,7 +750,7 @@ fi
 
 # PR review guard hook (PreToolUse -- blocks gh pr merge until CodeRabbit has reviewed)
 if [ -f "$SCRIPT_DIR/templates/hooks/pr-review-guard.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/pr-review-guard.js" "$CLAUDE_DIR/hooks/pr-review-guard.js" "pr review guard: pr-review-guard.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/pr-review-guard.js" "$CLAUDE_DIR/hooks/pr-review-guard.js" "pr review guard: pr-review-guard.js"
 
   # Merge PreToolUse hook entry into settings.json
   echo ""
@@ -756,7 +789,7 @@ fi
 
 # Post-tool verify hook (PostToolUse -- auto-runs tests after Edit/Write on code files)
 if [ -f "$SCRIPT_DIR/templates/hooks/post-tool-verify.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/post-tool-verify.js" "$CLAUDE_DIR/hooks/post-tool-verify.js" "post-tool verify: post-tool-verify.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/post-tool-verify.js" "$CLAUDE_DIR/hooks/post-tool-verify.js" "post-tool verify: post-tool-verify.js"
 
   # Merge PostToolUse hook entries into settings.json
   echo ""
@@ -799,7 +832,7 @@ fi
 
 # MEMORY.md size guard hook (PostToolUse -- enforces line limit on MEMORY.md writes)
 if [ -f "$SCRIPT_DIR/templates/hooks/md-size-guard.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/md-size-guard.js" "$CLAUDE_DIR/hooks/md-size-guard.js" "md size guard: md-size-guard.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/md-size-guard.js" "$CLAUDE_DIR/hooks/md-size-guard.js" "md size guard: md-size-guard.js"
 
   echo ""
   echo "--- Configuring md-size-guard in settings.json ---"
@@ -841,7 +874,7 @@ fi
 
 # Context guard hook (dual-mode: PostToolUse all tools + PreToolUse Edit/Write)
 if [ -f "$SCRIPT_DIR/templates/hooks/context-guard.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/context-guard.js" "$CLAUDE_DIR/hooks/context-guard.js" "context guard: context-guard.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/context-guard.js" "$CLAUDE_DIR/hooks/context-guard.js" "context guard: context-guard.js"
 
   echo ""
   echo "--- Configuring context-guard in settings.json ---"
@@ -917,7 +950,7 @@ fi
 
 # Checkpoint gate hook (PreToolUse all tools -- blocks tool calls after checkpoint/context-critical)
 if [ -f "$SCRIPT_DIR/templates/hooks/checkpoint-gate.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/checkpoint-gate.js" "$CLAUDE_DIR/hooks/checkpoint-gate.js" "checkpoint gate: checkpoint-gate.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/checkpoint-gate.js" "$CLAUDE_DIR/hooks/checkpoint-gate.js" "checkpoint gate: checkpoint-gate.js"
 
   echo ""
   echo "--- Configuring checkpoint-gate in settings.json ---"
@@ -963,7 +996,7 @@ fi
 
 # Sycophancy detector hook (PostToolUse all tools -- detects sycophantic patterns)
 if [ -f "$SCRIPT_DIR/templates/hooks/sycophancy-detector.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/sycophancy-detector.js" "$CLAUDE_DIR/hooks/sycophancy-detector.js" "sycophancy detector: sycophancy-detector.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/sycophancy-detector.js" "$CLAUDE_DIR/hooks/sycophancy-detector.js" "sycophancy detector: sycophancy-detector.js"
 
   echo ""
   echo "--- Configuring sycophancy-detector in settings.json ---"
@@ -1009,7 +1042,7 @@ fi
 
 # Multi-image guard hook (PreToolUse Read -- blocks reading multiple images in one session)
 if [ -f "$SCRIPT_DIR/templates/hooks/multi-image-guard.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/multi-image-guard.js" "$CLAUDE_DIR/hooks/multi-image-guard.js" "multi-image guard: multi-image-guard.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/multi-image-guard.js" "$CLAUDE_DIR/hooks/multi-image-guard.js" "multi-image guard: multi-image-guard.js"
 
   echo ""
   echo "--- Configuring multi-image-guard in settings.json ---"
@@ -1051,7 +1084,7 @@ fi
 
 # Orphan file guard hook (PreToolUse Write -- blocks creating unreferenced files)
 if [ -f "$SCRIPT_DIR/templates/hooks/orphan-file-guard.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/orphan-file-guard.js" "$CLAUDE_DIR/hooks/orphan-file-guard.js" "orphan file guard: orphan-file-guard.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/orphan-file-guard.js" "$CLAUDE_DIR/hooks/orphan-file-guard.js" "orphan file guard: orphan-file-guard.js"
 
   echo ""
   echo "--- Configuring orphan-file-guard in settings.json ---"
@@ -1093,7 +1126,7 @@ fi
 
 # MCP server guard hook (PreToolUse all -- warns when project MCP servers are enabled globally)
 if [ -f "$SCRIPT_DIR/templates/hooks/mcp-server-guard.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/mcp-server-guard.js" "$CLAUDE_DIR/hooks/mcp-server-guard.js" "MCP server guard: mcp-server-guard.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/mcp-server-guard.js" "$CLAUDE_DIR/hooks/mcp-server-guard.js" "MCP server guard: mcp-server-guard.js"
 
   echo ""
   echo "--- Configuring mcp-server-guard in settings.json ---"
@@ -1134,7 +1167,7 @@ fi
 
 # Pre-compact snapshot hook (PreCompact -- saves emergency MEMORY.md snapshot before compaction)
 if [ -f "$SCRIPT_DIR/templates/hooks/pre-compact.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/pre-compact.js" "$CLAUDE_DIR/hooks/pre-compact.js" "pre-compact hook: pre-compact.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/pre-compact.js" "$CLAUDE_DIR/hooks/pre-compact.js" "pre-compact hook: pre-compact.js"
 
   echo ""
   echo "--- Configuring pre-compact in settings.json ---"
@@ -1171,7 +1204,7 @@ fi
 
 # Post-compact context injection hook (PostCompact -- re-injects memory context after compaction)
 if [ -f "$SCRIPT_DIR/templates/hooks/post-compact.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/post-compact.js" "$CLAUDE_DIR/hooks/post-compact.js" "post-compact hook: post-compact.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/post-compact.js" "$CLAUDE_DIR/hooks/post-compact.js" "post-compact hook: post-compact.js"
 
   echo ""
   echo "--- Configuring post-compact in settings.json ---"
@@ -1208,7 +1241,7 @@ fi
 
 # Stuck detector hook (PreToolUse -- blocks/warns when agent repeats the same action in a row)
 if [ -f "$SCRIPT_DIR/templates/hooks/stuck-detector.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/stuck-detector.js" "$CLAUDE_DIR/hooks/stuck-detector.js" "stuck detector: stuck-detector.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/stuck-detector.js" "$CLAUDE_DIR/hooks/stuck-detector.js" "stuck detector: stuck-detector.js"
 
   echo ""
   echo "--- Configuring stuck-detector in settings.json ---"
@@ -1245,7 +1278,7 @@ fi
 
 # Subagent recovery hook (PostToolUse Task -- detects truncated subagent output, writes recovery state)
 if [ -f "$SCRIPT_DIR/templates/hooks/subagent-recovery.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/subagent-recovery.js" "$CLAUDE_DIR/hooks/subagent-recovery.js" "subagent recovery: subagent-recovery.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/subagent-recovery.js" "$CLAUDE_DIR/hooks/subagent-recovery.js" "subagent recovery: subagent-recovery.js"
 
   echo ""
   echo "--- Configuring subagent-recovery in settings.json ---"
@@ -1283,7 +1316,7 @@ fi
 
 # Subagent context hook (SubagentStart -- injects project context and loop warnings into spawned subagents)
 if [ -f "$SCRIPT_DIR/templates/hooks/subagent-context.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/subagent-context.js" "$CLAUDE_DIR/hooks/subagent-context.js" "subagent context: subagent-context.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/subagent-context.js" "$CLAUDE_DIR/hooks/subagent-context.js" "subagent context: subagent-context.js"
 
   echo ""
   echo "--- Configuring subagent-context in settings.json ---"
@@ -1320,7 +1353,7 @@ fi
 
 # Tool failure logger hook (PostToolUseFailure -- logs tool errors to ~/.claude/logs/tool-failures.jsonl)
 if [ -f "$SCRIPT_DIR/templates/hooks/tool-failure-logger.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/tool-failure-logger.js" "$CLAUDE_DIR/hooks/tool-failure-logger.js" "tool failure logger: tool-failure-logger.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/tool-failure-logger.js" "$CLAUDE_DIR/hooks/tool-failure-logger.js" "tool failure logger: tool-failure-logger.js"
 
   echo ""
   echo "--- Configuring tool-failure-logger in settings.json ---"
@@ -1357,12 +1390,12 @@ fi
 
 # PII detector shared module (installed before sanitize-guard which depends on it)
 if [ -f "$SCRIPT_DIR/templates/hooks/pii-detector.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/pii-detector.js" "$CLAUDE_DIR/hooks/pii-detector.js" "pii detector module: pii-detector.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/pii-detector.js" "$CLAUDE_DIR/hooks/pii-detector.js" "pii detector module: pii-detector.js"
 fi
 
 # Sanitize guard hook (dual-mode: PostToolUse all tools + PreToolUse Edit/Write)
 if [ -f "$SCRIPT_DIR/templates/hooks/sanitize-guard.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/sanitize-guard.js" "$CLAUDE_DIR/hooks/sanitize-guard.js" "sanitize guard: sanitize-guard.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/sanitize-guard.js" "$CLAUDE_DIR/hooks/sanitize-guard.js" "sanitize guard: sanitize-guard.js"
 
   echo ""
   echo "--- Configuring sanitize-guard in settings.json ---"
@@ -1405,7 +1438,7 @@ fi
 
 # Filesize guard hook (PreToolUse: blocks oversized/binary file reads)
 if [ -f "$SCRIPT_DIR/templates/hooks/filesize-guard.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/filesize-guard.js" "$CLAUDE_DIR/hooks/filesize-guard.js" "filesize guard: filesize-guard.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/filesize-guard.js" "$CLAUDE_DIR/hooks/filesize-guard.js" "filesize guard: filesize-guard.js"
 
   echo ""
   echo "--- Configuring filesize-guard in settings.json ---"
@@ -1443,7 +1476,7 @@ fi
 
 # Read-once dedup hook (PreToolUse: blocks re-reads of unchanged files)
 if [ -f "$SCRIPT_DIR/templates/hooks/read-once-dedup.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/read-once-dedup.js" "$CLAUDE_DIR/hooks/read-once-dedup.js" "read-once dedup: read-once-dedup.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/read-once-dedup.js" "$CLAUDE_DIR/hooks/read-once-dedup.js" "read-once dedup: read-once-dedup.js"
 
   echo ""
   echo "--- Configuring read-once-dedup in settings.json ---"
@@ -1481,7 +1514,7 @@ fi
 
 # Bloat guard hook (PreToolUse: blocks oversized file writes)
 if [ -f "$SCRIPT_DIR/templates/hooks/bloat-guard.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/bloat-guard.js" "$CLAUDE_DIR/hooks/bloat-guard.js" "bloat guard: bloat-guard.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/bloat-guard.js" "$CLAUDE_DIR/hooks/bloat-guard.js" "bloat guard: bloat-guard.js"
 
   echo ""
   echo "--- Configuring bloat-guard in settings.json ---"
@@ -1519,7 +1552,7 @@ fi
 
 # Skill guard hook (PreToolUse: blocks unregistered skills, warns on repeats)
 if [ -f "$SCRIPT_DIR/templates/hooks/skill-guard.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/skill-guard.js" "$CLAUDE_DIR/hooks/skill-guard.js" "skill guard: skill-guard.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/skill-guard.js" "$CLAUDE_DIR/hooks/skill-guard.js" "skill guard: skill-guard.js"
 
   # Merge PreToolUse hook entry into settings.json (matcher: Skill)
   echo ""
@@ -1553,7 +1586,7 @@ fi
 
 # Task-completed gate hook (TaskCompleted -- quality gate that blocks teammate task completion if tests fail)
 if [ -f "$SCRIPT_DIR/templates/hooks/task-completed-gate.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/task-completed-gate.js" "$CLAUDE_DIR/hooks/task-completed-gate.js" "task completed gate: task-completed-gate.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/task-completed-gate.js" "$CLAUDE_DIR/hooks/task-completed-gate.js" "task completed gate: task-completed-gate.js"
 
   # Merge TaskCompleted hook entry into settings.json
   echo ""
@@ -1586,7 +1619,7 @@ fi
 
 # Teammate idle nudge hook (TeammateIdle -- nudges idle teammates to check TaskList)
 if [ -f "$SCRIPT_DIR/templates/hooks/teammate-idle.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/teammate-idle.js" "$CLAUDE_DIR/hooks/teammate-idle.js" "teammate idle hook: teammate-idle.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/teammate-idle.js" "$CLAUDE_DIR/hooks/teammate-idle.js" "teammate idle hook: teammate-idle.js"
 
   echo ""
   echo "--- Configuring teammate-idle in settings.json ---"
