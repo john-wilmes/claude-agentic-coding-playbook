@@ -29,6 +29,14 @@ const WARN_THRESHOLD = 0.50;
 const BLOCK_THRESHOLD = 0.60;
 const FAILSAFE_THRESHOLD = 0.75; // Last resort: write sentinel directly under claude-loop
 
+// Minimum tool calls before BLOCK/FAILSAFE can trigger.
+// At claude-loop wakeup, SessionStart injects a large context (memory, CLAUDE.md,
+// lessons) that can push usage past 60% before any real work is done — causing an
+// immediate checkpoint that restarts the loop endlessly. This grace period lets the
+// agent do at least a few turns of work before being forced to checkpoint.
+// WARN thresholds still fire immediately so the agent is aware.
+const MIN_CALLS_BEFORE_BLOCK = 5;
+
 // State file tracks warning flags and fallback accumulator across invocations
 function getStateFile(sessionId) {
   const dir = path.join(os.tmpdir(), "claude-context-guard");
@@ -194,7 +202,7 @@ process.stdin.on("end", () => {
     // This fires if Claude ignored the 60% checkpoint instruction.
     // We lose the handoff (no memory update/commit), but it's better
     // than hitting 80% auto-compaction which destroys context entirely.
-    if (ctx.ratio >= FAILSAFE_THRESHOLD && process.env.CLAUDE_LOOP === "1") {
+    if (ctx.ratio >= FAILSAFE_THRESHOLD && process.env.CLAUDE_LOOP === "1" && state.toolCalls >= MIN_CALLS_BEFORE_BLOCK) {
       try {
         // Use CLAUDE_LOOP_PID to compute sentinel path — Claude Code may override
         // CLAUDE_LOOP_SENTINEL after changing process.cwd() to the project directory.
@@ -222,7 +230,7 @@ process.stdin.on("end", () => {
             `FAILSAFE: ${pct}% context used. Sentinel written directly — claude-loop will restart. Run /exit NOW.`,
         },
       };
-    } else if (ctx.ratio >= BLOCK_THRESHOLD) {
+    } else if (ctx.ratio >= BLOCK_THRESHOLD && state.toolCalls >= MIN_CALLS_BEFORE_BLOCK) {
       // Write the context-high flag so /checkpoint can decide EXIT vs STAY.
       // This is NOT the sentinel — claude-loop does NOT watch this file.
       try {

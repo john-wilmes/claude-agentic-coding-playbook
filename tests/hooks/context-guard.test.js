@@ -103,6 +103,20 @@ function runGuardPre(sessionId, opts = {}) {
   return runHook(CONTEXT_GUARD, input);
 }
 
+/**
+ * Pre-populate the state file for a session so toolCalls >= MIN_CALLS_BEFORE_BLOCK.
+ * Tests that expect BLOCK/FAILSAFE behavior need this since the grace period
+ * suppresses those thresholds for the first few calls (to avoid claude-loop wakeup loops).
+ */
+function primeSession(sessionId, toolCalls = 5) {
+  fs.mkdirSync(STATE_DIR, { recursive: true });
+  const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
+  fs.writeFileSync(stateFile, JSON.stringify({
+    subagentWarned: false, warned: false, warnedAtCall: 0,
+    cumulativeEstimatedTokens: 0, toolCalls,
+  }));
+}
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 console.log("\ncontext-guard.js:");
@@ -184,6 +198,7 @@ test("3. Transcript at 50%: checkpoint warning fires once", () => {
 // Test 4: Transcript at 60% → critical advisory (PostToolUse can't hard-block)
 test("4. Transcript at 60%: critical advisory via hookSpecificOutput", () => {
   const sessionId = newSessionId();
+  primeSession(sessionId); // bypass wakeup grace period
   // 60% of 200k = 120,000 tokens
   const transcript = createFakeTranscript([makeAssistantMessage(120000)]);
   try {
@@ -227,6 +242,7 @@ test("5. Cache tokens counted correctly (input + cache_read + cache_creation)", 
 // Test 6: Multiple assistant messages → uses most recent
 test("6. Multiple assistant messages: uses most recent", () => {
   const sessionId = newSessionId();
+  primeSession(sessionId); // bypass wakeup grace period
   const transcript = createFakeTranscript([
     makeAssistantMessage(60000),   // 30% — below threshold
     { type: "user", message: { content: "do something" } },
@@ -476,6 +492,7 @@ test("19. PreToolUse with no state file: allow (safe default)", () => {
 // Test 27: PostToolUse block at 60% writes context-high flag but NOT sentinel
 test("27. PostToolUse block at 60% writes context-high flag, not sentinel", () => {
   const sessionId = newSessionId();
+  primeSession(sessionId); // bypass wakeup grace period
   const fakePid = `test-${sessionId}`;
   const sentinelFile = path.join(os.tmpdir(), `claude-checkpoint-exit-${fakePid}`);
   const contextHighFile = path.join(os.tmpdir(), `claude-context-high-${fakePid}`);
@@ -542,6 +559,7 @@ test("28. PostToolUse warn (50%) does not write checkpoint-exit flag", () => {
 // Test 29: PostToolUse block writes JSONL log entry
 test("29. PostToolUse block writes JSONL log entry", () => {
   const sessionId = newSessionId();
+  primeSession(sessionId); // bypass wakeup grace period
   const env = require("./test-helpers").createTempHome();
   const transcript = createFakeTranscript([makeAssistantMessage(130000)]);
   try {
@@ -572,6 +590,7 @@ test("29. PostToolUse block writes JSONL log entry", () => {
 // Test 30: Failsafe at 75% under claude-loop writes sentinel with reason "failsafe"
 test("30. Failsafe at 75% under CLAUDE_LOOP=1 writes sentinel directly", () => {
   const sessionId = newSessionId();
+  primeSession(sessionId); // bypass wakeup grace period
   const sentinelFile = path.join(os.tmpdir(), `claude-failsafe-test-${sessionId}`);
   // 76% of 200k = 152,000 tokens — above failsafe threshold
   const transcript = createFakeTranscript([makeAssistantMessage(152000)]);
@@ -602,6 +621,7 @@ test("30. Failsafe at 75% under CLAUDE_LOOP=1 writes sentinel directly", () => {
 // Test 31: At 75% without CLAUDE_LOOP, no failsafe — normal BLOCK behavior
 test("31. At 75% without CLAUDE_LOOP, normal CRITICAL block (no failsafe)", () => {
   const sessionId = newSessionId();
+  primeSession(sessionId); // bypass wakeup grace period
   const sentinelFile = path.join(os.tmpdir(), `claude-failsafe-test-${sessionId}`);
   const transcript = createFakeTranscript([makeAssistantMessage(152000)]);
   try {
