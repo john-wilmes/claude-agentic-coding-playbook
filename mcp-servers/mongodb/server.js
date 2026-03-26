@@ -45,13 +45,29 @@ const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 const CONNECT_TIMEOUT_MS = 30000;
 
+// Strip URI options unsupported by mongodb 6.x (e.g. ext.name, ext.readonly)
+// that may be present in legacy connection strings.
+function sanitizeMongoUri(uri) {
+  try {
+    const u = new URL(uri);
+    for (const key of [...u.searchParams.keys()]) {
+      if (key.startsWith('ext.')) u.searchParams.delete(key);
+    }
+    return u.toString();
+  } catch {
+    return uri;
+  }
+}
+
+const CLEAN_MONGODB_URI = sanitizeMongoUri(MONGODB_URI);
+
 // ── MongoDB client (lazy) ─────────────────────────────────────────────────────
 
 let _client = null;
 
 async function getDb() {
   if (!_client) {
-    _client = new MongoClient(MONGODB_URI, {
+    _client = new MongoClient(CLEAN_MONGODB_URI, {
       connectTimeoutMS: CONNECT_TIMEOUT_MS,
       serverSelectionTimeoutMS: CONNECT_TIMEOUT_MS,
     });
@@ -70,7 +86,7 @@ async function getDb() {
  */
 function scrubError(err) {
   const msg = err instanceof Error ? err.message : String(err);
-  return msg.replace(MONGODB_URI, '[MONGODB_URI]');
+  return msg.replace(MONGODB_URI, '[MONGODB_URI]').replace(CLEAN_MONGODB_URI, '[MONGODB_URI]');
 }
 
 // ── MCP server setup ──────────────────────────────────────────────────────────
