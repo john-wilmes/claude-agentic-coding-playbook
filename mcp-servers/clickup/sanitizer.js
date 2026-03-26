@@ -18,15 +18,21 @@
 const {
   collectStrings,
   applyRedacted,
-  redactStringsWithPresidio,
+  redactStringLegacy,
 } = require('../shared/sanitizer-core.js');
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
- * Sanitize any JSON-serializable value:
+ * Sanitize any JSON-serializable value using regex-only redaction.
+ *
+ * ClickUp tasks contain org names, person names, and location strings that are
+ * not PHI — running Presidio NLP over them causes over-redaction. We apply only
+ * the regex pass, which catches actual credentials: emails, phone numbers, SSNs,
+ * JWTs, and bearer tokens.
+ *
  *   1. Collect all string leaves into one flat array
- *   2. Batch Presidio redaction on the entire flat array (throws if unavailable)
+ *   2. Apply regex redaction to each string
  *   3. Splice redacted strings back into the value tree
  *
  * @param {*} value
@@ -40,8 +46,8 @@ function sanitizeValue(value) {
   collectStrings(value, allStrings);
   if (allStrings.length === 0) return value;
 
-  // Batch Presidio redaction (throws if unavailable)
-  const redacted = redactStringsWithPresidio(allStrings);
+  // Regex-only redaction — no NLP, no Presidio
+  const redacted = allStrings.map(redactStringLegacy);
 
   // Splice redacted strings back into the value tree
   const cursor = { i: 0 };
