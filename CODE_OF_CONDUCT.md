@@ -46,7 +46,7 @@ an individual is officially representing the community in public spaces.
 ## Enforcement
 
 Instances of unacceptable behavior may be reported to the community leaders
-responsible for enforcement via [GitHub Issues](https://github.com/john-wilmes/claude-agentic-coding-playbook/issues)
+responsible for enforcement via [GitHub Issues](https://github.com/lumahealthhq/claude-agentic-coding-playbook/issues)
 or the contact information in [SECURITY.md](SECURITY.md).
 
 All complaints will be reviewed and investigated promptly and fairly. All

@@ -4,7 +4,7 @@
 
 If you discover a security vulnerability in this project, please report it responsibly.
 
-Please report security vulnerabilities through GitHub's [Security Advisory](https://github.com/john-wilmes/claude-agentic-coding-playbook/security/advisories/new) feature.
+Please report security vulnerabilities through GitHub's [Security Advisory](https://github.com/lumahealthhq/claude-agentic-coding-playbook/security/advisories/new) feature.
 
 **Do not** open a public GitHub issue for security vulnerabilities.
 
