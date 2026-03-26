@@ -89,6 +89,20 @@ function scrubError(err) {
   return msg.replace(MONGODB_URI, '[MONGODB_URI]').replace(CLEAN_MONGODB_URI, '[MONGODB_URI]');
 }
 
+// ── Parameter coercion ────────────────────────────────────────────────────────
+
+/**
+ * Coerce a parameter that may arrive as a JSON string (from MCP clients that
+ * serialize object/array parameters as strings) into the expected JS type.
+ * Returns the original value if it is already the right type or cannot be parsed.
+ */
+function coerceJson(value) {
+  if (typeof value === 'string') {
+    try { return JSON.parse(value); } catch { return value; }
+  }
+  return value;
+}
+
 // ── BSON type conversion ──────────────────────────────────────────────────────
 
 /**
@@ -220,7 +234,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 async function handleFind(args) {
-  const { collection, filter, projection, limit, sort, hint } = args || {};
+  const params = args || {};
+  const collection = params.collection;
+  const filter = coerceJson(params.filter);
+  const projection = coerceJson(params.projection);
+  const limit = params.limit;
+  const sort = coerceJson(params.sort);
+  const hint = params.hint;
 
   // Validate inputs
   if (!collection || typeof collection !== 'string' || collection.trim() === '') {
@@ -257,7 +277,9 @@ async function handleFind(args) {
 }
 
 async function handleAggregate(args) {
-  const { collection, pipeline } = args || {};
+  const params = args || {};
+  const collection = params.collection;
+  const pipeline = coerceJson(params.pipeline);
 
   // Validate inputs
   if (!collection || typeof collection !== 'string' || collection.trim() === '') {
