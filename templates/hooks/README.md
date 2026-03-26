@@ -42,7 +42,7 @@ Claude Code hook scripts that run automatically during sessions. These are insta
 
 | File | Matcher | Description |
 |------|---------|-------------|
-| `tool-failure-logger.js` | all tools | Logs tool errors to `~/.claude/logs/tool-failures.jsonl` for post-session analysis. |
+| `tool-failure-logger.js` | all tools | Logs tool errors to the shared `~/.claude/logs/YYYY-MM-DD.jsonl` log and warns the agent when the same tool fails repeatedly within a session. |
 
 ## TaskCompleted Hooks
 

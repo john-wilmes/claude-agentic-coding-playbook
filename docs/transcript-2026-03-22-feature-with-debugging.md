@@ -163,7 +163,7 @@ In a fully-instrumented session, hooks would have fired at several points:
   phase (multiple Bash outputs from long-running tests).
 - **stuck-detector:** If the agent had retried the same test command 3+ times
   without changes, would have warned about a loop.
-- **post-tool-test-runner:** After each Edit, would have prompted to run tests —
+- **post-tool-verify:** After each Edit, would have prompted to run tests —
   which the agent did manually here.
 
 ### Cost profile

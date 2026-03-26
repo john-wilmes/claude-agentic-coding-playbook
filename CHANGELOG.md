@@ -38,7 +38,7 @@ Initial public release.
 
 ### Added
 
-- Evidence-based best practices guide with 54 verified citations
+- Evidence-based best practices guide with 57 verified citations
 - 22 hooks for safety, quality, and resource management
 - 6 skills: /checkpoint, /create-project, /playbook, /learn, /promote, /investigate
 - CLI tools: q, qa, claude-loop, knowledge-consolidate, repo-fleet-index

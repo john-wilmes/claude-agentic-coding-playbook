@@ -32,7 +32,7 @@ No type-check or lint commands — this is a bash + Node scripting project.
 
 ## Project Conventions
 
-- **Node.js 18+** for hooks and test scripts
+- **Node.js 18+** for hooks and test scripts; **Node.js 22+** required for `knowledge-db.js` (uses `node:sqlite`) and the multi-model analyzer
 - **Zero npm dependencies** — all hooks use Node stdlib only (`fs`, `path`, `os`, `crypto`, `child_process`)
 - **JSON stdout** — hooks communicate with Claude Code via JSON on stdout
 - **Exit 0 always** — hooks must never crash or exit non-zero; errors produce `{}` output
