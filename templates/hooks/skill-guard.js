@@ -113,6 +113,10 @@ function getActiveSkillFile(sessionId) {
   return path.join(os.tmpdir(), `skill-active-${sessionId}.json`);
 }
 
+function getGlobalActiveSkillFile() {
+  return path.join(os.tmpdir(), "skill-active-global.json");
+}
+
 /**
  * Parse a comma-separated frontmatter field from a skill's SKILL.md.
  * Returns an array of trimmed, non-empty values.
@@ -172,18 +176,24 @@ function runPrereqs(prereqs) {
 }
 
 function loadActiveSkill(sessionId) {
+  // Try session-keyed file first (own session or already propagated).
   try {
     return JSON.parse(fs.readFileSync(getActiveSkillFile(sessionId), "utf8"));
-  } catch {
-    return null;
-  }
+  } catch {}
+  // Fall back to global file so subagents inherit the parent's active skill.
+  try {
+    return JSON.parse(fs.readFileSync(getGlobalActiveSkillFile(), "utf8"));
+  } catch {}
+  return null;
 }
 
 function saveActiveSkill(sessionId, skillName, allowedTools) {
-  fs.writeFileSync(
-    getActiveSkillFile(sessionId),
-    JSON.stringify({ skill: skillName, allowedTools })
-  );
+  const data = JSON.stringify({ skill: skillName, allowedTools });
+  // Write session-keyed file for this session's own lookups.
+  fs.writeFileSync(getActiveSkillFile(sessionId), data);
+  // Write global fallback so subagents (with different session IDs) inherit
+  // the active skill state without needing parent_session_id propagation.
+  fs.writeFileSync(getGlobalActiveSkillFile(), data);
 }
 
 /**

@@ -6,6 +6,9 @@ const INJECTION_PATTERNS = [
   { pattern: /disregard\s+(all\s+)?previous/i, reason: "Prompt injection: instruction disregard attempt" },
   { pattern: /forget\s+everything/i, reason: "Prompt injection: memory wipe attempt" },
   { pattern: /you\s+are\s+now\s+a/i, reason: "Prompt injection: role assignment attempt" },
+  // Direct database/API access that bypasses PHI sanitization layer
+  { pattern: /\bmongosh\b/, reason: "Direct mongosh access bypasses PHI sanitization layer — use mcp__mongodb__ tools instead" },
+  { pattern: /curl\s+.*datadoghq\.com/i, reason: "Direct Datadog API calls bypass PHI sanitization layer — use mcp__datadog__get_logs instead" },
   // Credential exfiltration via network tools (curl/wget sending secret env vars or credential files)
   { pattern: /curl\s+.*\$\{?\w*(?:KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)\w*\}?/i, reason: "Potential credential exfiltration via curl" },
   { pattern: /wget\s+.*\$\{?\w*(?:KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)\w*\}?/i, reason: "Potential credential exfiltration via wget" },

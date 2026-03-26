@@ -82,6 +82,15 @@ function cleanStateFile(sessionId) {
 }
 
 /**
+ * Clean up the global active skill fallback file.
+ */
+function cleanGlobalActiveSkillFile() {
+  try {
+    fs.unlinkSync(path.join(os.tmpdir(), "skill-active-global.json"));
+  } catch {}
+}
+
+/**
  * Helper: create a SKILL.md with allowed-tools frontmatter in a skill directory.
  */
 function createSkillMd(home, skillName, allowedTools) {
@@ -570,6 +579,8 @@ test("wildcard pattern in allowed-tools matches tool prefix", () => {
 test("no active skill means non-Skill tools pass without checks", () => {
   const { home, cleanup } = setupSkills(["continue"]);
   const sid = "t-at-5";
+  // Clear the global fallback file to ensure no spillover from prior tests.
+  cleanGlobalActiveSkillFile();
   try {
     // No skill invoked — call a tool directly
     const r = runToolGuard("Bash", sid, home);
@@ -578,6 +589,7 @@ test("no active skill means non-Skill tools pass without checks", () => {
   } finally {
     cleanup();
     cleanStateFile(sid);
+    cleanGlobalActiveSkillFile();
   }
 });
 
@@ -593,6 +605,93 @@ test("skill with empty allowed-tools does not restrict tools", () => {
   } finally {
     cleanup();
     cleanStateFile(sid);
+  }
+});
+
+// --- Subagent session ID propagation tests ---
+
+test("subagent inherits parent active skill via global fallback", () => {
+  // Simulates: parent session activates a skill (writes session-keyed + global files),
+  // then a subagent with a different session ID checks its allowed tools.
+  const { home, cleanup } = setupSkills(["deploy"]);
+  const parentSid = "t-sub-1-parent";
+  const subagentSid = "t-sub-1-subagent";
+  createSkillMd(home, "deploy", ["Bash", "Read"]);
+  try {
+    // Parent activates the skill
+    runSkillGuard("deploy", parentSid, home);
+
+    // Subagent (different session ID) checks an allowed tool — should pass
+    const r1 = runToolGuard("Bash", subagentSid, home);
+    assert.strictEqual(r1.status, 0);
+    assert.deepStrictEqual(r1.json, {}, "Subagent should inherit parent active skill for allowed tool");
+
+    // Subagent checks a disallowed tool — should get advisory warning
+    const r2 = runToolGuard("Grep", subagentSid, home);
+    assert.strictEqual(r2.status, 0);
+    const ctx =
+      r2.json &&
+      r2.json.hookSpecificOutput &&
+      r2.json.hookSpecificOutput.additionalContext;
+    assert.ok(ctx, "Subagent should warn on disallowed tool via global fallback");
+    assert.ok(ctx.includes("Grep"), "Warning should mention the blocked tool");
+    assert.ok(ctx.includes("deploy"), "Warning should mention the active skill");
+  } finally {
+    cleanup();
+    cleanStateFile(parentSid);
+    cleanStateFile(subagentSid);
+    cleanGlobalActiveSkillFile();
+  }
+});
+
+test("subagent with no parent active skill passes tools without restriction", () => {
+  // No global file exists — subagent should behave as if no skill is active.
+  const { home, cleanup } = setupSkills(["deploy"]);
+  const subagentSid = "t-sub-2-subagent";
+  cleanGlobalActiveSkillFile(); // ensure clean state
+  try {
+    const r = runToolGuard("Grep", subagentSid, home);
+    assert.strictEqual(r.status, 0);
+    assert.deepStrictEqual(r.json, {}, "No active skill means no restriction");
+  } finally {
+    cleanup();
+    cleanStateFile(subagentSid);
+    cleanGlobalActiveSkillFile();
+  }
+});
+
+test("session-keyed file takes priority over global fallback", () => {
+  // If the subagent already has its own session-keyed file (e.g., because it also
+  // invoked a Skill tool), that takes priority over the global fallback.
+  const { home, cleanup } = setupSkills(["deploy", "research"]);
+  const parentSid = "t-sub-3-parent";
+  const subagentSid = "t-sub-3-subagent";
+  createSkillMd(home, "deploy", ["Bash"]);
+  createSkillMd(home, "research", ["Read", "Grep"]);
+  try {
+    // Parent activates "deploy" (writes global file with deploy/Bash)
+    runSkillGuard("deploy", parentSid, home);
+
+    // Subagent activates its own "research" skill (writes session-keyed file for subagentSid)
+    runSkillGuard("research", subagentSid, home);
+
+    // Subagent checks "Read" — allowed by "research" (session-keyed file)
+    const r1 = runToolGuard("Read", subagentSid, home);
+    assert.deepStrictEqual(r1.json, {}, "Read should be allowed by subagent's own skill");
+
+    // Subagent checks "Bash" — NOT in research allowed-tools, should warn
+    const r2 = runToolGuard("Bash", subagentSid, home);
+    const ctx =
+      r2.json &&
+      r2.json.hookSpecificOutput &&
+      r2.json.hookSpecificOutput.additionalContext;
+    assert.ok(ctx, "Bash should be warned against under subagent's own research skill");
+    assert.ok(ctx.includes("research"), "Warning should reference subagent's own active skill");
+  } finally {
+    cleanup();
+    cleanStateFile(parentSid);
+    cleanStateFile(subagentSid);
+    cleanGlobalActiveSkillFile();
   }
 });
 

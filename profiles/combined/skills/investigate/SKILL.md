@@ -4,7 +4,7 @@ description: Manage structured investigations with multi-agent evidence collecti
 compatibility: claude-code
 disable-model-invocation: false
 context: fork
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Task
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Task, mcp__mongodb__*, mcp__datadog__*, mcp__snowflake__*, mcp__clickup__*
 argument-hint: "<id> [new|run|collect|synthesize|close|status] | list | search <query>"
 ---
 
