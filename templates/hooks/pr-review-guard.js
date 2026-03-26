@@ -56,7 +56,8 @@ function checkCodeRabbitReview(prNumber) {
     return { reviewed: false, error: true, reason: "gh API call failed (allowing merge)" };
   }
 
-  if (reviewOutput.split("\n").some(l => l.trim() === "coderabbitai[bot]")) {
+  const isCR = (l) => ["coderabbitai", "coderabbitai[bot]"].includes(l.trim());
+  if (reviewOutput.split("\n").some(isCR)) {
     return { reviewed: true, error: false, reason: "CodeRabbit review found" };
   }
 
@@ -71,7 +72,7 @@ function checkCodeRabbitReview(prNumber) {
     return { reviewed: false, error: true, reason: "gh API call failed on comments check (allowing merge)" };
   }
 
-  if (commentOutput.split("\n").some(l => l.trim() === "coderabbitai[bot]")) {
+  if (commentOutput.split("\n").some(isCR)) {
     return { reviewed: true, error: false, reason: "CodeRabbit comment found" };
   }
 
