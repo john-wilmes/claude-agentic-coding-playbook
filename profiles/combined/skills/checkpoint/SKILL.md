@@ -61,8 +61,7 @@ The subagent prompt should instruct it to:
 After the subagent returns, run:
 
 ```bash
-INSTALL_ROOT="$(bash ~/.claude/scripts/skills/find-install-root.sh)"
-bash "${INSTALL_ROOT}/scripts/skills/da-check.sh"
+bash ~/.claude/scripts/skills/da-check.sh
 ```
 
 If the output is `DA_NEEDED`, print:
