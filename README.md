@@ -314,8 +314,10 @@ PHI-sanitizing MCP servers for safe AI-assisted queries against healthcare data 
 | `mongodb-sanitizer` | MongoDB | Drops PHI fields, redacts string values, Presidio NLP second pass |
 | `snowflake-sanitizer` | Snowflake | Drops PHI columns from SELECT results, read-only enforcement |
 | `datadog-sanitizer` | Datadog Logs | Strips names, emails, SSNs, tokens from log output |
+| `clickup-sanitizer` | ClickUp | Regex + Presidio redaction of emails, phones, SSNs, tokens; read-only |
+| `slack-sanitizer` | Slack | Regex + Presidio redaction of emails, phones, SSNs, tokens; read-only |
 
-All three use a shared `phi-config.yaml` to define which columns and tables are PHI — no code changes required to adapt to your data model.
+MongoDB, Snowflake, and Datadog use a shared `phi-config.yaml` to define which columns and tables are PHI — no code changes required to adapt to your data model. ClickUp and Slack apply string-level redaction (no field blocklist, as they are not PHI databases).
 
 ## Roadmap
 
