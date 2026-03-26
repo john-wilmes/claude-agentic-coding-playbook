@@ -87,7 +87,7 @@
       "disabled": true
     },
     "env_required": [],
-    "notes": "OAuth flow on first use"
+    "notes": "PHI-sanitizing server available in mcp-servers/slack/server.js. Launch via a shell script that injects SLACK_BOT_TOKEN from your keychain. Register the script in ~/.claude.json mcpServers. Strictly read-only (GET-only), redacts strings via Presidio (or regex fallback). Note: search_messages requires a user token (xoxp-) with search:read scope. See mcp-servers/slack/README.md."
   },
   "cloudwatch": {
     "description": "AWS CloudWatch logs, metrics, alarms",
@@ -182,7 +182,7 @@
       "disabled": true
     },
     "env_required": [],
-    "notes": "Generic OAuth server (Public Beta). For a custom integration, build a wrapper (e.g. /path/to/clickup-mcp/server.js) launched via /path/to/clickup-launch.sh and register it in ~/.claude.json. Store the API token in your system keychain under a service name of your choice."
+    "notes": "PHI-sanitizing server available in mcp-servers/clickup/server.js. Launch via a shell script that injects CLICKUP_API_TOKEN from your keychain. Register the script in ~/.claude.json mcpServers. Strictly read-only (GET-only), redacts strings via Presidio (or regex fallback). Exposes get_task, get_tasks, search_tasks. See mcp-servers/clickup/README.md."
   },
   "mongodb": {
     "description": "MongoDB queries and collection inspection",
