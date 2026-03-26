@@ -24,7 +24,6 @@ const {
 const {
   collectStrings,
   applyRedacted,
-  redactString,
   redactStringsWithPresidio,
 } = require('../shared/sanitizer-core.js');
 
@@ -58,60 +57,37 @@ function dropPHIFields(doc, tableName) {
   return out;
 }
 
-// ── Per-value string redaction (fallback) ─────────────────────────────────────
-
-/**
- * Walk a value tree and redact all string leaves using redactString.
- * Used as a fallback when batch Presidio is unavailable.
- *
- * @param {*} val
- * @returns {Promise<*>}
- */
-async function redactStringsInValue(val) {
-  if (val === null || val === undefined) return val;
-  if (typeof val === 'string') return redactString(val);
-  if (val instanceof Date || val instanceof Buffer) return val;
-  if (Array.isArray(val)) {
-    return Promise.all(val.map(item => redactStringsInValue(item)));
-  }
-  if (typeof val === 'object') {
-    const out = {};
-    for (const [k, v] of Object.entries(val)) {
-      out[k] = await redactStringsInValue(v);
-    }
-    return out;
-  }
-  return val;
-}
-
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
  * Sanitize a single document:
  *   1. Drop PHI fields (field-level blocking via isPHIInContext)
- *   2. Redact remaining string leaves via redactString (regex + openredaction)
+ *   2. Redact remaining string leaves via batch Presidio
  *
  * For bulk processing prefer sanitizeDocuments, which batches Presidio across
  * all documents in a single subprocess call.
  *
  * @param {object} doc
  * @param {string} tableName
- * @returns {Promise<object>}
+ * @returns {object}
  */
-async function sanitizeDocument(doc, tableName) {
+function sanitizeDocument(doc, tableName) {
   if (!doc || typeof doc !== 'object') return doc;
   const cleaned = dropPHIFields(doc, tableName);
   if (isEntityTable(tableName)) return cleaned;
-  return redactStringsInValue(cleaned);
+  const allStrings = [];
+  collectStrings(cleaned, allStrings);
+  if (allStrings.length === 0) return cleaned;
+  const redacted = redactStringsWithPresidio(allStrings);
+  return applyRedacted(cleaned, redacted, { i: 0 });
 }
 
 /**
  * Sanitize an array of documents efficiently:
  *   1. Drop PHI fields from each document
  *   2. Collect all string leaves from all documents into one flat array
- *   3. Attempt batch Presidio redaction on the entire flat array
- *   4. On Presidio failure, fall back to per-string redactString
- *   5. Splice redacted strings back into each document tree
+ *   3. Batch Presidio redaction on the entire flat array (throws if unavailable)
+ *   4. Splice redacted strings back into each document tree
  *
  * @param {object[]} docs
  * @param {string} tableName
@@ -131,18 +107,10 @@ async function sanitizeDocuments(docs, tableName) {
   for (const doc of cleaned) collectStrings(doc, allStrings);
   if (allStrings.length === 0) return cleaned;
 
-  // Step 3: try batch Presidio
-  const presidioResult = redactStringsWithPresidio(allStrings);
+  // Step 3: batch Presidio redaction (throws if unavailable)
+  const redacted = redactStringsWithPresidio(allStrings);
 
-  let redacted;
-  if (presidioResult) {
-    redacted = presidioResult;
-  } else {
-    // Step 4: fallback — redact each string individually
-    redacted = await Promise.all(allStrings.map(s => redactString(s)));
-  }
-
-  // Step 5: splice back into document trees
+  // Step 4: splice back into document trees
   const cursor = { i: 0 };
   return cleaned.map(doc => applyRedacted(doc, redacted, cursor));
 }

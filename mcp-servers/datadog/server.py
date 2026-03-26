@@ -5,6 +5,7 @@
 #   "datadog-api-client>=2.0.0",
 #   "presidio-analyzer>=2.2.0",
 #   "presidio-anonymizer>=2.2.0",
+#   "en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
 # ]
 # ///
 """
@@ -195,27 +196,25 @@ const shield = new or.Shield();
 
 
 def _redact_string(s: str) -> str:
-    """Redact PII and secrets using Presidio when available; else legacy regex.
+    """Redact PII and secrets using Presidio (required).
 
-    After the primary redaction pass, applies an optional OpenRedaction
+    After the primary Presidio pass, applies an optional OpenRedaction
     subprocess pass for additional coverage.
     """
     global _analyzer, _anonymizer
-    try:
-        from presidio_analyzer import AnalyzerEngine
-        from presidio_anonymizer import AnonymizerEngine
-        if _analyzer is None:
-            _analyzer = AnalyzerEngine()
-        if _anonymizer is None:
-            _anonymizer = AnonymizerEngine()
-        results = _analyzer.analyze(text=s, language="en")
-        if results:
-            out = _anonymizer.anonymize(text=s, analyzer_results=results)
-            s = out.text if out else s
-        else:
-            s = _redact_string_legacy(s)
-    except Exception:
-        s = _redact_string_legacy(s)
+    from presidio_analyzer import AnalyzerEngine
+    from presidio_analyzer.nlp_engine import NlpEngineProvider
+    from presidio_anonymizer import AnonymizerEngine
+    if _analyzer is None:
+        nlp_config = {"nlp_engine_name": "spacy", "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}]}
+        nlp_engine = NlpEngineProvider(nlp_configuration=nlp_config).create_engine()
+        _analyzer = AnalyzerEngine(nlp_engine=nlp_engine)
+    if _anonymizer is None:
+        _anonymizer = AnonymizerEngine()
+    results = _analyzer.analyze(text=s, language="en")
+    if results:
+        out = _anonymizer.anonymize(text=s, analyzer_results=results)
+        s = out.text if out else s
 
     # Optional additional pass via OpenRedaction
     s = _redact_with_openredaction(s)

@@ -21,7 +21,6 @@ const {
 const {
   collectStrings,
   applyRedacted,
-  redactString,
   redactStringsWithPresidio,
 } = require('../shared/sanitizer-core.js');
 
@@ -45,41 +44,14 @@ function dropPHIFields(row, tableName) {
   return out;
 }
 
-// ── Per-value string redaction (fallback) ─────────────────────────────────────
-
-/**
- * Walk a value tree and redact all string leaves using redactString.
- * Used as a fallback when batch Presidio is unavailable.
- *
- * @param {*} val
- * @returns {Promise<*>}
- */
-async function redactStringsInValue(val) {
-  if (val === null || val === undefined) return val;
-  if (typeof val === 'string') return redactString(val);
-  if (val instanceof Date) return val;
-  if (Array.isArray(val)) {
-    return Promise.all(val.map(item => redactStringsInValue(item)));
-  }
-  if (typeof val === 'object') {
-    const out = {};
-    for (const [k, v] of Object.entries(val)) {
-      out[k] = await redactStringsInValue(v);
-    }
-    return out;
-  }
-  return val;
-}
-
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
  * Sanitize an array of Snowflake row objects efficiently:
  *   1. Drop PHI fields from each row
  *   2. Collect all string leaves from all rows into one flat array
- *   3. Attempt batch Presidio redaction on the entire flat array
- *   4. On Presidio failure, fall back to per-string redactString
- *   5. Splice redacted strings back into each row tree
+ *   3. Batch Presidio redaction on the entire flat array (throws if unavailable)
+ *   4. Splice redacted strings back into each row tree
  *
  * String redaction is skipped for entity tables (lookup tables where values are
  * labels, not person data).
@@ -88,7 +60,7 @@ async function redactStringsInValue(val) {
  * @param {string} tableName
  * @returns {Promise<object[]>}
  */
-async function sanitizeRows(rows, tableName) {
+function sanitizeRows(rows, tableName) {
   if (!Array.isArray(rows) || rows.length === 0) return rows;
 
   // Step 1: drop PHI fields
@@ -102,18 +74,10 @@ async function sanitizeRows(rows, tableName) {
   for (const row of cleaned) collectStrings(row, allStrings);
   if (allStrings.length === 0) return cleaned;
 
-  // Step 3: try batch Presidio
-  const presidioResult = redactStringsWithPresidio(allStrings);
+  // Step 3: batch Presidio redaction (throws if unavailable)
+  const redacted = redactStringsWithPresidio(allStrings);
 
-  let redacted;
-  if (presidioResult) {
-    redacted = presidioResult;
-  } else {
-    // Step 4: fallback — redact each string individually
-    redacted = await Promise.all(allStrings.map(s => redactString(s)));
-  }
-
-  // Step 5: splice back into row trees
+  // Step 4: splice back into row trees
   const cursor = { i: 0 };
   return cleaned.map(row => applyRedacted(row, redacted, cursor));
 }

@@ -6,10 +6,9 @@
  * Shared string redaction engine used by mongodb-sanitizer and
  * snowflake-sanitizer (and optionally datadog-sanitizer).
  *
- * Provides three redaction layers, applied in order:
- *   1. openredaction (npm) — ML-based, catches names/values regex misses
- *   2. Presidio (Python subprocess, optional) — NLP-based entity recognition
- *   3. Legacy regex — always available, zero dependencies
+ * Provides two redaction layers, applied in order:
+ *   1. Presidio (Python subprocess, required) — NLP-based entity recognition
+ *   2. openredaction (npm) — ML-based, catches names/values Presidio misses
  *
  * Exported:
  *   PRESIDIO_SCRIPT          — inline Python script string
@@ -22,6 +21,9 @@
  */
 
 const { spawnSync } = require('child_process');
+const os = require('os');
+const path = require('path');
+const PRESIDIO_PYTHON = path.join(os.homedir(), '.presidio-venv/bin/python');
 
 // ── Regex patterns for the legacy redaction pass ─────────────────────────────
 // Applied in order. Each entry is [RegExp, replacement string].
@@ -53,17 +55,17 @@ let _presidioAvailable = null;
 const PRESIDIO_SCRIPT = `
 import sys, json
 from presidio_analyzer import AnalyzerEngine
+from presidio_analyzer.nlp_engine import NlpEngineProvider
 from presidio_anonymizer import AnonymizerEngine
-a = AnalyzerEngine()
+nlp_cfg = {'nlp_engine_name': 'spacy', 'models': [{'lang_code': 'en', 'model_name': 'en_core_web_sm'}]}
+nlp_engine = NlpEngineProvider(nlp_configuration=nlp_cfg).create_engine()
+a = AnalyzerEngine(nlp_engine=nlp_engine)
 an = AnonymizerEngine()
 texts = json.loads(sys.stdin.read())
 out = []
 for t in texts:
-    try:
-        r = a.analyze(text=t, language='en')
-        out.append(an.anonymize(text=t, analyzer_results=r).text if r else t)
-    except Exception:
-        out.append(t)
+    r = a.analyze(text=t, language='en')
+    out.append(an.anonymize(text=t, analyzer_results=r).text if r else t)
 print(json.dumps(out))
 `.trim();
 
@@ -124,7 +126,7 @@ function applyRedacted(val, redacted, cursor) {
 function checkPresidioAvailable() {
   if (_presidioAvailable !== null) return _presidioAvailable;
   try {
-    const probe = spawnSync('python3', ['-c', 'from presidio_analyzer import AnalyzerEngine'], {
+    const probe = spawnSync(PRESIDIO_PYTHON, ['-c', 'from presidio_analyzer import AnalyzerEngine'], {
       timeout: 5000,
       encoding: 'utf8',
     });
@@ -137,28 +139,30 @@ function checkPresidioAvailable() {
 
 /**
  * Redact an array of strings through Presidio in a single subprocess call.
- * Returns the redacted array, or null if Presidio is unavailable / errors.
+ * Throws if Presidio is unavailable or the subprocess fails.
  *
  * @param {string[]} strings
- * @returns {string[]|null}
+ * @returns {string[]}
  */
 function redactStringsWithPresidio(strings) {
-  if (!checkPresidioAvailable()) return null;
-  if (!strings || strings.length === 0) return strings;
-  try {
-    const result = spawnSync('python3', ['-c', PRESIDIO_SCRIPT], {
-      input: JSON.stringify(strings),
-      timeout: 30000,
-      encoding: 'utf8',
-      maxBuffer: 10 * 1024 * 1024,
-    });
-    if (result.status !== 0) return null;
-    const parsed = JSON.parse(result.stdout.trim());
-    if (!Array.isArray(parsed) || parsed.length !== strings.length) return null;
-    return parsed;
-  } catch (_) {
-    return null;
+  if (!checkPresidioAvailable()) {
+    throw new Error(`Presidio unavailable: ${PRESIDIO_PYTHON} not found or presidio not installed`);
   }
+  if (!strings || strings.length === 0) return strings;
+  const result = spawnSync(PRESIDIO_PYTHON, ['-c', PRESIDIO_SCRIPT], {
+    input: JSON.stringify(strings),
+    timeout: 30000,
+    encoding: 'utf8',
+    maxBuffer: 10 * 1024 * 1024,
+  });
+  if (result.status !== 0) {
+    throw new Error(`Presidio subprocess failed (exit ${result.status}): ${result.stderr}`);
+  }
+  const parsed = JSON.parse(result.stdout.trim());
+  if (!Array.isArray(parsed) || parsed.length !== strings.length) {
+    throw new Error(`Presidio returned unexpected output: ${result.stdout.slice(0, 200)}`);
+  }
+  return parsed;
 }
 
 // ── String redaction ─────────────────────────────────────────────────────────
@@ -179,9 +183,7 @@ function redactStringLegacy(s) {
 }
 
 /**
- * Redact a single string. Tries openredaction (npm) for ML-based detection,
- * falls back to regex-only legacy redaction if openredaction is not installed
- * or throws.
+ * Redact a single string using openredaction (npm) for ML-based detection.
  *
  * Note: the Presidio pass is applied separately as a batch operation over all
  * strings in a document set — see redactStringsWithPresidio.
@@ -190,16 +192,13 @@ function redactStringLegacy(s) {
  * @returns {Promise<string>}
  */
 async function redactString(s) {
-  try {
-    if (!_openRedaction) {
-      const { OpenRedaction } = require('openredaction');
-      _openRedaction = new OpenRedaction();
-    }
-    const result = await _openRedaction.detect(s);
-    return result && result.redacted != null ? result.redacted : s;
-  } catch (_) {
-    return redactStringLegacy(s);
+  if (!_openRedaction) {
+    const { OpenRedaction } = require('openredaction');
+    _openRedaction = new OpenRedaction();
   }
+  const result = await _openRedaction.detect(s);
+  if (result && result.redacted != null) return result.redacted;
+  return s;
 }
 
 module.exports = {

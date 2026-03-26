@@ -18,48 +18,21 @@
 const {
   collectStrings,
   applyRedacted,
-  redactString,
   redactStringsWithPresidio,
 } = require('../shared/sanitizer-core.js');
-
-// ── Per-value string redaction (fallback) ─────────────────────────────────────
-
-/**
- * Walk a value tree and redact all string leaves using redactString.
- * Used as a fallback when batch Presidio is unavailable.
- *
- * @param {*} val
- * @returns {Promise<*>}
- */
-async function redactStringsInValue(val) {
-  if (val === null || val === undefined) return val;
-  if (typeof val === 'string') return redactString(val);
-  if (Array.isArray(val)) {
-    return Promise.all(val.map(item => redactStringsInValue(item)));
-  }
-  if (typeof val === 'object') {
-    const out = {};
-    for (const [k, v] of Object.entries(val)) {
-      out[k] = await redactStringsInValue(v);
-    }
-    return out;
-  }
-  return val;
-}
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
  * Sanitize any JSON-serializable value:
  *   1. Collect all string leaves into one flat array
- *   2. Attempt batch Presidio redaction on the entire flat array
- *   3. On Presidio failure, fall back to per-string redactString
- *   4. Splice redacted strings back into the value tree
+ *   2. Batch Presidio redaction on the entire flat array (throws if unavailable)
+ *   3. Splice redacted strings back into the value tree
  *
  * @param {*} value
- * @returns {Promise<*>}
+ * @returns {*}
  */
-async function sanitizeValue(value) {
+function sanitizeValue(value) {
   if (value === null || value === undefined) return value;
 
   // Collect all string leaves
@@ -67,16 +40,8 @@ async function sanitizeValue(value) {
   collectStrings(value, allStrings);
   if (allStrings.length === 0) return value;
 
-  // Try batch Presidio
-  const presidioResult = redactStringsWithPresidio(allStrings);
-
-  let redacted;
-  if (presidioResult) {
-    redacted = presidioResult;
-  } else {
-    // Fallback: redact each string individually
-    redacted = await Promise.all(allStrings.map(s => redactString(s)));
-  }
+  // Batch Presidio redaction (throws if unavailable)
+  const redacted = redactStringsWithPresidio(allStrings);
 
   // Splice redacted strings back into the value tree
   const cursor = { i: 0 };
