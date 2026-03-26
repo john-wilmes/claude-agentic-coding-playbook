@@ -8,9 +8,22 @@ access and applies a shared PHI blocklist to column names and string values.
 
 | Directory | Data store | Key feature |
 |-----------|-----------|-------------|
-| `mongodb-sanitizer/` | MongoDB | Document-level PHI field removal + string redaction |
-| `snowflake-sanitizer/` | Snowflake | Column-level PHI removal from SELECT results |
-| [`datadog-sanitizer/`](datadog/README.md) | Datadog Logs | PHI stripping from unstructured log text |
+| [`mongodb/`](mongodb/README.md) | MongoDB | Document-level PHI field removal + string redaction |
+| [`snowflake/`](snowflake/README.md) | Snowflake | Column-level PHI removal from SELECT results, LIMIT enforcement |
+| [`datadog/`](datadog/README.md) | Datadog Logs | PHI stripping from unstructured log text |
+
+### MongoDB server files
+
+- [`mongodb/server.js`](mongodb/server.js) — MCP server entry point (find, aggregate tools)
+- [`mongodb/sanitizer.js`](mongodb/sanitizer.js) — PHI document sanitizer (sanitizeDocument, sanitizeDocuments, sanitizeProjection, filterPipeline)
+- [`mongodb/package.json`](mongodb/package.json) — npm manifest
+
+### Snowflake server files
+
+- [`snowflake/server.js`](snowflake/server.js) — MCP server entry point (run_sql tool)
+- [`snowflake/sanitizer.js`](snowflake/sanitizer.js) — PHI row sanitizer (sanitizeRows, validateQuery)
+- [`snowflake/package.json`](snowflake/package.json) — npm manifest
+- [`snowflake/README.md`](snowflake/README.md) — setup and configuration guide
 
 ## Shared Utilities (`shared/`)
 

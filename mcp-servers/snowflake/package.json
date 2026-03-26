@@ -1,0 +1,16 @@
+{
+  "name": "snowflake-sanitizer-mcp",
+  "version": "1.0.0",
+  "description": "PHI-safe Snowflake MCP server",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "snowflake-sdk": "^1.14.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

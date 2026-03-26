@@ -17,7 +17,7 @@
       "disabled": true
     },
     "env_required": ["DATADOG_API_KEY", "DATADOG_APP_KEY"],
-    "notes": "Generic public server. For PHI-sanitizing use, build a custom wrapper (e.g. /path/to/datadog-sanitizer/server.py) launched via /path/to/datadog-launch.sh and register it in ~/.claude.json. A custom server can strip PHI keys and redact emails/phones/SSNs before output."
+    "notes": "PHI-sanitizing server available in mcp-servers/datadog/server.py. Launch via a shell script that injects DD_API_KEY and DD_APP_KEY from your keychain and sets PHI_CONFIG_PATH. Register the script in ~/.claude.json mcpServers. Strips PHI attribute keys and redacts emails/phones/SSNs/JWTs before output. See mcp-servers/datadog/README.md."
   },
   "snowflake": {
     "description": "Data warehouse queries and schema inspection",
@@ -27,7 +27,7 @@
       "disabled": true
     },
     "env_required": ["SNOWFLAKE_ACCOUNT", "SNOWFLAKE_USER", "SNOWFLAKE_PASSWORD"],
-    "notes": "Requires Snowflake account credentials"
+    "notes": "PHI-sanitizing server available in mcp-servers/snowflake/server.js. Launch via a shell script that injects SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_PASSWORD from your keychain. Register the script in ~/.claude.json mcpServers. Enforces SELECT-only (LIMIT required), strips PHI fields, redacts strings via Presidio (or regex fallback). See mcp-servers/snowflake/README.md."
   },
   "postgres": {
     "description": "PostgreSQL database queries (restricted mode)",
@@ -192,7 +192,7 @@
       "disabled": true
     },
     "env_required": ["MDB_MCP_CONNECTION_STRING"],
-    "notes": "Generic public server. For PHI-sanitizing use, build a custom wrapper (e.g. /path/to/mongodb-sanitizer/server.js) launched via /path/to/mongodb-launch.sh and register it in ~/.claude.json. A custom server can enforce read-only mode, strip PHI fields, and add a 30s timeout. Store credentials in your system keychain under a service name of your choice."
+    "notes": "PHI-sanitizing server available in mcp-servers/mongodb/server.js. Launch via a shell script that injects MONGODB_URI from your keychain. Register the script in ~/.claude.json mcpServers. Enforces read-only mode, strips PHI fields, batch-redacts strings via Presidio (or regex fallback), 30s timeout. See mcp-servers/mongodb/README.md."
   },
   "presidio": {
     "description": "On-demand PII/PHI detection and anonymization",

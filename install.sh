@@ -1795,6 +1795,38 @@ else
   echo "SKIPPED: scripts/repo-fleet-index.sh (not found)"
 fi
 
+# --- PHI-safe MCP servers ---
+
+echo ""
+echo "--- Installing PHI-safe MCP servers ---"
+
+MCP_SERVERS_DIR="$SCRIPT_DIR/mcp-servers"
+
+# Print template path for reference
+OPERATIONS_TEMPLATE="$SCRIPT_DIR/templates/operations.md.template"
+if [ -f "$OPERATIONS_TEMPLATE" ]; then
+  echo "Template available: templates/operations.md.template (copy and customize for your project)"
+fi
+
+if [ ! -d "$MCP_SERVERS_DIR" ]; then
+  echo "SKIPPED: mcp-servers/ directory not found"
+else
+  for server_dir in "$MCP_SERVERS_DIR"/*/; do
+    name="$(basename "$server_dir")"
+    if [ -f "$server_dir/package.json" ]; then
+      if [ "$DRY_RUN" = true ]; then
+        echo "[DRY RUN] Would run: npm install in mcp-servers/$name/"
+      else
+        echo "Installing dependencies for mcp-servers/$name/ ..."
+        (cd "$server_dir" && npm install --silent 2>&1 | tail -1) || echo "  WARNING: npm install failed for $name"
+        echo "INSTALLED: mcp-servers/$name/ dependencies"
+      fi
+    else
+      echo "SKIPPED: mcp-servers/$name/ (no package.json)"
+    fi
+  done
+fi
+
 # --- MCP Server Registry ---
 
 echo ""

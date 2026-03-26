@@ -1,0 +1,52 @@
+# Operational Runbook: Data System Access
+
+## Critical Policy: MCP Only
+
+**Never use CLI tools to query {{MONGODB_NAME}}, {{DATADOG_NAME}}, {{SNOWFLAKE_NAME}}, or other data systems.**
+
+CLI tools bypass the PHI/PII sanitization layer. All data access MUST go through the MCP servers listed below. This applies to all agents, subagents, and tasks.
+
+## MCP Tool Reference
+
+### MongoDB — `mcp__{{MONGODB_MCP_NAME}}__find`, `mcp__{{MONGODB_MCP_NAME}}__aggregate`
+
+Default database: `{{MONGODB_DEFAULT_DB}}` (check your server config).
+
+```
+mcp__{{MONGODB_MCP_NAME}}__find:
+  collection: "appointments"     # required
+  filter: { "org": "..." }       # required — never omit (full scans blocked)
+  projection: { "field": 1 }     # always include — limits PHI exposure
+  limit: 20                      # always include — default is unbounded
+  sort: { "createdAt": -1 }      # optional
+
+mcp__{{MONGODB_MCP_NAME}}__aggregate:
+  collection: "appointments"
+  pipeline: [{ "$match": {...} }, { "$limit": 20 }]
+  # $out and $merge are blocked server-side (read-only)
+```
+
+Key collections: `users`, `patients`, `appointments` (add yours here)
+
+### Datadog — `mcp__{{DATADOG_MCP_NAME}}__get_logs`
+
+```
+mcp__{{DATADOG_MCP_NAME}}__get_logs:
+  query: "service:my-service @rootId:abc123"
+  from: "now-1h"     # use narrow ranges — broad queries are expensive
+  to: "now"
+  limit: 50
+```
+
+Hex IDs embedded in log messages may not be found by full-text search. Use attribute filters and filter client-side.
+
+### Snowflake — `mcp__{{SNOWFLAKE_MCP_NAME}}__run_sql`
+
+Read-only (SELECT, DESCRIBE, USE only). Always include LIMIT.
+
+## Setup
+
+1. Build the PHI-safe servers: `./install.sh --extras` (runs `npm install` for each server)
+2. Create a launch script for each server (see `mcp-servers/<name>/README.md`)
+3. Register in `~/.claude.json` under the `mcpServers` key
+4. Customize `phi-config.yaml` for your data model (see `mcp-servers/shared/phi-config.example.yaml`)
