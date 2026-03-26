@@ -43,7 +43,8 @@ function isPrivateOrLoopbackIP(ip) {
 
 // ─── Built-in patterns ───────────────────────────────────────────────────────
 
-const PATTERNS = {
+const ENTITIES = {
+  // ── Regex-based (always available) ──────────────────────────────────────────
   US_SSN: {
     regex: /\b\d{3}-\d{2}-\d{4}\b/g,
     placeholder: "[SSN]",
@@ -55,7 +56,7 @@ const PATTERNS = {
   },
   PHONE_US: {
     // \b before the area code only applies when it starts with a digit (no parens).
-    // The alternation handles both "(555) 867-5309" and "555-867-5309".
+    // The alternation handles both paren-prefix and plain-digit area code formats.
     // Dot removed from separators to avoid matching version strings like "2.0.0-1234".
     // Negative lookbehind (?<![.\d]) rejects matches like "v1.800.555.1234" where
     // the area code is preceded by a dot (version-string context).
@@ -70,8 +71,8 @@ const PATTERNS = {
   },
   CREDIT_CARD: {
     // Requires separator pattern (spaces or hyphens between groups) like real card numbers.
-    // Matches: 4111-1111-1111-1111, 4111 1111 1111 1111
-    // Does NOT match: 4111111111111111 (unseparated digits — too many false positives in code)
+    // Matches: digit groups separated by spaces or hyphens (e.g. NNNN-NNNN-NNNN-NNNN).
+    // Does NOT match unseparated digit strings — too many false positives in code.
     regex: /\b\d{4}[- ]\d{4}[- ]\d{4}[- ]\d{1,7}(?:[- ]\d{1,4})?\b/g,
     placeholder: "[CREDIT_CARD]",
     validate(match) {
@@ -94,9 +95,143 @@ const PATTERNS = {
     regex: /\b(?:DOB|Date of Birth|Birth\s?Date)[:\s]+\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4}\b/g,
     placeholder: "[DOB]",
   },
+  IBAN_CODE: {
+    // International Bank Account Number: 2-letter country code, 2 check digits, up to 30 alphanum
+    regex: /\b[A-Z]{2}\d{2}[A-Z0-9]{4,30}\b/g,
+    placeholder: "[IBAN_CODE]",
+    validate(match) {
+      // Valid IBANs are 15–34 chars total
+      return match.length >= 15 && match.length <= 34;
+    },
+  },
+  US_ITIN: {
+    // Individual Taxpayer ID: starts with 9, middle two digits in 70-88, 90-92, or 94-99
+    regex: /\b9\d{2}[-\s]?(?:7[0-9]|8[0-8]|9[0-2]|9[4-9])[-\s]?\d{4}\b/g,
+    placeholder: "[US_ITIN]",
+  },
+  US_PASSPORT: {
+    // US passport: one uppercase letter followed by 8 digits
+    regex: /\b[A-Z]\d{8}\b/g,
+    placeholder: "[US_PASSPORT]",
+  },
+  CRYPTO: {
+    // Ethereum address (0x + 40 hex chars), Bitcoin legacy (25–34 base58 chars), Bech32 (bc1 prefix)
+    regex: /\b(?:0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-z0-9]{39,59})\b/g,
+    placeholder: "[CRYPTO]",
+  },
+  DATE_TIME: {
+    // Bare date patterns without a label: MM/DD/YYYY, DD-MM-YY, etc.
+    // Also matches spelled-out month formats: Jan 15, 2024 / January 15, 2024
+    regex: /\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}\b/gi,
+    placeholder: "[DATE_TIME]",
+  },
+  URL: {
+    // HTTP/HTTPS URLs — excludes localhost and example domains
+    regex: /https?:\/\/(?!localhost\b|127\.0\.0\.1\b|example\.com\b|example\.org\b|example\.net\b)[^\s"'<>]+/g,
+    placeholder: "[URL]",
+  },
+  UK_NHS: {
+    // NHS number: three groups of digits (3-3-4) separated by spaces or hyphens
+    regex: /\b\d{3}[-\s]\d{3}[-\s]\d{4}\b/g,
+    placeholder: "[UK_NHS]",
+  },
+  SG_NRIC_FIN: {
+    // Singapore NRIC/FIN: S/T/F/G/M prefix + 7 digits + checksum letter
+    regex: /\b[STFGM]\d{7}[A-Z]\b/g,
+    placeholder: "[SG_NRIC_FIN]",
+  },
+  AU_ABN: {
+    // Australian Business Number: 11 digits optionally space-grouped as NN NNN NNN NNN
+    regex: /\b\d{2}\s?\d{3}\s?\d{3}\s?\d{3}\b/g,
+    placeholder: "[AU_ABN]",
+    validate(match) {
+      return match.replace(/\s/g, "").length === 11;
+    },
+  },
+  AU_TFN: {
+    // Australian Tax File Number: 9 digits optionally grouped as NNN NNN NNN
+    regex: /\b\d{3}[-\s]?\d{3}[-\s]?\d{3}\b/g,
+    placeholder: "[AU_TFN]",
+    validate(match) {
+      return match.replace(/[-\s]/g, "").length === 9;
+    },
+  },
+  IN_PAN: {
+    // Indian Permanent Account Number: 5 uppercase letters + 4 digits + 1 uppercase letter
+    regex: /\b[A-Z]{5}\d{4}[A-Z]\b/g,
+    placeholder: "[IN_PAN]",
+  },
+  IN_AADHAAR: {
+    // Indian Aadhaar: 12 digits optionally in XXXX XXXX XXXX format
+    regex: /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g,
+    placeholder: "[IN_AADHAAR]",
+    validate(match) {
+      return match.replace(/[-\s]/g, "").length === 12;
+    },
+  },
+  AU_MEDICARE: {
+    // Australian Medicare card: 10 digits optionally followed by a sub-number digit
+    regex: /\b\d{10}[\/\s]?\d?\b/g,
+    placeholder: "[AU_MEDICARE]",
+    validate(match) {
+      const digits = match.replace(/[\/\s]/g, "");
+      return digits.length === 10 || digits.length === 11;
+    },
+  },
+  IN_VEHICLE_REGISTRATION: {
+    // Indian vehicle registration plate: state code + district number + series + number
+    regex: /\b[A-Z]{2}[-\s]\d{1,2}[-\s][A-Z]{1,3}[-\s]\d{4}\b/g,
+    placeholder: "[IN_VEHICLE_REGISTRATION]",
+  },
+
+  // ── NLP-only types (presidioOnly: true) ─────────────────────────────────────
+  // Require the Presidio MCP server. Set PRESIDIO_AVAILABLE=1 in environment to enable.
+  // These are skipped by detectPII() unless { includePresidioOnly: true } is passed.
+  PERSON: {
+    presidioOnly: true,
+    placeholder: "[PERSON]",
+  },
+  LOCATION: {
+    presidioOnly: true,
+    placeholder: "[LOCATION]",
+  },
+  NRP: {
+    // Nationality, religion, or political group
+    presidioOnly: true,
+    placeholder: "[NRP]",
+  },
+  ORGANIZATION: {
+    presidioOnly: true,
+    placeholder: "[ORGANIZATION]",
+  },
+  PHONE_NUMBER: {
+    // International phone numbers — NLP preferred to avoid high false positive rate
+    presidioOnly: true,
+    placeholder: "[PHONE_NUMBER]",
+  },
+  MEDICAL_LICENSE: {
+    // Medical license numbers vary by jurisdiction — NLP preferred
+    presidioOnly: true,
+    placeholder: "[MEDICAL_LICENSE]",
+  },
+  US_DRIVER_LICENSE: {
+    // US driver's license numbers vary by state — NLP preferred
+    presidioOnly: true,
+    placeholder: "[US_DRIVER_LICENSE]",
+  },
+  AU_ACN: {
+    // Australian Company Number — NLP preferred for context disambiguation
+    presidioOnly: true,
+    placeholder: "[AU_ACN]",
+  },
 };
 
-const DEFAULT_ENTITIES = Object.keys(PATTERNS);
+// PATTERNS is an alias for ENTITIES kept for backward compatibility.
+const PATTERNS = ENTITIES;
+
+// DEFAULT_ENTITIES: regex-capable types only (excludes presidioOnly).
+// Used when no explicit entity list is provided to detectPII().
+const DEFAULT_ENTITIES = Object.keys(ENTITIES).filter(k => !ENTITIES[k].presidioOnly);
 
 // ─── detectPII ────────────────────────────────────────────────────────────────
 
@@ -115,9 +250,15 @@ function detectPII(text, enabledEntities, customPatterns) {
   const detections = [];
 
   // Built-in patterns
+  const presidioAvailable = process.env.PRESIDIO_AVAILABLE === "1";
   for (const entity of entities) {
     const pattern = PATTERNS[entity];
     if (!pattern) continue;
+
+    // Skip presidioOnly entities unless PRESIDIO_AVAILABLE=1 is set
+    if (pattern.presidioOnly && !presidioAvailable) continue;
+    // presidioOnly entities have no regex — nothing to do without Presidio
+    if (!pattern.regex) continue;
 
     // Clone regex with global flag to reset lastIndex each call
     const re = new RegExp(pattern.regex.source, pattern.regex.flags.includes("g") ? pattern.regex.flags : pattern.regex.flags + "g");

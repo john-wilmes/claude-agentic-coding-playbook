@@ -326,13 +326,29 @@ test("21. Custom patterns from config are detected", () => {
   assert.strictEqual(custom[0].match, "PT-123456");
 });
 
-// 22. DEFAULT_ENTITIES contains all built-in types
+// 22. DEFAULT_ENTITIES contains all built-in regex-based types (excludes presidioOnly)
 test("22. DEFAULT_ENTITIES contains all built-in types", () => {
-  const expected = ["US_SSN", "EMAIL", "PHONE_US", "CREDIT_CARD", "IP_ADDRESS", "MRN", "DOB"];
-  for (const e of expected) {
+  // Core original types
+  const coreTypes = ["US_SSN", "EMAIL", "PHONE_US", "CREDIT_CARD", "IP_ADDRESS", "MRN", "DOB"];
+  for (const e of coreTypes) {
     assert.ok(DEFAULT_ENTITIES.includes(e), `DEFAULT_ENTITIES should include ${e}`);
   }
-  assert.strictEqual(DEFAULT_ENTITIES.length, expected.length, "Should have exactly the expected entities");
+  // Extended regex-based types
+  const extendedTypes = [
+    "IBAN_CODE", "US_ITIN", "US_PASSPORT", "CRYPTO", "UK_NHS",
+    "SG_NRIC_FIN", "AU_ABN", "AU_TFN", "IN_PAN", "IN_AADHAAR",
+    "AU_MEDICARE", "IN_VEHICLE_REGISTRATION", "DATE_TIME", "URL",
+  ];
+  for (const e of extendedTypes) {
+    assert.ok(DEFAULT_ENTITIES.includes(e), `DEFAULT_ENTITIES should include ${e}`);
+  }
+  // presidioOnly types must NOT be in DEFAULT_ENTITIES
+  const presidioTypes = ["PERSON", "LOCATION", "NRP", "PHONE_NUMBER", "MEDICAL_LICENSE"];
+  for (const e of presidioTypes) {
+    assert.ok(!DEFAULT_ENTITIES.includes(e), `DEFAULT_ENTITIES should NOT include presidioOnly type ${e}`);
+  }
+  // Total: 7 core + 14 extended = 21 regex-based entities
+  assert.strictEqual(DEFAULT_ENTITIES.length, 21, "Should have exactly 21 regex-based entities");
 });
 
 // 23. Multiple PII types in same text all detected

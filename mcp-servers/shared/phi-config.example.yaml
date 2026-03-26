@@ -1,0 +1,156 @@
+# PHI-Safe MCP Servers — PHI Configuration
+# ===========================================
+# Copy this file to phi-config.yaml and customize for your data model.
+#
+# Resolution order (first match wins):
+#   1. PHI_CONFIG_PATH environment variable (absolute path to this file)
+#   2. phi-config.yaml searched upward from the server's working directory
+#   3. Built-in generic defaults (used if no config file is found)
+#
+# YAML parsing requires js-yaml (npm install js-yaml).
+# Without js-yaml, rename this file phi-config.json and use JSON syntax.
+#
+# Column name matching is case-insensitive and ignores underscores:
+#   first_name, firstName, FIRST_NAME → all match "firstname" in phi_columns.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Tables where the `name` column is a person's full name (PHI).
+# In all other tables (facilities, appointmenttypes, etc.) the `name` column
+# is an entity label (facility name, procedure name) and passes through.
+# Add every table that stores rows representing individual people.
+person_tables:
+  - users
+  - patients
+  - providers
+  # - staff
+  # - contacts
+  # - subscribers
+
+# Tables whose string values are entity labels, not person data.
+# String-level PII redaction (openredaction / regex) is skipped for these
+# tables to avoid false positives like "Dr Smith Family Practice" being
+# redacted as a person name.
+#
+# Add lookup/config/reference tables here. PHI column names (phi_columns) are
+# still dropped even for entity tables — only free-text string redaction is
+# skipped.
+entity_tables:
+  - facilities
+  - appointmenttypes
+  - procedures
+  - diagnoses
+  - departments
+  - insurancepayors
+  # - settings
+  # - rollouts
+  # - templates
+
+# Column names that are always PHI regardless of which table is queried.
+# Matching is case-insensitive and underscore-insensitive (see note above).
+#
+# NOT listed here (not PHI per common operational definition):
+#   medical_record_number, mrn — identifiers, not names
+#   patient_id, user_id, provider_id — reference IDs, not names
+#   age, age_group — derived aggregates, not direct identifiers
+phi_columns:
+  # ── Person names ──────────────────────────────────────────────
+  - firstname
+  - lastname
+  - middlename
+  # 'name' is handled contextually via contextual_phi below
+  - normalizedname
+  - alternativename
+  - preferredname
+  - membername         # insurance subscriber name on card
+  - referringprovider  # stored as a name string, not an ID
+
+  # ── Contact information ────────────────────────────────────────
+  - email
+  - phone
+  - displayphone
+  - sms                # phone channel extracted from contact array
+  - voice              # phone channel extracted from contact array
+  - contact            # array with type/value contact entries
+  - from               # message sender (phone/email value)
+  - to                 # message recipient (phone/email value)
+  - homephone
+  - homeemailaddress
+  - donotcontactmessage
+
+  # ── Date of birth ──────────────────────────────────────────────
+  - dob
+  - dateofbirth
+  - dateofbirthyear
+  - dobyear
+  - dateofbirthmonth
+  - dobmonth
+  - dateofbirthday
+  - dobday
+
+  # ── Demographics ───────────────────────────────────────────────
+  - gender
+  - birthsex
+  - race
+  - ethnicity
+  - ethnicitygroup
+  - maritalstatus
+  - veteran
+  - deceased
+
+  # ── Address ───────────────────────────────────────────────────
+  - address
+  - address2
+  - city
+  - state
+  - postcode
+  - country
+  - previousaddress
+
+  # ── SSN ──────────────────────────────────────────────────────
+  - ssn
+
+  # ── Free-text fields that may contain patient-identifying content ──
+  - notes              # appointment/clinical notes — staff-entered free text
+  - staffnotes
+  - text               # message body text
+  - body               # message body
+  - alerts             # patient alerts (subject + description free text)
+  - statusreason       # may contain patient-identifying text
+
+  # ── Clinical / medical data ────────────────────────────────────
+  - medications
+  - immunizationhistory
+  - surgicalhistory
+  - allergies
+  - familyhistory
+  - socialhistory
+  - medicalhistory
+  - problems
+
+  # ── Insurance subscriber (may contain name + DOB) ──────────────
+  - subscriber
+
+  # ── Auth / credential fields (not PHI but sensitive) ──────────
+  # These are dropped from results regardless of table type.
+  - password
+  - passwordhash
+  - resetpasswordtoken
+  - token
+  - authtoken
+  - accesstoken
+  - refreshtoken
+  - twofactorauthsecret
+
+# Columns that are PHI only when a person_table is in the query.
+# In other tables (facilities, appointmenttypes, etc.) these are entity labels
+# and pass through.
+#
+# Example: SELECT name FROM facilities  →  allowed (facility name)
+#          SELECT name FROM patients    →  blocked (patient name)
+#
+# To work around this for ambiguous queries, alias the column:
+#   SELECT name AS facility_name FROM facilities
+# Aliases like facility_name, type_name are not in phi_columns.
+contextual_phi:
+  - name

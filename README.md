@@ -305,6 +305,18 @@ bash scripts/swe-bench.sh --full
 
 See [docs/swe-bench-methodology.md](docs/swe-bench-methodology.md) for task selection, scoring, and limitations.
 
+## MCP Servers
+
+PHI-sanitizing MCP servers for safe AI-assisted queries against healthcare data stores. See [`mcp-servers/`](mcp-servers/) for setup and configuration.
+
+| Server | Data store | PHI protection |
+|--------|-----------|----------------|
+| `mongodb-sanitizer` | MongoDB | Drops PHI fields, redacts string values, Presidio NLP second pass |
+| `snowflake-sanitizer` | Snowflake | Drops PHI columns from SELECT results, read-only enforcement |
+| `datadog-sanitizer` | Datadog Logs | Strips names, emails, SSNs, tokens from log output |
+
+All three use a shared `phi-config.yaml` to define which columns and tables are PHI — no code changes required to adapt to your data model.
+
 ## Roadmap
 
 - **Subagent overflow recovery (claude-loop)** -- When a subagent runs out of turns or context, detect the truncation via a PostToolUse hook on Task, write a state file with remaining work, and have claude-loop inject it as the prompt for a fresh session to finish the job.
