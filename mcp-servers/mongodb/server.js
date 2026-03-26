@@ -3,9 +3,10 @@
 /**
  * server.js — PHI-safe MongoDB MCP server
  *
- * Exposes two read-only tools:
- *   find      — query a collection with filter, projection, sort, limit
- *   aggregate — run a read-only aggregation pipeline
+ * Exposes three read-only tools:
+ *   find                — query a collection with filter, projection, sort, limit
+ *   aggregate           — run a read-only aggregation pipeline
+ *   discover_collection — list all indexes for a collection
  *
  * PHI is stripped from all results by sanitizer.js before being returned to
  * the model. $out and $merge pipeline stages are blocked server-side.
@@ -87,7 +88,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       name: 'find',
       description:
         'Query a MongoDB collection. PHI fields are stripped from all results. ' +
-        'A filter is required — omitting it will be rejected to prevent full-collection scans.',
+        'A filter is required — omitting it will be rejected to prevent full-collection scans. ' +
+        'Use the hint parameter with a named index string to prevent collection scans. Call discover_collection first if you don\'t know which indexes exist.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -110,6 +112,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           sort: {
             type: 'object',
             description: 'MongoDB sort specification (optional)',
+          },
+          hint: {
+            type: 'string',
+            description: "Named MongoDB index to force (e.g. 'user_1_deleted_1_type_1'). Prevents collection scans. Get index names by calling discover_collection first.",
           },
         },
         required: ['collection', 'filter'],
@@ -136,6 +142,21 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['collection', 'pipeline'],
       },
     },
+    {
+      name: 'discover_collection',
+      description:
+        'List all indexes for a MongoDB collection. Call this before querying an unfamiliar collection to find available index names for the hint parameter. Returns each index name, key pattern, and partial filter expression (if any). Always use an index hint when querying large collections.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          collection: {
+            type: 'string',
+            description: 'Collection name to inspect',
+          },
+        },
+        required: ['collection'],
+      },
+    },
   ],
 }));
 
@@ -149,6 +170,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return await handleFind(args);
     } else if (name === 'aggregate') {
       return await handleAggregate(args);
+    } else if (name === 'discover_collection') {
+      return await handleDiscoverCollection(args);
     } else {
       return {
         content: [{ type: 'text', text: `Unknown tool: ${name}` }],
@@ -164,7 +187,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 async function handleFind(args) {
-  const { collection, filter, projection, limit, sort } = args || {};
+  const { collection, filter, projection, limit, sort, hint } = args || {};
 
   // Validate inputs
   if (!collection || typeof collection !== 'string' || collection.trim() === '') {
@@ -185,6 +208,7 @@ async function handleFind(args) {
   let cursor = db.collection(collection).find(filter, { projection: safeProjection });
   if (sort && typeof sort === 'object') cursor = cursor.sort(sort);
   cursor = cursor.limit(resolvedLimit);
+  if (hint && typeof hint === 'string') cursor = cursor.hint(hint);
 
   const raw = await cursor.toArray();
   const sanitized = await sanitizeDocuments(raw, collection);
@@ -222,6 +246,34 @@ async function handleAggregate(args) {
       { type: 'text', text: summary },
       { type: 'text', text: JSON.stringify(sanitized, null, 2) },
     ],
+  };
+}
+
+async function handleDiscoverCollection(args) {
+  const { collection } = args || {};
+  if (!collection || typeof collection !== 'string' || collection.trim() === '') {
+    throw new Error('collection must be a non-empty string');
+  }
+  const db = await getDb();
+  const indexes = await db.collection(collection).indexes();
+
+  const lines = [`Indexes for collection "${collection}" (${indexes.length} total):\n`];
+  for (const idx of indexes) {
+    const keyStr = Object.entries(idx.key).map(([k, v]) => `${k}: ${v}`).join(', ');
+    lines.push(`  name: "${idx.name}"`);
+    lines.push(`  key:  { ${keyStr} }`);
+    if (idx.partialFilterExpression) {
+      lines.push(`  partialFilter: ${JSON.stringify(idx.partialFilterExpression)}`);
+      lines.push(`  ⚠ This is a partial index — your filter MUST include the partialFilter fields exactly.`);
+    }
+    if (idx.unique) lines.push(`  unique: true`);
+    lines.push('');
+  }
+  lines.push('Usage: pass the index name string as the hint parameter in find calls.');
+  lines.push('Example: { collection: "' + collection + '", filter: {...}, hint: "' + (indexes[1]?.name || indexes[0]?.name) + '" }');
+
+  return {
+    content: [{ type: 'text', text: lines.join('\n') }],
   };
 }
 
