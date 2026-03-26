@@ -24,7 +24,7 @@ const {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } = require('@modelcontextprotocol/sdk/types.js');
-const { MongoClient } = require('mongodb');
+const { MongoClient, ObjectId } = require('mongodb');
 
 const {
   sanitizeDocuments,
@@ -87,6 +87,23 @@ async function getDb() {
 function scrubError(err) {
   const msg = err instanceof Error ? err.message : String(err);
   return msg.replace(MONGODB_URI, '[MONGODB_URI]').replace(CLEAN_MONGODB_URI, '[MONGODB_URI]');
+}
+
+// ── BSON type conversion ──────────────────────────────────────────────────────
+
+/**
+ * Recursively convert {"$oid": "<hex>"} in query objects to ObjectId instances.
+ * This allows callers to query by _id without needing native BSON types.
+ */
+function convertBsonTypes(obj) {
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(convertBsonTypes);
+  if (typeof obj.$oid === 'string') return new ObjectId(obj.$oid);
+  const result = {};
+  for (const [k, v] of Object.entries(obj)) {
+    result[k] = convertBsonTypes(v);
+  }
+  return result;
 }
 
 // ── MCP server setup ──────────────────────────────────────────────────────────
@@ -219,9 +236,10 @@ async function handleFind(args) {
   );
 
   const safeProjection = sanitizeProjection(projection, collection);
+  const convertedFilter = convertBsonTypes(filter);
 
   const db = await getDb();
-  let cursor = db.collection(collection).find(filter, { projection: safeProjection });
+  let cursor = db.collection(collection).find(convertedFilter, { projection: safeProjection });
   if (sort && typeof sort === 'object') cursor = cursor.sort(sort);
   cursor = cursor.limit(resolvedLimit);
   if (hint && typeof hint === 'string') cursor = cursor.hint(hint);

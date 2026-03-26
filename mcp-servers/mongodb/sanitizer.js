@@ -126,13 +126,31 @@ async function sanitizeDocuments(docs, tableName) {
  */
 function sanitizeProjection(projection, tableName) {
   const out = projection ? Object.assign({}, projection) : {};
-  // Check every field the caller explicitly included, plus all known PHI columns
-  const allFields = new Set([...Object.keys(out), ...PHI_COLUMNS]);
-  for (const field of allFields) {
-    if (isPHIInContext(field, [tableName])) {
-      out[field] = 0;
+
+  // Determine if caller is using inclusion mode (any non-_id field set to 1).
+  // MongoDB forbids mixing inclusion (1) and exclusion (0) fields except for _id.
+  const isInclusionMode = Object.entries(out).some(
+    ([k, v]) => k !== '_id' && v === 1
+  );
+
+  if (isInclusionMode) {
+    // In inclusion mode: remove PHI fields from the projection rather than
+    // explicitly excluding them — avoids the mixed-projection MongoDB error.
+    for (const field of Object.keys(out)) {
+      if (isPHIInContext(field, [tableName])) {
+        delete out[field];
+      }
+    }
+  } else {
+    // In exclusion mode (or no projection): add PHI fields as explicit exclusions.
+    const allFields = new Set([...Object.keys(out), ...PHI_COLUMNS]);
+    for (const field of allFields) {
+      if (isPHIInContext(field, [tableName])) {
+        out[field] = 0;
+      }
     }
   }
+
   return out;
 }
 
