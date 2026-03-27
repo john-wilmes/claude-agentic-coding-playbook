@@ -80,7 +80,28 @@ process.stdin.on("end", () => {
       process.exit(0);
     }
 
-    // contextHighExists: allow Bash and Skill (for /checkpoint), deny everything else
+    // contextHighExists: check for stale flag from a previous session first.
+    // If the flag carries a session_id that doesn't match the current session,
+    // it was written before claude-loop restarted — delete it and allow the call.
+    try {
+      const flagContent = JSON.parse(fs.readFileSync(contextHighFlag, "utf8"));
+      if (flagContent.session_id && flagContent.session_id !== (hookInput.session_id || "")) {
+        fs.unlinkSync(contextHighFlag);
+        log.writeLog({
+          hook: "checkpoint-gate",
+          event: "stale-flag-cleared",
+          session_id: hookInput.session_id,
+          tool_use_id: hookInput.tool_use_id,
+          details: `Stale context-high flag cleared (flag session: ${flagContent.session_id}, current: ${hookInput.session_id})`,
+          project: hookInput.cwd,
+          context: { tool: toolName },
+        });
+        process.stdout.write(JSON.stringify({}));
+        process.exit(0);
+      }
+    } catch {}
+
+    // Allow Bash and Skill (for /checkpoint), deny everything else
     if (CHECKPOINT_ALLOWED_TOOLS.has(toolName)) {
       process.stdout.write(JSON.stringify({}));
       process.exit(0);

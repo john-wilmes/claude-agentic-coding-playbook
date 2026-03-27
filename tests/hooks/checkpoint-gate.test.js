@@ -227,6 +227,39 @@ test("10. Deny event writes JSONL log entry", (env) => {
   }
 });
 
+test("11. Context-high flag from different session -> allow (stale flag cleared)", (env) => {
+  cleanup();
+  // Write flag with a different session_id than the runGate helper's "test-session"
+  fs.writeFileSync(contextHighPath(), JSON.stringify({ reason: "context-high", ratio: 0.65, session_id: "old-session", timestamp: Date.now() }));
+  try {
+    const result = runGate("Read", {}, { HOME: env.home, USERPROFILE: env.home });
+
+    assert.strictEqual(result.status, 0);
+    assert.deepStrictEqual(result.json, {}, "Stale-session flag should be cleared and tool allowed");
+    assert.ok(!fs.existsSync(contextHighPath()), "Stale flag file should have been deleted");
+  } finally {
+    cleanup();
+  }
+});
+
+test("12. Context-high flag from same session -> deny", (env) => {
+  cleanup();
+  // Write flag with same session_id as runGate helper's "test-session"
+  fs.writeFileSync(contextHighPath(), JSON.stringify({ reason: "context-high", ratio: 0.65, session_id: "test-session", timestamp: Date.now() }));
+  try {
+    const result = runGate("Read", {}, { HOME: env.home, USERPROFILE: env.home });
+
+    assert.strictEqual(result.status, 0);
+    assert.strictEqual(result.json.hookSpecificOutput.permissionDecision, "deny");
+    assert.ok(
+      result.json.hookSpecificOutput.permissionDecisionReason.includes("Context critical"),
+      `Reason was: ${result.json.hookSpecificOutput.permissionDecisionReason}`
+    );
+  } finally {
+    cleanup();
+  }
+});
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
 console.log(`\n${"─".repeat(60)}`);
