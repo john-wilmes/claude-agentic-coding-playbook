@@ -31,7 +31,7 @@ const EXEMPT_BASENAMES = new Set([
   ".gitignore", ".env", ".env.local", ".env.example",
   "package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
   "tsconfig.json", "tsconfig.build.json",
-  "CLAUDE.md", "README.md", "LICENSE", "LICENSE.md", "CHANGELOG.md",
+  "CLAUDE.md", "AGENTS.md", "README.md", "LICENSE", "LICENSE.md", "CHANGELOG.md",
   "Dockerfile", "docker-compose.yml", "docker-compose.yaml",
   "Makefile", ".editorconfig", ".prettierrc", ".eslintrc.json",
   "MEMORY.md",
