@@ -104,6 +104,118 @@ function clickupGet(path, queryParams) {
   });
 }
 
+/**
+ * Make an HTTPS POST request to the ClickUp API with a JSON body.
+ * Returns parsed JSON or throws on error / non-2xx status.
+ *
+ * @param {string} path  API path (e.g. "/api/v2/task/abc123/comment")
+ * @param {object} body  Request body (serialized as JSON)
+ * @returns {Promise<object>}
+ */
+function clickupPost(path, body) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(`https://api.clickup.com${path}`);
+    const payload = JSON.stringify(body);
+
+    const options = {
+      hostname: url.hostname,
+      path: url.pathname + url.search,
+      method: 'POST',
+      headers: {
+        Authorization: CLICKUP_API_TOKEN,
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload),
+      },
+    };
+
+    const req = https.request(options, (res) => {
+      const chunks = [];
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () => {
+        const responseBody = Buffer.concat(chunks).toString('utf8');
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          let msg = `ClickUp API error ${res.statusCode}`;
+          try {
+            const parsed = JSON.parse(responseBody);
+            if (parsed.err) msg += `: ${parsed.err}`;
+            else if (parsed.error) msg += `: ${parsed.error}`;
+          } catch (_) {}
+          return reject(new Error(msg));
+        }
+        try {
+          resolve(JSON.parse(responseBody));
+        } catch (e) {
+          reject(new Error(`Failed to parse ClickUp response: ${e.message}`));
+        }
+      });
+    });
+
+    req.setTimeout(REQUEST_TIMEOUT_MS, () => {
+      req.destroy(new Error(`ClickUp API request timed out after ${REQUEST_TIMEOUT_MS}ms`));
+    });
+
+    req.on('error', reject);
+    req.write(payload);
+    req.end();
+  });
+}
+
+/**
+ * Make an HTTPS PUT request to the ClickUp API with a JSON body.
+ * Returns parsed JSON or throws on error / non-2xx status.
+ *
+ * @param {string} path  API path (e.g. "/api/v2/task/abc123")
+ * @param {object} body  Request body (serialized as JSON)
+ * @returns {Promise<object>}
+ */
+function clickupPut(path, body) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(`https://api.clickup.com${path}`);
+    const payload = JSON.stringify(body);
+
+    const options = {
+      hostname: url.hostname,
+      path: url.pathname + url.search,
+      method: 'PUT',
+      headers: {
+        Authorization: CLICKUP_API_TOKEN,
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload),
+      },
+    };
+
+    const req = https.request(options, (res) => {
+      const chunks = [];
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () => {
+        const responseBody = Buffer.concat(chunks).toString('utf8');
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          let msg = `ClickUp API error ${res.statusCode}`;
+          try {
+            const parsed = JSON.parse(responseBody);
+            if (parsed.err) msg += `: ${parsed.err}`;
+            else if (parsed.error) msg += `: ${parsed.error}`;
+          } catch (_) {}
+          return reject(new Error(msg));
+        }
+        try {
+          resolve(JSON.parse(responseBody));
+        } catch (e) {
+          reject(new Error(`Failed to parse ClickUp response: ${e.message}`));
+        }
+      });
+    });
+
+    req.setTimeout(REQUEST_TIMEOUT_MS, () => {
+      req.destroy(new Error(`ClickUp API request timed out after ${REQUEST_TIMEOUT_MS}ms`));
+    });
+
+    req.on('error', reject);
+    req.write(payload);
+    req.end();
+  });
+}
+
 // ── Formatting helpers ─────────────────────────────────────────────────────────
 
 /**
@@ -211,6 +323,87 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         additionalProperties: false,
       },
     },
+    {
+      name: 'update_task_status',
+      description: 'Update the status of a ClickUp task.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          task_id: {
+            type: 'string',
+            description: 'ClickUp task ID (e.g. "abc123")',
+          },
+          status: {
+            type: 'string',
+            description: 'New status value to set on the task',
+          },
+        },
+        required: ['task_id', 'status'],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: 'post_comment',
+      description:
+        'Post a comment on a ClickUp task. comment_text is sanitized before sending.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          task_id: {
+            type: 'string',
+            description: 'ClickUp task ID (e.g. "abc123")',
+          },
+          comment_text: {
+            type: 'string',
+            description: 'Text content of the comment to post',
+          },
+        },
+        required: ['task_id', 'comment_text'],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: 'get_task_templates',
+      description: 'List available task templates for a ClickUp list.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          list_id: {
+            type: 'string',
+            description: 'ClickUp list ID',
+          },
+          page: {
+            type: 'integer',
+            description: 'Page number (default 0)',
+          },
+        },
+        required: ['list_id'],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: 'create_task_from_template',
+      description: 'Create a new task in a list using a task template.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          list_id: {
+            type: 'string',
+            description: 'ClickUp list ID',
+          },
+          template_id: {
+            type: 'string',
+            description: 'ClickUp task template ID',
+          },
+          name: {
+            type: 'string',
+            description: 'Name for the new task',
+          },
+        },
+        required: ['list_id', 'template_id', 'name'],
+        additionalProperties: false,
+      },
+    },
   ],
 }));
 
@@ -226,6 +419,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return await handleGetTasks(args || {});
     } else if (name === 'search_tasks') {
       return await handleSearchTasks(args || {});
+    } else if (name === 'update_task_status') {
+      return await handleUpdateTaskStatus(args || {});
+    } else if (name === 'post_comment') {
+      return await handlePostComment(args || {});
+    } else if (name === 'get_task_templates') {
+      return await handleGetTaskTemplates(args || {});
+    } else if (name === 'create_task_from_template') {
+      return await handleCreateTaskFromTemplate(args || {});
     } else {
       return {
         content: [{ type: 'text', text: `Unknown tool: ${name}` }],
@@ -331,6 +532,86 @@ async function handleSearchTasks(args) {
       { type: 'text', text: summary },
       { type: 'text', text: JSON.stringify(sanitized, null, 2) },
     ],
+  };
+}
+
+async function handleUpdateTaskStatus(args) {
+  const { task_id, status } = args;
+  if (!task_id || typeof task_id !== 'string' || task_id.trim() === '') {
+    throw new Error('task_id must be a non-empty string');
+  }
+  if (!status || typeof status !== 'string' || status.trim() === '') {
+    throw new Error('status must be a non-empty string');
+  }
+
+  const result = await clickupPut(`/api/v2/task/${encodeURIComponent(task_id)}`, { status });
+
+  return {
+    content: [{ type: 'text', text: JSON.stringify({ success: true, id: result.id, status: result.status?.status }, null, 2) }],
+  };
+}
+
+async function handlePostComment(args) {
+  const { task_id, comment_text } = args;
+  if (!task_id || typeof task_id !== 'string' || task_id.trim() === '') {
+    throw new Error('task_id must be a non-empty string');
+  }
+  if (!comment_text || typeof comment_text !== 'string' || comment_text.trim() === '') {
+    throw new Error('comment_text must be a non-empty string');
+  }
+
+  const sanitized = await sanitizeValue(comment_text);
+  const result = await clickupPost(`/api/v2/task/${encodeURIComponent(task_id)}/comment`, {
+    comment_text: sanitized,
+    notify_all: false,
+  });
+
+  return {
+    content: [{ type: 'text', text: JSON.stringify({ success: true, id: result.id }, null, 2) }],
+  };
+}
+
+async function handleGetTaskTemplates(args) {
+  const { list_id, page = 0 } = args;
+  if (!list_id || typeof list_id !== 'string' || list_id.trim() === '') {
+    throw new Error('list_id must be a non-empty string');
+  }
+
+  const data = await clickupGet(
+    `/api/v2/list/${encodeURIComponent(list_id)}/taskTemplate`,
+    { page }
+  );
+
+  const templates = (data.templates || []).map((t) => ({
+    id:   t.id,
+    name: t.name,
+  }));
+
+  const sanitized = await sanitizeValue(templates);
+  return {
+    content: [{ type: 'text', text: JSON.stringify(sanitized, null, 2) }],
+  };
+}
+
+async function handleCreateTaskFromTemplate(args) {
+  const { list_id, template_id, name } = args;
+  if (!list_id || typeof list_id !== 'string' || list_id.trim() === '') {
+    throw new Error('list_id must be a non-empty string');
+  }
+  if (!template_id || typeof template_id !== 'string' || template_id.trim() === '') {
+    throw new Error('template_id must be a non-empty string');
+  }
+  if (!name || typeof name !== 'string' || name.trim() === '') {
+    throw new Error('name must be a non-empty string');
+  }
+
+  const result = await clickupPost(
+    `/api/v2/list/${encodeURIComponent(list_id)}/taskTemplate/${encodeURIComponent(template_id)}`,
+    { name }
+  );
+
+  return {
+    content: [{ type: 'text', text: JSON.stringify({ success: true, id: result.id, name: result.name, url: result.url }, null, 2) }],
   };
 }
 
