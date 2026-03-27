@@ -189,3 +189,4 @@ Additional rules are loaded from `~/.claude/rules/`:
 - `hooks.md` — hook authoring conventions
 - `testing.md` — test authoring conventions
 - `operations.md` — MCP tool reference and data access policy (MongoDB, Datadog, Snowflake, ClickUp)
+- `luma-architecture.md` — Luma repo ownership, user discriminators, model-repository conventions
