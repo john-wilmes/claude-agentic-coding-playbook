@@ -63,7 +63,12 @@ a = AnalyzerEngine(nlp_engine=nlp_engine)
 an = AnonymizerEngine()
 texts = json.loads(sys.stdin.read())
 out = []
+import re
+tz_re = re.compile(r'^[A-Za-z_]+/[A-Za-z_+\\-]+$')
 for t in texts:
+    if tz_re.match(t):
+        out.append(t)
+        continue
     r = a.analyze(text=t, language='en')
     out.append(an.anonymize(text=t, analyzer_results=r).text if r else t)
 print(json.dumps(out))
