@@ -175,6 +175,48 @@ function manifestToSearchText(m) {
   return parts.filter(Boolean).join(" ");
 }
 
+// ─── ClickUp HTTP helper ──────────────────────────────────────────────────────
+
+function clickupRequest(apiPath) {
+  return new Promise((resolve, reject) => {
+    const apiKey = process.env.CLICKUP_API_KEY;
+    if (!apiKey) {
+      reject(new Error("CLICKUP_API_KEY environment variable is not set"));
+      return;
+    }
+    const url = `https://api.clickup.com/api/v2${apiPath}`;
+    const options = {
+      headers: { Authorization: apiKey, "Content-Type": "application/json" },
+    };
+    const https = require("https");
+    const req = https.get(url, options, (res) => {
+      let data = "";
+      res.on("data", (chunk) => { data += chunk; });
+      res.on("end", () => {
+        try {
+          const parsed = JSON.parse(data);
+          if (res.statusCode >= 400) {
+            reject(new Error(`ClickUp API error ${res.statusCode}: ${parsed.err || data}`));
+          } else {
+            resolve(parsed);
+          }
+        } catch {
+          reject(new Error(`Failed to parse ClickUp response: ${data.slice(0, 200)}`));
+        }
+      });
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+const CLICKUP_API_KEY_MISSING = {
+  isError: true,
+  errorCategory: "validation",
+  isRetryable: false,
+  description: "CLICKUP_API_KEY environment variable is not set",
+};
+
 // ─── Tool implementations ─────────────────────────────────────────────────────
 
 function toolSearchRepos({ query, limit = 10 }) {
@@ -267,6 +309,98 @@ function toolGetDigest() {
   }
 }
 
+async function toolClickupGetSpaces({ team_id } = {}) {
+  if (!process.env.CLICKUP_API_KEY) return CLICKUP_API_KEY_MISSING;
+  const tid = team_id || process.env.CLICKUP_TEAM_ID;
+  if (!tid) {
+    return { isError: true, errorCategory: "validation", isRetryable: false, description: "team_id argument or CLICKUP_TEAM_ID environment variable is required" };
+  }
+  const data = await clickupRequest(`/team/${tid}/space?archived=false`);
+  return (data.spaces || []).map((s) => ({
+    id:                 s.id,
+    name:               s.name,
+    private:            s.private,
+    status:             s.status,
+    multiple_assignees: s.multiple_assignees,
+  }));
+}
+
+async function toolClickupGetLists({ space_id } = {}) {
+  if (!process.env.CLICKUP_API_KEY) return CLICKUP_API_KEY_MISSING;
+  if (!space_id) {
+    return { isError: true, errorCategory: "validation", isRetryable: false, description: "space_id is required" };
+  }
+  const data = await clickupRequest(`/space/${space_id}/list?archived=false`);
+  return (data.lists || []).map((l) => ({
+    id:         l.id,
+    name:       l.name,
+    task_count: l.task_count,
+    status:     l.status,
+  }));
+}
+
+async function toolClickupGetTasks({ list_id, page = 0, include_closed = false } = {}) {
+  if (!process.env.CLICKUP_API_KEY) return CLICKUP_API_KEY_MISSING;
+  if (!list_id) {
+    return { isError: true, errorCategory: "validation", isRetryable: false, description: "list_id is required" };
+  }
+  const data = await clickupRequest(`/list/${list_id}/task?page=${page}&include_closed=${include_closed}&subtasks=false`);
+  return (data.tasks || []).map((t) => ({
+    id:        t.id,
+    name:      t.name,
+    status:    t.status?.status || null,
+    priority:  t.priority?.priority || null,
+    assignees: (t.assignees || []).map((a) => a.username),
+    due_date:  t.due_date || null,
+    tags:      (t.tags || []).map((tg) => tg.name),
+    url:       t.url,
+  }));
+}
+
+async function toolClickupGetTask({ task_id } = {}) {
+  if (!process.env.CLICKUP_API_KEY) return CLICKUP_API_KEY_MISSING;
+  if (!task_id) {
+    return { isError: true, errorCategory: "validation", isRetryable: false, description: "task_id is required" };
+  }
+  const t = await clickupRequest(`/task/${task_id}`);
+  return {
+    id:          t.id,
+    name:        t.name,
+    description: t.description || null,
+    status:      t.status?.status || null,
+    priority:    t.priority?.priority || null,
+    assignees:   (t.assignees || []).map((a) => a.username),
+    due_date:    t.due_date || null,
+    tags:        (t.tags || []).map((tg) => tg.name),
+    url:         t.url,
+    list:        t.list  ? { id: t.list.id,  name: t.list.name  } : null,
+    space:       t.space ? { id: t.space.id, name: t.space.name } : null,
+    creator:     t.creator?.username || null,
+  };
+}
+
+async function toolClickupSearchTasks({ query, team_id, page = 0 } = {}) {
+  if (!process.env.CLICKUP_API_KEY) return CLICKUP_API_KEY_MISSING;
+  if (!query) {
+    return { isError: true, errorCategory: "validation", isRetryable: false, description: "query is required" };
+  }
+  const tid = team_id || process.env.CLICKUP_TEAM_ID;
+  if (!tid) {
+    return { isError: true, errorCategory: "validation", isRetryable: false, description: "team_id argument or CLICKUP_TEAM_ID environment variable is required" };
+  }
+  const data = await clickupRequest(`/team/${tid}/task?query=${encodeURIComponent(query)}&page=${page}&subtasks=false`);
+  return (data.tasks || []).map((t) => ({
+    id:        t.id,
+    name:      t.name,
+    status:    t.status?.status || null,
+    priority:  t.priority?.priority || null,
+    assignees: (t.assignees || []).map((a) => a.username),
+    due_date:  t.due_date || null,
+    tags:      (t.tags || []).map((tg) => tg.name),
+    url:       t.url,
+  }));
+}
+
 // ─── Tool registry ────────────────────────────────────────────────────────────
 
 const TOOLS = [
@@ -327,6 +461,91 @@ const TOOLS = [
       properties: {},
     },
   },
+  {
+    name:        "clickup_get_spaces",
+    description: "List all spaces in the ClickUp workspace. Requires CLICKUP_API_KEY and CLICKUP_TEAM_ID.",
+    inputSchema: {
+      type:       "object",
+      properties: {
+        team_id: {
+          type:        "string",
+          description: "ClickUp team ID (overrides CLICKUP_TEAM_ID env var)",
+        },
+      },
+    },
+  },
+  {
+    name:        "clickup_get_lists",
+    description: "List all lists in a ClickUp space (non-archived). Use clickup_get_spaces first to find space IDs.",
+    inputSchema: {
+      type:       "object",
+      properties: {
+        space_id: {
+          type:        "string",
+          description: "ClickUp space ID",
+        },
+      },
+      required: ["space_id"],
+    },
+  },
+  {
+    name:        "clickup_get_tasks",
+    description: "Get tasks from a ClickUp list. Returns up to 100 tasks with key fields.",
+    inputSchema: {
+      type:       "object",
+      properties: {
+        list_id: {
+          type:        "string",
+          description: "ClickUp list ID",
+        },
+        page: {
+          type:        "number",
+          description: "Page number for pagination (default: 0)",
+        },
+        include_closed: {
+          type:        "boolean",
+          description: "Include closed tasks (default: false)",
+        },
+      },
+      required: ["list_id"],
+    },
+  },
+  {
+    name:        "clickup_get_task",
+    description: "Get a single ClickUp task by ID with full details.",
+    inputSchema: {
+      type:       "object",
+      properties: {
+        task_id: {
+          type:        "string",
+          description: "ClickUp task ID",
+        },
+      },
+      required: ["task_id"],
+    },
+  },
+  {
+    name:        "clickup_search_tasks",
+    description: "Search tasks in the workspace by keyword. Requires CLICKUP_TEAM_ID.",
+    inputSchema: {
+      type:       "object",
+      properties: {
+        query: {
+          type:        "string",
+          description: "Search keyword(s)",
+        },
+        team_id: {
+          type:        "string",
+          description: "ClickUp team ID (overrides CLICKUP_TEAM_ID env var)",
+        },
+        page: {
+          type:        "number",
+          description: "Page number for pagination (default: 0)",
+        },
+      },
+      required: ["query"],
+    },
+  },
 ];
 
 // ─── JSON-RPC helpers ─────────────────────────────────────────────────────────
@@ -362,7 +581,7 @@ function dispatch(req) {
         reply(id, {
           protocolVersion: "2025-03-26",
           capabilities:    { tools: {}, resources: {} },
-          serverInfo:      { name: "fleet-index", version: "1.1.0" },
+          serverInfo:      { name: "fleet-index", version: "1.2.0" },
         });
         break;
 
@@ -378,27 +597,32 @@ function dispatch(req) {
         const toolName = params.name;
         const args     = params.arguments || {};
 
-        let result;
-        switch (toolName) {
-          case "search_repos":
-            result = toolSearchRepos(args);
-            break;
-          case "get_manifest":
-            result = toolGetManifest(args);
-            break;
-          case "list_repos":
-            result = toolListRepos(args);
-            break;
-          case "get_digest":
-            result = toolGetDigest();
-            break;
-          default:
-            replyError(id, -32601, `Unknown tool: ${toolName}`);
-            return;
-        }
+        const runTool = () => {
+          switch (toolName) {
+            case "search_repos":           return toolSearchRepos(args);
+            case "get_manifest":           return toolGetManifest(args);
+            case "list_repos":             return toolListRepos(args);
+            case "get_digest":             return toolGetDigest();
+            case "clickup_get_spaces":     return toolClickupGetSpaces(args);
+            case "clickup_get_lists":      return toolClickupGetLists(args);
+            case "clickup_get_tasks":      return toolClickupGetTasks(args);
+            case "clickup_get_task":       return toolClickupGetTask(args);
+            case "clickup_search_tasks":   return toolClickupSearchTasks(args);
+            default:
+              replyError(id, -32601, `Unknown tool: ${toolName}`);
+              return undefined;
+          }
+        };
 
-        reply(id, {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        const result = runTool();
+        if (result === undefined) break; // error already sent
+
+        Promise.resolve(result).then((resolved) => {
+          reply(id, {
+            content: [{ type: "text", text: JSON.stringify(resolved, null, 2) }],
+          });
+        }).catch((err) => {
+          replyError(id, -32603, `Tool error: ${err.message}`);
         });
         break;
       }
