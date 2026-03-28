@@ -1175,6 +1175,46 @@ if [ -f "$SCRIPT_DIR/templates/hooks/mcp-server-guard.js" ]; then
   fi
 fi
 
+# MCP query interceptor (PreToolUse -- blocks MongoDB/Datadog/Snowflake calls when MCP_QUERY_INTERCEPT=1)
+if [ -f "$SCRIPT_DIR/templates/hooks/mcp-query-interceptor.js" ]; then
+  install_symlink "$SCRIPT_DIR/templates/hooks/mcp-query-interceptor.js" "$CLAUDE_DIR/hooks/mcp-query-interceptor.js" "MCP query interceptor: mcp-query-interceptor.js"
+
+  echo ""
+  echo "--- Configuring mcp-query-interceptor in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  MQI_CMD="node $CLAUDE_DIR/hooks/mcp-query-interceptor.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add mcp-query-interceptor PreToolUse hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    node -e "
+      const fs = require('fs');
+      const path = require('path');
+      const settingsPath = path.resolve(process.argv[1]);
+      const hookCmd = process.argv[2];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.hooks) settings.hooks = {};
+      if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+      const exists = settings.hooks.PreToolUse.some(e =>
+        e.hooks && e.hooks.some(h => h.command && h.command.includes('mcp-query-interceptor'))
+      );
+      if (!exists) {
+        settings.hooks.PreToolUse.push({
+          hooks: [{ type: 'command', command: hookCmd, timeout: 5 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+        console.log('CONFIGURED: mcp-query-interceptor PreToolUse hook (no matcher, all tools)');
+      } else {
+        console.log('ALREADY CONFIGURED: mcp-query-interceptor PreToolUse hook in settings.json');
+      }
+    " "$SETTINGS_FILE" "$MQI_CMD"
+  fi
+fi
+
 # Pre-compact snapshot hook (PreCompact -- saves emergency MEMORY.md snapshot before compaction)
 if [ -f "$SCRIPT_DIR/templates/hooks/pre-compact.js" ]; then
   install_symlink "$SCRIPT_DIR/templates/hooks/pre-compact.js" "$CLAUDE_DIR/hooks/pre-compact.js" "pre-compact hook: pre-compact.js"
