@@ -10,3 +10,4 @@ sanitization:
     - DOB
   exclude_paths:
     - "tests/fixtures/**"
+    - "../../../.mcp/shared/canary-tokens.json"
