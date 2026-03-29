@@ -50,8 +50,9 @@ const ENTITIES = {
     placeholder: "[SSN]",
   },
   EMAIL: {
-    // Standard email — excludes user@example.com, config@localhost, noreply@example.com, etc.
-    regex: /\b[a-zA-Z0-9._%+\-]+@(?!example\.com\b|localhost\b|example\.org\b|example\.net\b)[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b/g,
+    // Standard email — excludes user@example.com, config@localhost, noreply@example.com,
+    // and *.invalid TLD (RFC 2606 reserved for testing, e.g. canary tokens).
+    regex: /\b[a-zA-Z0-9._%+\-]+@(?!example\.com\b|localhost\b|example\.org\b|example\.net\b|[a-zA-Z0-9.\-]+\.invalid\b)[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b/g,
     placeholder: "[EMAIL]",
   },
   PHONE_US: {

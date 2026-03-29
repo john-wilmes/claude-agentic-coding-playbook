@@ -129,6 +129,30 @@ const DEFAULT_PHI_COLUMNS = [
 // ── YAML / JSON loader ──────────────────────────────────────────────────────
 
 /**
+ * Load the built-in phi-defaults.yaml (or phi-defaults.json fallback) from the
+ * same directory as this file. Returns a validated config object or null.
+ *
+ * Called when no user-supplied config is found, so defaults live in one
+ * canonical file rather than hardcoded arrays above.
+ *
+ * @returns {{ person_tables: string[], entity_tables: string[], phi_columns: string[], contextual_phi: string[] }|null}
+ */
+function loadDefaults() {
+  const yamlPath = path.join(__dirname, 'phi-defaults.yaml');
+  const jsonPath = path.join(__dirname, 'phi-defaults.json');
+  const raw = parseConfigFile(yamlPath) || parseConfigFile(jsonPath);
+  if (!raw || typeof raw !== 'object') return null;
+  const toStringArray = (val) =>
+    Array.isArray(val) ? val.filter(s => typeof s === 'string') : [];
+  return {
+    person_tables:  toStringArray(raw.person_tables),
+    entity_tables:  toStringArray(raw.entity_tables),
+    phi_columns:    toStringArray(raw.phi_columns),
+    contextual_phi: toStringArray(raw.contextual_phi),
+  };
+}
+
+/**
  * Try to load js-yaml. Returns null if not installed.
  * @returns {object|null}
  */
@@ -225,8 +249,12 @@ function loadConfig() {
 }
 
 // ── Build exported values ───────────────────────────────────────────────────
+// Resolution order:
+//   1. User config (PHI_CONFIG_PATH env var or phi-config.yaml searched upward)
+//   2. phi-defaults.yaml / phi-defaults.json co-located with this file
+//   3. Hardcoded DEFAULT_* arrays above (absolute last resort)
 
-const config = loadConfig();
+const config = loadConfig() || loadDefaults();
 
 /** @type {string[]} */
 const PHI_COLUMNS = config ? config.phi_columns : DEFAULT_PHI_COLUMNS;

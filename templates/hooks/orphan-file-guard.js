@@ -69,6 +69,11 @@ function isExempt(filePath) {
   const claudeMemDir = path.join(os.homedir(), ".claude", "projects");
   if (filePath.startsWith(claudeMemDir)) return true;
 
+  // MCP server infrastructure files (~/.mcp/) — live outside any project repo
+  // and reference each other directly; orphan detection via project grep is inapplicable.
+  const mcpDir = path.join(os.homedir(), ".mcp");
+  if (filePath.startsWith(mcpDir)) return true;
+
   return false;
 }
 
