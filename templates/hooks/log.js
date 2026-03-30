@@ -78,8 +78,11 @@ function writeLog(entry) {
     throw new TypeError("writeLog: entry.event is required");
   }
 
-  // Ensure log directory exists
-  fs.mkdirSync(LOG_DIR, { recursive: true });
+  // Ensure log directory exists with correct permissions.
+  // mkdirSync(mode) only applies to newly created dirs, not pre-existing ones,
+  // so explicitly chmod after to cover the case where the dir already existed.
+  fs.mkdirSync(LOG_DIR, { recursive: true, mode: 0o700 });
+  try { fs.chmodSync(LOG_DIR, 0o700); } catch { /* best-effort */ }
 
   // Auto-populate context fields from environment (explicit entry values win)
   const env = process.env;

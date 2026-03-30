@@ -641,8 +641,8 @@ t_auto_commit_commits() {
   touch "${tmpdir}/initial.txt"
   git -C "${tmpdir}" add -A
   git -C "${tmpdir}" commit -q -m "initial"
-  # Create an uncommitted file
-  echo "new content" > "${tmpdir}/work.txt"
+  # Modify a tracked file (auto_commit_task uses git add -u, not -A)
+  echo "new content" >> "${tmpdir}/initial.txt"
   # Run auto_commit_task from inside the repo
   (cd "${tmpdir}" && auto_commit_task "Test task")
   # Verify the commit was created

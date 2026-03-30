@@ -7,6 +7,7 @@
 //
 // All functions are non-throwing — errors are swallowed silently.
 
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
@@ -64,13 +65,15 @@ function _jsonlStageCandidate(candidate) {
     source_project: candidate.source_project || "",
     cwd: candidate.cwd || "",
   };
-  const filePath = path.join(getStagedDir(), `${candidate.session_id}.jsonl`);
+  const sessionKey = crypto.createHash("sha256").update(candidate.session_id || "").digest("hex").slice(0, 16);
+  const filePath = path.join(getStagedDir(), `${sessionKey}.jsonl`);
   fs.appendFileSync(filePath, JSON.stringify(record) + "\n", "utf8");
 }
 
 function _jsonlReadStagedCandidates(sessionId) {
   try {
-    const filePath = path.join(getStagedDir(), `${sessionId}.jsonl`);
+    const sessionKey = crypto.createHash("sha256").update(sessionId || "").digest("hex").slice(0, 16);
+    const filePath = path.join(getStagedDir(), `${sessionKey}.jsonl`);
     const raw = fs.readFileSync(filePath, "utf8");
     const results = [];
     for (const line of raw.split("\n")) {
@@ -89,7 +92,8 @@ function _jsonlReadStagedCandidates(sessionId) {
 }
 
 function _jsonlClearStagedCandidates(sessionId) {
-  const filePath = path.join(getStagedDir(), `${sessionId}.jsonl`);
+  const sessionKey = crypto.createHash("sha256").update(sessionId || "").digest("hex").slice(0, 16);
+  const filePath = path.join(getStagedDir(), `${sessionKey}.jsonl`);
   fs.rmSync(filePath, { force: true });
 }
 

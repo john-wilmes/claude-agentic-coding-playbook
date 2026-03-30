@@ -31,8 +31,14 @@ const IMAGE_EXTENSIONS = new Set([
  * Get the tracking file path for this session's image reads.
  * Uses session_id to isolate per-session state.
  */
+function getMultiImageDir() {
+  const dir = path.join(os.tmpdir(), "claude-multi-image-guard");
+  try { fs.mkdirSync(dir, { mode: 0o700, recursive: true }); } catch {}
+  return dir;
+}
+
 function trackingPath(sessionId) {
-  return path.join(os.tmpdir(), `claude-image-reads-${sessionId}`);
+  return path.join(getMultiImageDir(), `claude-image-reads-${path.basename(sessionId)}`);
 }
 
 /**
@@ -98,7 +104,10 @@ process.stdin.on("end", () => {
       process.exit(0);
     }
 
-    // This is an image read — check count
+    // This is an image read — check count.
+    // NOTE: Known TOCTOU race between getImageCount and incrementImageCount.
+    // Accepted limitation: Claude Code serializes tool calls within a session,
+    // so concurrent increments from the same session cannot occur in practice.
     const sessionId = event.session_id || "unknown";
     const count = getImageCount(sessionId);
 

@@ -36,6 +36,8 @@ const THROWAWAY_PATTERNS = [
 ];
 
 const STATE_DIR = path.join(os.tmpdir(), "claude-bloat-guard");
+// Ensure state dir exists with restrictive permissions (M1: predictable tmp paths)
+try { fs.mkdirSync(STATE_DIR, { mode: 0o700, recursive: true }); } catch {}
 const ESCALATION_THRESHOLD = 5;
 
 // ---------------------------------------------------------------------------
@@ -47,7 +49,7 @@ const ESCALATION_THRESHOLD = 5;
  * @param {string} sessionId - from hookInput.session_id
  */
 function getStateFile(sessionId) {
-  const id = sessionId || "default";
+  const id = path.basename(sessionId || "default");
   return path.join(STATE_DIR, `${id}.json`);
 }
 
@@ -70,7 +72,7 @@ function loadState(sessionId) {
  */
 function saveState(sessionId, files) {
   try {
-    fs.mkdirSync(STATE_DIR, { recursive: true });
+    fs.mkdirSync(STATE_DIR, { mode: 0o700, recursive: true });
     fs.writeFileSync(getStateFile(sessionId), JSON.stringify({ files }));
   } catch {
     // Best-effort; don't crash the hook

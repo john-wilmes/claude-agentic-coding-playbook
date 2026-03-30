@@ -105,16 +105,22 @@ function normalizeSkillName(name) {
 // Session state (repeat detection)
 // ---------------------------------------------------------------------------
 
+function getSkillGuardDir() {
+  const dir = path.join(os.tmpdir(), "claude-skill-guard");
+  try { fs.mkdirSync(dir, { mode: 0o700, recursive: true }); } catch {}
+  return dir;
+}
+
 function getStateFile(sessionId) {
-  return path.join(os.tmpdir(), `skill-guard-${sessionId}.json`);
+  return path.join(getSkillGuardDir(), `skill-guard-${path.basename(sessionId)}.json`);
 }
 
 function getActiveSkillFile(sessionId) {
-  return path.join(os.tmpdir(), `skill-active-${sessionId}.json`);
+  return path.join(getSkillGuardDir(), `skill-active-${path.basename(sessionId)}.json`);
 }
 
 function getGlobalActiveSkillFile() {
-  return path.join(os.tmpdir(), "skill-active-global.json");
+  return path.join(getSkillGuardDir(), "skill-active-global.json");
 }
 
 /**
@@ -128,7 +134,8 @@ function parseFrontmatterField(home, skillName, fieldName) {
     const parts = skillMd.split("---");
     if (parts.length < 3) return [];
     const frontmatter = parts[1];
-    const re = new RegExp(`^${fieldName}:\\s*(.+)`);
+    const escaped = fieldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`^${escaped}:\\s*(.+)`);
     for (const line of frontmatter.split("\n")) {
       const match = line.match(re);
       if (match) {
@@ -158,10 +165,54 @@ function parsePrereqs(home, skillName) {
 }
 
 /**
+ * Check if a prereq command is safe to execute.
+ * Only allows: command -v, which, tool --version/-v,
+ * test -f, [ -f ... ]. Rejects pipes, backticks, $(), eval, exec, curl, wget, bash -c, sh -c.
+ */
+function isAllowedPrereq(cmd) {
+  if (!cmd || typeof cmd !== "string") return false;
+  const trimmed = cmd.trim();
+
+  // Reject dangerous shell constructs
+  if (/[|`]/.test(trimmed)) return false;
+  if (/\$\(/.test(trimmed)) return false;
+  if (/\beval\b/.test(trimmed)) return false;
+  if (/\bexec\b/.test(trimmed)) return false;
+  if (/\bcurl\b/.test(trimmed)) return false;
+  if (/\bwget\b/.test(trimmed)) return false;
+  if (/\bbash\s+-c\b/.test(trimmed)) return false;
+  if (/\bsh\s+-c\b/.test(trimmed)) return false;
+
+  // Block shell metacharacters that chain commands (;, &&, ||, newlines, $())
+  if (/[;&|`\n\r$]/.test(trimmed)) return false;
+
+  // Allow: command -v <name> (alphanumeric/dash/underscore only)
+  if (/^command\s+-v\s+[\w.-]+$/.test(trimmed)) return true;
+  // Allow: which <name>
+  if (/^which\s+[\w.-]+$/.test(trimmed)) return true;
+  // Allow: <tool> --version or <tool> -v
+  if (/^[\w.-]+\s+--version$/.test(trimmed) || /^[\w.-]+\s+-v$/.test(trimmed)) return true;
+  // Allow: test -f <path> (no metacharacters in path)
+  if (/^test\s+-[fedr]\s+[\w.\/~-]+$/.test(trimmed)) return true;
+  // Allow: [ -f <path> ]
+  if (/^\[\s+-[fedr]\s+[\w.\/~-]+\s+\]$/.test(trimmed)) return true;
+
+  return false;
+}
+
+/**
  * Run prereqs commands. Returns { ok: true } or { ok: false, failed: string, error: string }.
  */
 function runPrereqs(prereqs) {
   for (const cmd of prereqs) {
+    // Validate command against allowlist before executing
+    if (!isAllowedPrereq(cmd)) {
+      return {
+        ok: false,
+        failed: cmd,
+        error: "Prereq command not in allowlist. Only version checks (--version, -v), existence checks (which, command -v, test -f), and bracket tests are allowed.",
+      };
+    }
     try {
       execSync(cmd, { stdio: "pipe", timeout: 10000 });
     } catch (err) {

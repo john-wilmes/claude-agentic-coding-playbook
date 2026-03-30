@@ -82,8 +82,9 @@ function detectRetrievalMisses(sessionId, cwd) {
           // Direct LIKE fallback: find active entries matching at least one term in context
           // (FTS5 cross-connection returns empty without error on some SQLite versions)
           try {
-            const likeClause = queryTerms.map(() => "(context_text LIKE ? OR fix_text LIKE ?)").join(" OR ");
-            const params = queryTerms.flatMap(t => [`%${t}%`, `%${t}%`]);
+            const likeClause = queryTerms.map(() => "(context_text LIKE ? ESCAPE '\\' OR fix_text LIKE ? ESCAPE '\\')").join(" OR ");
+            const escapeLike = (t) => t.replace(/[\\%_]/g, c => `\\${c}`);
+            const params = queryTerms.flatMap(t => { const e = escapeLike(t); return [`%${e}%`, `%${e}%`]; });
             const toolFilter = candidateTool ? "tool = ? AND " : "";
             const toolParams = candidateTool ? [candidateTool] : [];
             const stmt = db.prepare(

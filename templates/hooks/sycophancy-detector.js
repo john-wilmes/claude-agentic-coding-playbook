@@ -59,7 +59,7 @@ const READ_TOOLS = new Set(["Read"]);
 
 function getStateDir() {
   const dir = path.join(os.tmpdir(), "claude-sycophancy-detector");
-  try { fs.mkdirSync(dir, { recursive: true }); } catch {}
+  try { fs.mkdirSync(dir, { mode: 0o700, recursive: true }); } catch {}
   return dir;
 }
 
@@ -69,7 +69,7 @@ function getStateKey(sessionId) {
 }
 
 function getStateFile(sessionId) {
-  return path.join(getStateDir(), `${getStateKey(sessionId)}.json`);
+  return path.join(getStateDir(), `${path.basename(getStateKey(sessionId))}.json`);
 }
 
 function loadState(stateFile) {

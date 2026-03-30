@@ -51,7 +51,11 @@ The subagent prompt should instruct it to:
    fi
    rm -f "$PROJECT_DIR/session-marker.json"
    rm -f "$PROJECT_DIR/loop-detector.json"
-   rm -rf /tmp/claude-subagent-recovery/
+   # Only delete session-specific state, not the entire shared recovery directory
+   # (other concurrent sessions may be using it)
+   if [ -n "${CLAUDE_LOOP_PID:-}" ] && [[ "${CLAUDE_LOOP_PID}" =~ ^[0-9]+$ ]]; then
+     rm -f "/tmp/claude-subagent-recovery/recovery-${CLAUDE_LOOP_PID}.json"
+   fi
    ```
 
 6. **Return a one-line summary** of what was done (e.g. "Memory updated, committed abc1234, pushed to origin").
@@ -72,6 +76,7 @@ echo "CLAUDE_LOOP=${CLAUDE_LOOP:-0} SENTINEL=${CLAUDE_LOOP_SENTINEL:-}"
 **If `CLAUDE_LOOP=1` (headless/task-queue mode):** Write the sentinel and exit.
 
 ```bash
+[[ "${CLAUDE_LOOP_PID}" =~ ^[0-9]+$ ]] || exit 0
 SENTINEL="/tmp/claude-checkpoint-exit-${CLAUDE_LOOP_PID}"
 echo '{"reason":"checkpoint","timestamp":'$(date +%s)'}' > "${SENTINEL}"
 ```
@@ -81,6 +86,7 @@ Print exactly "Exiting — claude-loop will respawn." Then STOP. Do not make any
 **If `CLAUDE_LOOP_SENTINEL` is set (interactive mode under claude-loop):** Write the sentinel.
 
 ```bash
+[[ "${CLAUDE_LOOP_PID}" =~ ^[0-9]+$ ]] || exit 0
 SENTINEL="/tmp/claude-checkpoint-exit-${CLAUDE_LOOP_PID}"
 echo '{"reason":"checkpoint","timestamp":'$(date +%s)'}' > "${SENTINEL}"
 ```

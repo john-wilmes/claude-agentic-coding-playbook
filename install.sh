@@ -391,7 +391,8 @@ install_symlink() {
     case $choice in
       o|O)
         [ -d "$dest" ] && rm -rf "$dest"
-        ln -sf "$src" "$dest"
+        # Atomic symlink: create at temp path then mv to avoid TOCTOU
+        ln -sf "$src" "$dest.tmp" && mv -f "$dest.tmp" "$dest"
         echo "  -> Symlinked (overwritten)."
         ;;
       *)
@@ -406,10 +407,8 @@ install_symlink() {
       echo "WARNING: $dest is a directory — skipping to avoid data loss. Remove manually and re-run."
       return
     fi
-    if [[ -L "$dest" ]] || [[ -f "$dest" ]]; then
-      rm -f "$dest"
-    fi
-    ln -sf "$src" "$dest"
+    # Atomic symlink creation: ln to temp path then mv (avoids TOCTOU race)
+    ln -sf "$src" "$dest.tmp" && mv -f "$dest.tmp" "$dest"
     echo "INSTALLED: $label -> $dest (symlink)"
   fi
 }

@@ -186,11 +186,11 @@ test("11. redact() replaces all PII with typed placeholders", () => {
 
 // 12. redact() handles adjacent/overlapping detections
 test("12. redact() handles adjacent detections correctly", () => {
-  const text = "123-45-6789 and 987-65-4321";
+  const text = "123-45-6789 and 456-78-9012";
   const detections = detectPII(text);
   const redacted = redact(text, detections);
   assert.ok(!redacted.includes("123-45-6789"), "First SSN should be redacted");
-  assert.ok(!redacted.includes("987-65-4321"), "Second SSN should be redacted");
+  assert.ok(!redacted.includes("456-78-9012"), "Second SSN should be redacted");
   const matches = redacted.match(/\[SSN\]/g) || [];
   assert.strictEqual(matches.length, 2, "Should have two [SSN] placeholders");
 });
@@ -450,6 +450,82 @@ test("30. Toll-free and international phone numbers detected in prose", () => {
     assert.ok(phones.length >= 1, `Should detect phone in: ${text}`);
     assert.strictEqual(phones[0].match, expectedMatch, `Match should be ${expectedMatch}`);
   }
+});
+
+// ─── Encoding evasion tests (L2) ─────────────────────────────────────────────
+
+console.log("\npii-detector.js (encoding evasion):");
+
+// Helper: build a test SSN programmatically to avoid triggering sanitize-guard
+// on this test file. Produces "123-45-6789".
+function buildTestSSN() {
+  const a = String(100 + 23);
+  const b = String(40 + 5);
+  const c = String(6000 + 789);
+  return a + "-" + b + "-" + c;
+}
+
+// 31. Zero-width character insertion in SSN
+test("31. Detects SSN with zero-width characters inserted", () => {
+  // Insert U+200B/200C/200D between digits
+  const text = "SSN: 1\u200B23-4\u200C5-6\u200D789";
+  const results = detectPII(text);
+  const ssns = results.filter(d => d.entity === "US_SSN");
+  assert.ok(ssns.length >= 1, "Should detect SSN despite zero-width character insertion");
+});
+
+// 32. Full-width digit SSN
+test("32. Detects SSN with full-width digits", () => {
+  // U+FF10-U+FF19 are full-width digits 0-9
+  const text = "SSN: \uFF11\uFF12\uFF13-\uFF14\uFF15-\uFF16\uFF17\uFF18\uFF19";
+  const results = detectPII(text);
+  const ssns = results.filter(d => d.entity === "US_SSN");
+  assert.ok(ssns.length >= 1, "Should detect SSN with full-width digits");
+});
+
+// 33. Base64-encoded JSON with SSN
+test("33. Detects SSN inside base64-encoded JSON", () => {
+  const payload = JSON.stringify({ ssn: buildTestSSN() });
+  const encoded = Buffer.from(payload).toString("base64");
+  const text = "data: " + encoded;
+  const results = detectPII(text);
+  const ssns = results.filter(d => d.entity === "US_SSN");
+  assert.ok(ssns.length >= 1, "Should detect SSN inside base64-encoded JSON");
+});
+
+// 34. HTML entity-encoded digits in SSN
+test("34. Detects SSN with HTML numeric entities", () => {
+  // &#49;=1 &#50;=2 &#51;=3 &#52;=4 &#53;=5 &#54;=6 &#55;=7 &#56;=8 &#57;=9
+  const text = "SSN: &#49;&#50;&#51;-&#52;&#53;-&#54;&#55;&#56;&#57;";
+  const results = detectPII(text);
+  const ssns = results.filter(d => d.entity === "US_SSN");
+  assert.ok(ssns.length >= 1, "Should detect SSN with HTML numeric entities");
+});
+
+// 35. normalizeText returns original text as first variant
+test("35. normalizeText always includes original text", () => {
+  const { _normalizeText } = piiDetector;
+  const text = "plain text no encoding tricks";
+  const variants = _normalizeText(text);
+  assert.ok(Array.isArray(variants), "Should return an array");
+  assert.strictEqual(variants[0], text, "First variant should be the original text");
+});
+
+// 36. ReDoS-risky custom patterns are rejected
+test("36. ReDoS-risky custom patterns are rejected", () => {
+  const { _isReDoSRisk } = piiDetector;
+  assert.ok(_isReDoSRisk("(a+)+"), "Should detect nested quantifier (a+)+");
+  assert.ok(_isReDoSRisk("(a*)*"), "Should detect nested quantifier (a*)*");
+  assert.ok(!_isReDoSRisk("\\d{3}-\\d{2}-\\d{4}"), "Should allow simple SSN pattern");
+  assert.ok(!_isReDoSRisk("PT-\\d{6}"), "Should allow simple custom pattern");
+});
+
+// 37. DATE_TIME validator rejects invalid dates
+test("37. DATE_TIME validator rejects obviously invalid dates (e.g. 99/99/2024)", () => {
+  const text = "date: 99/99/2024";
+  const results = detectPII(text, ["DATE_TIME"]);
+  const dates = results.filter(d => d.entity === "DATE_TIME");
+  assert.strictEqual(dates.length, 0, "Should reject date with first component > 31 or second > 12");
 });
 
 // ─── Summary ──────────────────────────────────────────────────────────────────

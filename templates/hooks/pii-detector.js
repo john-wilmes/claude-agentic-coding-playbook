@@ -41,6 +41,73 @@ function isPrivateOrLoopbackIP(ip) {
   return false;
 }
 
+// ─── Text normalization (encoding bypass defense) ────────────────────────────
+
+/**
+ * Normalize text to defeat encoding-based PII evasion.
+ * Strips zero-width characters, normalizes full-width digits,
+ * decodes HTML numeric entities, and detects base64-encoded JSON blobs.
+ *
+ * Returns an array of strings to scan: [original, ...normalized variants].
+ * The original text is always included so that match indices remain valid.
+ */
+function normalizeText(text) {
+  if (!text || typeof text !== "string") return [text];
+
+  let normalized = text;
+
+  // 1. Strip zero-width characters (U+200B, U+200C, U+200D, U+FEFF, U+00AD)
+  normalized = normalized.replace(/[\u200B\u200C\u200D\uFEFF\u00AD]/g, "");
+
+  // 2. Normalize full-width digits (U+FF10-U+FF19) to ASCII digits
+  normalized = normalized.replace(/[\uFF10-\uFF19]/g, (ch) =>
+    String.fromCharCode(ch.charCodeAt(0) - 0xFF10 + 0x30)
+  );
+
+  // 3. Decode HTML numeric entities (&#NNN; and &#xHHH;)
+  normalized = normalized.replace(/&#(\d+);/g, (_, dec) => {
+    const code = parseInt(dec, 10);
+    return code > 0 && code < 0x10000 ? String.fromCharCode(code) : _;
+  });
+  normalized = normalized.replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => {
+    const code = parseInt(hex, 16);
+    return code > 0 && code < 0x10000 ? String.fromCharCode(code) : _;
+  });
+
+  const results = [text];
+  if (normalized !== text) results.push(normalized);
+
+  // 4. Detect base64-encoded JSON blobs
+  const b64Re = /[A-Za-z0-9+/]{20,}={0,2}/g;
+  let m;
+  while ((m = b64Re.exec(text)) !== null) {
+    try {
+      const decoded = Buffer.from(m[0], "base64").toString("utf8");
+      // Heuristic: if it parses as JSON, scan the stringified content
+      try {
+        JSON.parse(decoded);
+        results.push(decoded);
+      } catch {
+        // Not valid JSON — check if it's mostly printable ASCII text (e.g. SSNs, emails)
+        if (decoded.length >= 8) {
+          let printable = 0;
+          for (let i = 0; i < decoded.length; i++) {
+            const c = decoded.charCodeAt(i);
+            if (c >= 32 && c <= 126) printable++;
+          }
+          if (printable / decoded.length > 0.8) {
+            results.push(decoded);
+          }
+        }
+      }
+    } catch {
+      // Not valid base64 — skip
+    }
+  }
+
+  return results;
+}
+
 // ─── Built-in patterns ───────────────────────────────────────────────────────
 
 const ENTITIES = {
@@ -48,6 +115,12 @@ const ENTITIES = {
   US_SSN: {
     regex: /\b\d{3}-\d{2}-\d{4}\b/g,
     placeholder: "[SSN]",
+    validate(match) {
+      // Reject invalid SSN area numbers: 000, 666, and 900-999
+      const area = parseInt(match.slice(0, 3), 10);
+      if (area === 0 || area === 666 || area >= 900) return false;
+      return true;
+    },
   },
   EMAIL: {
     // Standard email — excludes user@example.com, config@localhost, noreply@example.com,
@@ -125,6 +198,19 @@ const ENTITIES = {
     // Also matches spelled-out month formats: Jan 15, 2024 / January 15, 2024
     regex: /\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}\b/gi,
     placeholder: "[DATE_TIME]",
+    validate(match) {
+      // Basic date range validation for numeric formats (MM/DD/YYYY or DD-MM-YY).
+      // Supports both MM/DD (US) and DD/MM (international) formats.
+      // Reject if either component exceeds 31 (impossible in any format).
+      // Reject if BOTH components exceed 12 (neither can be a month).
+      const numMatch = match.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-]/);
+      if (!numMatch) return true; // Spelled-out month format — always valid
+      const first = parseInt(numMatch[1], 10);
+      const second = parseInt(numMatch[2], 10);
+      if (first > 31 || second > 31) return false;
+      if (first > 12 && second > 12) return false;
+      return true;
+    },
   },
   URL: {
     // HTTP/HTTPS URLs — excludes localhost and example domains
@@ -244,11 +330,31 @@ const DEFAULT_ENTITIES = Object.keys(ENTITIES).filter(k => !ENTITIES[k].presidio
  * @param {Array} [customPatterns] - additional patterns from config
  * @returns {Array<{entity: string, match: string, index: number, length: number}>}
  */
+/**
+ * Check if a regex pattern has ReDoS risk (nested quantifiers, backreferences with quantifiers).
+ * @param {string} pattern - regex source string
+ * @returns {boolean} true if the pattern is a ReDoS risk
+ */
+function isReDoSRisk(pattern) {
+  // Detect nested quantifiers: (a+)+, (a*)*,  (a?)+ etc.
+  if (/([+*?])\)[+*?{]/.test(pattern)) return true;
+  // Backreferences with quantifiers
+  if (/\\[0-9]/.test(pattern)) return true;
+  // Overlapping alternation in quantified groups: (a|a)+, (\w|\w+)* etc.
+  if (/\([^)]*\|[^)]*\)[+*?{]/.test(pattern)) return true;
+  // Quantified groups containing word/space class combos: (\w+\s+)+
+  if (/\([^)]*\\[wWdDsS][+*][^)]*\\[wWdDsS][+*][^)]*\)[+*?{]/.test(pattern)) return true;
+  return false;
+}
+
 function detectPII(text, enabledEntities, customPatterns) {
   if (!text || typeof text !== "string") return [];
 
   const entities = Array.isArray(enabledEntities) ? enabledEntities : DEFAULT_ENTITIES;
   const detections = [];
+
+  // Normalize text and scan both raw and normalized variants
+  const textVariants = normalizeText(text);
 
   // Built-in patterns
   const presidioAvailable = process.env.PRESIDIO_AVAILABLE === "1";
@@ -261,25 +367,67 @@ function detectPII(text, enabledEntities, customPatterns) {
     // presidioOnly entities have no regex — nothing to do without Presidio
     if (!pattern.regex) continue;
 
-    // Clone regex with global flag to reset lastIndex each call
-    const re = new RegExp(pattern.regex.source, pattern.regex.flags.includes("g") ? pattern.regex.flags : pattern.regex.flags + "g");
-    let m;
-    while ((m = re.exec(text)) !== null) {
-      const match = m[0];
-      // Run optional validator (Luhn, private IP exclusion)
-      if (pattern.validate && !pattern.validate(match)) continue;
-      detections.push({ entity, match, index: m.index, length: match.length });
+    const seenMatches = new Set();
+    for (const variant of textVariants) {
+      if (!variant) continue;
+      const isOriginal = variant === text;
+      // Clone regex with global flag to reset lastIndex each call
+      const re = new RegExp(pattern.regex.source, pattern.regex.flags.includes("g") ? pattern.regex.flags : pattern.regex.flags + "g");
+      let m;
+      while ((m = re.exec(variant)) !== null) {
+        const match = m[0];
+        // Run optional validator (Luhn, private IP exclusion, date range)
+        if (pattern.validate && !pattern.validate(match)) continue;
+        // Deduplicate: use entity:match:index to allow the same value at different positions.
+        // For normalized variants, use entity:match:variant to avoid double-reporting
+        // matches already found in the original text.
+        const key = isOriginal ? `${entity}:${m.index}` : `${entity}:${match}:variant`;
+        if (seenMatches.has(key)) continue;
+        seenMatches.add(key);
+        // For normalized variants, find the match position in the original text.
+        // Use indexOf with a search-start offset to handle duplicate matches correctly.
+        let originalIndex = m.index;
+        if (!isOriginal) {
+          // Search from last-known position to avoid always returning first occurrence
+          const searchFrom = detections.filter(d => d.entity === entity).reduce((max, d) => Math.max(max, d.index + d.length), 0);
+          const idx = text.indexOf(match, searchFrom);
+          // If not found at offset, try from start; if still not found, flag as variant-only
+          originalIndex = idx >= 0 ? idx : text.indexOf(match);
+          if (originalIndex < 0) {
+            // PII found in decoded/normalized text but not in original — still report it
+            // with index -1 so redact() can handle it (append placeholder rather than splice)
+            originalIndex = -1;
+          }
+        }
+        detections.push({ entity, match, index: originalIndex, length: match.length });
+      }
     }
   }
 
-  // Custom patterns (from config)
+  // Custom patterns (from config).
+  // Intentional limitation: custom patterns scan only the original text, NOT
+  // normalized variants (decoded base64, full-width ASCII, etc.). User-defined
+  // regexes are repo-specific and may produce false positives on pre-processed
+  // text. Built-in patterns cover normalized variants for higher recall.
   if (Array.isArray(customPatterns)) {
     for (const cp of customPatterns) {
       if (!cp.name || !cp.regex) continue;
+      // ReDoS validation (M6): reject dangerous patterns
+      if (isReDoSRisk(cp.regex)) {
+        process.stderr.write(`pii-detector: skipping custom pattern "${cp.name}" — ReDoS risk detected\n`);
+        continue;
+      }
       try {
         const re = new RegExp(cp.regex, "g");
         let m;
+        let matchCount = 0;
+        const MAX_MATCHES = 1000;
         while ((m = re.exec(text)) !== null) {
+          matchCount++;
+          if (matchCount > MAX_MATCHES) {
+            process.stderr.write(`pii-detector: custom pattern "${cp.name}" exceeded ${MAX_MATCHES} matches — stopping early\n`);
+            break;
+          }
           detections.push({
             entity: cp.name,
             match: m[0],
@@ -311,8 +459,12 @@ function redact(text, detections) {
   if (!text || typeof text !== "string") return text;
   if (!detections || detections.length === 0) return text;
 
+  // Separate variant-only detections (index === -1) from normal ones
+  const normal = detections.filter(d => d.index >= 0);
+  const variantOnly = detections.filter(d => d.index < 0);
+
   // Work in reverse index order to keep earlier indices valid
-  const sorted = [...detections].sort((a, b) => b.index - a.index);
+  const sorted = [...normal].sort((a, b) => b.index - a.index);
   let result = text;
   for (const d of sorted) {
     // Determine placeholder: built-in pattern or entity name fallback
@@ -323,6 +475,12 @@ function redact(text, detections) {
       placeholder = `[${d.entity}]`;
     }
     result = result.slice(0, d.index) + placeholder + result.slice(d.index + d.length);
+  }
+
+  // Append warnings for PII found only in decoded/normalized variants
+  if (variantOnly.length > 0) {
+    const types = [...new Set(variantOnly.map(d => d.entity))];
+    result += ` [PII detected in encoded content: ${types.join(", ")}]`;
   }
   return result;
 }
@@ -536,4 +694,6 @@ module.exports = {
   // Exposed for testing
   _luhnCheck: luhnCheck,
   _isPrivateOrLoopbackIP: isPrivateOrLoopbackIP,
+  _normalizeText: normalizeText,
+  _isReDoSRisk: isReDoSRisk,
 };

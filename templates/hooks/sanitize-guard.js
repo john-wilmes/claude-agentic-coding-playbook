@@ -23,6 +23,8 @@ const piiDetector = require("./pii-detector");
 
 // ─── Glob matching ───────────────────────────────────────────────────────────
 
+// Supported glob syntax: * (single segment), ** (any depth), ? (single char).
+// Does not support brace expansion ({a,b}), character classes ([abc]), or negation (!pattern).
 function globToRegex(glob) {
   // Escape regex special chars except * and ? which we handle manually
   const escaped = glob
@@ -36,7 +38,8 @@ function globToRegex(glob) {
 
 function isExcluded(filePath, excludePatterns, cwd) {
   if (!filePath || !excludePatterns || excludePatterns.length === 0) return false;
-  const rel = path.relative(cwd || "", filePath);
+  const resolved = path.resolve(filePath);
+  const rel = path.relative(path.resolve(cwd || ""), resolved);
   return excludePatterns.some(p => {
     try { return globToRegex(p).test(rel); } catch { return false; }
   });
@@ -83,16 +86,11 @@ process.stdin.on("end", () => {
     if (isPostToolUse) {
       // ── PostToolUse path ──────────────────────────────────────────────────
 
-      // Extract text content from tool_response without serializing the whole
-      // JSON structure — serializing then redacting breaks JSON syntax.
+      // Extract text content from tool_response for PII scanning.
+      // Always use JSON.stringify to ensure no response keys (rows, data, etc.) are missed.
       function extractText(response) {
+        if (!response) return "";
         if (typeof response === "string") return response;
-        if (!response || typeof response !== "object") return "";
-        const parts = [];
-        for (const key of ["content", "output", "result", "text", "stdout", "stderr"]) {
-          if (typeof response[key] === "string") parts.push(response[key]);
-        }
-        if (parts.length > 0) return parts.join("\n");
         return JSON.stringify(response);
       }
 
@@ -111,14 +109,18 @@ process.stdin.on("end", () => {
         process.exit(0);
       }
 
-      const detections = piiDetector.detectPII(text, config.entities, config.custom_patterns);
+      // Scan both tool_response and tool_input for PII
+      const responseDetections = piiDetector.detectPII(text, config.entities, config.custom_patterns);
+      const inputText = extractText(hookInput.tool_input);
+      const inputDetections = piiDetector.detectPII(inputText, config.entities, config.custom_patterns);
+      const detections = [...responseDetections, ...inputDetections];
       if (detections.length === 0) {
         process.stdout.write(JSON.stringify({}));
         process.exit(0);
       }
 
       const summary = buildSummary(detections);
-      const redacted = truncate(piiDetector.redact(text, detections));
+      const redacted = truncate(piiDetector.redact(text, responseDetections));
 
       log.writeLog({
         hook: "sanitize-guard",

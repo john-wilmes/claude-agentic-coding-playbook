@@ -73,27 +73,27 @@ SLUG="<2-4 word kebab-case summary>"
 ENTRY_ID="${TIMESTAMP}-${SLUG}"
 ```
 
-Insert the entry into the knowledge database:
+Insert the entry into the knowledge database. Use `node -e` with `JSON.stringify` to build the JSON safely — never use shell HEREDOC interpolation, which can break on quotes, backslashes, or newlines in field values:
 
 ```bash
-node ${INSTALL_ROOT}/.claude/hooks/knowledge-db.js insert "$(cat <<EOF
-{
-  "id": "${ENTRY_ID}",
-  "created": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "author": "<agent name from session>",
-  "source_project": "<current project name>",
-  "tool": "<tool>",
-  "category": "<category>",
-  "tags": "<JSON array of tags>",
-  "confidence": "<confidence>",
-  "visibility": "local",
-  "verified_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "context_text": "<1-3 sentences: what situation triggers this lesson>",
-  "fix_text": "<concrete steps, commands, or code changes>",
-  "evidence_text": "<how discovered: file paths, error messages, reproduction steps>"
-}
-EOF
-)"
+ENTRY_ID="${ENTRY_ID}" node -e "
+const entry = {
+  id: process.env.ENTRY_ID,
+  created: new Date().toISOString(),
+  author: '<agent name from session>',
+  source_project: '<current project name>',
+  tool: '<tool>',
+  category: '<category>',
+  tags: <JSON array of tags>,
+  confidence: '<confidence>',
+  visibility: 'local',
+  verified_at: new Date().toISOString(),
+  context_text: '<1-3 sentences: what situation triggers this lesson>',
+  fix_text: '<concrete steps, commands, or code changes>',
+  evidence_text: '<how discovered: file paths, error messages, reproduction steps>',
+};
+process.stdout.write(JSON.stringify(entry));
+" | node ${INSTALL_ROOT}/.claude/hooks/knowledge-db.js insert -
 ```
 
 Also capture provenance (repo, commit, branch) automatically — knowledge-db.js handles this during insert if the entry doesn't already have repo_url set.

@@ -5,9 +5,15 @@
 // Run: node tests/hooks/post-tool-verify.test.js
 
 const assert = require("assert");
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+
+// Mirror the hook's session key derivation so tests can pre-create debounce files.
+function sessionToKey(sessionId) {
+  return crypto.createHash("sha256").update(sessionId || "unknown").digest("hex").slice(0, 16);
+}
 
 const { runHook, createTempHome, createStagedDir } = require("./test-helpers");
 
@@ -440,12 +446,12 @@ test("16. Debounce: second Edit within 10s skips test run (returns {})", (env) =
   const projDir = createTempProject("## Quality Gates\n\nTest: `node -e 'process.exit(0)'`\n");
   fs.writeFileSync(path.join(projDir, "app.ts"), "export const x = 1;\n");
 
-  // The hook uses per-session debounce files in /tmp/claude-post-tool-verify/<sessionId>.json.
+  // The hook uses per-session debounce files in /tmp/claude-post-tool-verify/<hash>.json.
   // Write a debounce entry with ts=now so the hook sees it as within the debounce window.
   const SESSION_ID = "test-debounce-16";
   const debounceDir = path.join(os.tmpdir(), "claude-post-tool-verify");
   fs.mkdirSync(debounceDir, { recursive: true });
-  const debounceFile = path.join(debounceDir, `${SESSION_ID}.json`);
+  const debounceFile = path.join(debounceDir, `${sessionToKey(SESSION_ID)}.json`);
   const state = {};
   state[projDir] = { ts: Date.now(), lastPassed: true, lastFailOutput: "" };
   fs.writeFileSync(debounceFile, JSON.stringify(state));
@@ -478,7 +484,7 @@ test("17. Debounce: Edit after debounce window expires runs tests again", (env) 
   const SESSION_ID = "test-debounce-17";
   const debounceDir = path.join(os.tmpdir(), "claude-post-tool-verify");
   fs.mkdirSync(debounceDir, { recursive: true });
-  const debounceFile = path.join(debounceDir, `${SESSION_ID}.json`);
+  const debounceFile = path.join(debounceDir, `${sessionToKey(SESSION_ID)}.json`);
   const state = {};
   state[projDir] = { ts: Date.now() - 15000, lastPassed: true, lastFailOutput: "" };
   fs.writeFileSync(debounceFile, JSON.stringify(state));

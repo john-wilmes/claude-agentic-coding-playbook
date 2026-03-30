@@ -53,6 +53,11 @@ function validateTestCommand(cmd) {
     // Encoded payload execution
     { pattern: /\beval\b/, label: "eval execution" },
     { pattern: /\bbase64\s+-d\b/, label: "base64 decode execution" },
+    // Arbitrary code execution via interpreter inline flags
+    { pattern: /\bpython3?\s+-c\b/, label: "python -c arbitrary code execution" },
+    { pattern: /\bnode\s+-e\b/, label: "node -e arbitrary code execution" },
+    { pattern: /\bruby\s+-e\b/, label: "ruby -e arbitrary code execution" },
+    { pattern: /\bperl\s+-e\b/, label: "perl -e arbitrary code execution" },
   ];
 
   for (const { pattern, label } of dangerous) {

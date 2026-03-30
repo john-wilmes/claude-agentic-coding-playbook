@@ -30,6 +30,10 @@ const DIGEST_FILE   = process.env.FLEET_DIGEST_FILE
   || path.join(DEFAULT_FLEET, "fleet-digest.txt");
 
 // ─── Load fleet-index module (try installed path first, then source tree) ────
+// TRUST ASSUMPTION: ~/.claude/fleet/ is user-controlled and trusted.
+// Manifests and the fleet-index module are loaded from this directory without
+// sandboxing. Compromising this directory is equivalent to compromising the
+// user's shell profile. Do not load modules from untrusted paths.
 
 let fleetIndex = null;
 
@@ -345,7 +349,7 @@ function replyError(id, code, message) {
   process.stdout.write(msg + "\n");
 }
 
-function log(msg) {
+function serverLog(msg) {
   process.stderr.write(`[fleet-index-server] ${msg}\n`);
 }
 
@@ -467,15 +471,15 @@ function dispatch(req) {
         replyError(id, -32601, `Method not found: ${method}`);
     }
   } catch (err) {
-    log(`Error handling ${method}: ${err.message}`);
-    replyError(id, -32603, `Internal error: ${err.message}`);
+    process.stderr.write(`Internal error: ${err.message}\n`);
+    replyError(id, -32603, "Internal server error");
   }
 }
 
 // ─── Stdin reader ─────────────────────────────────────────────────────────────
 
 function main() {
-  log("starting (manifests: " + MANIFESTS_DIR + ")");
+  serverLog("starting (manifests: " + MANIFESTS_DIR + ")");
 
   const reader = rl.createInterface({
     input:     process.stdin,
@@ -504,17 +508,17 @@ function main() {
   });
 
   reader.on("close", () => {
-    log("stdin closed, shutting down");
+    serverLog("stdin closed, shutting down");
     process.exit(0);
   });
 
   // Never crash on unhandled errors — log to stderr and continue
   process.on("uncaughtException", (err) => {
-    log(`uncaughtException: ${err.message}`);
+    serverLog(`uncaughtException: ${err.message}`);
   });
 
   process.on("unhandledRejection", (reason) => {
-    log(`unhandledRejection: ${reason}`);
+    serverLog(`unhandledRejection: ${reason}`);
   });
 }
 

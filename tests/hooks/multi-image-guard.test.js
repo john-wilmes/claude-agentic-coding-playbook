@@ -30,7 +30,7 @@ function test(name, fn) {
 
 // Helper: clean up tracking file for a session
 function cleanTracking(sessionId) {
-  const p = path.join(os.tmpdir(), `claude-image-reads-${sessionId}`);
+  const p = path.join(os.tmpdir(), "claude-multi-image-guard", `claude-image-reads-${sessionId}`);
   try { fs.unlinkSync(p); } catch {}
 }
 

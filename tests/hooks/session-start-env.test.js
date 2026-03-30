@@ -174,7 +174,7 @@ test("14. CLAUDE_ENV_FILE written with export statement for project env.yaml", (
 
     const envFileContent = fs.readFileSync(tmpEnvFile, "utf8");
     assert.ok(
-      envFileContent.includes('export TEST_VAR="hello"'),
+      envFileContent.includes("export TEST_VAR='hello'"),
       `CLAUDE_ENV_FILE should contain export statement, got: ${envFileContent}`
     );
   } finally {
@@ -241,9 +241,9 @@ test("16. CLAUDE_ENV_FILE receives multiple export lines for multiple vars", () 
     );
 
     const content = fs.readFileSync(tmpEnvFile, "utf8");
-    assert.ok(content.includes('export ALPHA="one"'), `Missing ALPHA export, got: ${content}`);
-    assert.ok(content.includes('export BETA="two"'), `Missing BETA export, got: ${content}`);
-    assert.ok(content.includes('export GAMMA="three"'), `Missing GAMMA export, got: ${content}`);
+    assert.ok(content.includes("export ALPHA='one'"), `Missing ALPHA export, got: ${content}`);
+    assert.ok(content.includes("export BETA='two'"), `Missing BETA export, got: ${content}`);
+    assert.ok(content.includes("export GAMMA='three'"), `Missing GAMMA export, got: ${content}`);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -354,7 +354,7 @@ test("19. CLAUDE_ENV_FILE appends (does not overwrite) if file already has conte
       `Pre-existing content should be preserved, got: ${content}`
     );
     assert.ok(
-      content.includes('export NEW_VAR="added"'),
+      content.includes("export NEW_VAR='added'"),
       `New var should be appended, got: ${content}`
     );
   } finally {
@@ -387,8 +387,8 @@ test("20. env.yaml with comments and blank lines: only valid vars exported", () 
     );
 
     const content = fs.readFileSync(tmpEnvFile, "utf8");
-    assert.ok(content.includes('export DB_HOST="localhost"'), `DB_HOST missing, got: ${content}`);
-    assert.ok(content.includes('export DB_NAME="mydb"'), `DB_NAME missing, got: ${content}`);
+    assert.ok(content.includes("export DB_HOST='localhost'"), `DB_HOST missing, got: ${content}`);
+    assert.ok(content.includes("export DB_NAME='mydb'"), `DB_NAME missing, got: ${content}`);
     // The comment's text "DB_PORT" should not appear as an export
     assert.ok(!content.includes("export DB_PORT"), `DB_PORT should not be exported, got: ${content}`);
   } finally {

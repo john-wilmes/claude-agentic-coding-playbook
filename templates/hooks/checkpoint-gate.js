@@ -39,7 +39,7 @@ process.stdin.on("end", () => {
 
     // Only active inside claude-loop sessions
     const pid = process.env.CLAUDE_LOOP_PID;
-    if (!pid) {
+    if (!pid || !/^\d+$/.test(pid)) {
       process.stdout.write(JSON.stringify({}));
       process.exit(0);
     }

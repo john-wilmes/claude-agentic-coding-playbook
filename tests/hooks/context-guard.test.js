@@ -493,7 +493,8 @@ test("19. PreToolUse with no state file: allow (safe default)", () => {
 test("27. PostToolUse block at 60% writes context-high flag, not sentinel", () => {
   const sessionId = newSessionId();
   primeSession(sessionId); // bypass wakeup grace period
-  const fakePid = `test-${sessionId}`;
+  // Use a numeric PID — context-guard validates PID is digits-only (M3 fix)
+  const fakePid = String(process.pid);
   const sentinelFile = path.join(os.tmpdir(), `claude-checkpoint-exit-${fakePid}`);
   const contextHighFile = path.join(os.tmpdir(), `claude-context-high-${fakePid}`);
   // 65% of 200k = 130,000 tokens — above block threshold

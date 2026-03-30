@@ -24,8 +24,14 @@ try { log = require("./log"); } catch { log = { writeLog() {} }; }
 /**
  * Check if we already warned this session.
  */
+function getMcpGuardDir() {
+  const dir = path.join(os.tmpdir(), "claude-mcp-server-guard");
+  try { fs.mkdirSync(dir, { mode: 0o700, recursive: true }); } catch {}
+  return dir;
+}
+
 function alreadyWarned(sessionId) {
-  const flag = path.join(os.tmpdir(), `claude-mcp-warned-${sessionId}`);
+  const flag = path.join(getMcpGuardDir(), `claude-mcp-warned-${path.basename(sessionId)}`);
   return fs.existsSync(flag);
 }
 
@@ -33,7 +39,7 @@ function alreadyWarned(sessionId) {
  * Mark that we warned this session.
  */
 function markWarned(sessionId) {
-  const flag = path.join(os.tmpdir(), `claude-mcp-warned-${sessionId}`);
+  const flag = path.join(getMcpGuardDir(), `claude-mcp-warned-${path.basename(sessionId)}`);
   fs.writeFileSync(flag, "1");
 }
 

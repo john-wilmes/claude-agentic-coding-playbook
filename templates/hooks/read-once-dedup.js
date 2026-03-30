@@ -18,6 +18,7 @@
 // State TTL: 4 hours. On stale state the hook starts fresh.
 // On any unexpected error: outputs {} and exits 0 — never blocks unexpectedly.
 
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
@@ -38,8 +39,11 @@ function getStateKey(sessionId) {
 }
 
 function getStateFile(sessionId) {
-  try { fs.mkdirSync(STATE_DIR, { recursive: true }); } catch {}
-  return path.join(STATE_DIR, `${getStateKey(sessionId)}.json`);
+  try { fs.mkdirSync(STATE_DIR, { mode: 0o700, recursive: true }); } catch {}
+  // Hash the full key (not basename) so different session IDs that share the
+  // same basename (e.g. "foo/bar" and "../../victim") never collide.
+  const safeKey = crypto.createHash("sha256").update(getStateKey(sessionId) || "").digest("hex").slice(0, 16);
+  return path.join(STATE_DIR, `${safeKey}.json`);
 }
 
 function loadState(stateFile) {

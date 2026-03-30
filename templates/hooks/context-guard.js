@@ -44,8 +44,8 @@ const BASELINE_HEADROOM = 0.08;
 // State file tracks warning flags and fallback accumulator across invocations
 function getStateFile(sessionId) {
   const dir = path.join(os.tmpdir(), "claude-context-guard");
-  try { fs.mkdirSync(dir, { recursive: true }); } catch {}
-  return path.join(dir, `${sessionId}.json`);
+  try { fs.mkdirSync(dir, { mode: 0o700, recursive: true }); } catch {}
+  return path.join(dir, `${path.basename(sessionId)}.json`);
 }
 
 function loadState(stateFile) {
@@ -215,9 +215,19 @@ process.stdin.on("end", () => {
       try {
         // Use CLAUDE_LOOP_PID to compute sentinel path — Claude Code may override
         // CLAUDE_LOOP_SENTINEL after changing process.cwd() to the project directory.
-        const sentinelPath = process.env.CLAUDE_LOOP_PID
-          ? path.join(os.tmpdir(), `claude-checkpoint-exit-${process.env.CLAUDE_LOOP_PID}`)
-          : (process.env.CLAUDE_LOOP_SENTINEL || path.join(os.tmpdir(), "claude-checkpoint-exit"));
+        // Validate PID is numeric to prevent path traversal.
+        const rawPid = process.env.CLAUDE_LOOP_PID;
+        const validPid = rawPid && /^\d+$/.test(rawPid) ? rawPid : null;
+        // Validate CLAUDE_LOOP_SENTINEL path to prevent path traversal.
+        // Resolve to canonical path before checking prefix to defeat /tmp/../../ attacks.
+        const rawSentinel = process.env.CLAUDE_LOOP_SENTINEL;
+        const resolvedSentinel = rawSentinel ? path.resolve(rawSentinel) : null;
+        const tmpDir = path.resolve(os.tmpdir());
+        const validSentinel = resolvedSentinel && resolvedSentinel.startsWith(tmpDir + path.sep)
+          ? resolvedSentinel : null;
+        const sentinelPath = validPid
+          ? path.join(os.tmpdir(), `claude-checkpoint-exit-${validPid}`)
+          : (validSentinel || path.join(os.tmpdir(), "claude-checkpoint-exit"));
         fs.writeFileSync(
           sentinelPath,
           JSON.stringify({ reason: "failsafe", ratio: ctx.ratio, timestamp: Date.now() })
@@ -250,8 +260,10 @@ process.stdin.on("end", () => {
         // Write the context-high flag so /checkpoint can decide EXIT vs STAY.
         // This is NOT the sentinel — claude-loop does NOT watch this file.
         try {
-          const flagPath = process.env.CLAUDE_LOOP_PID
-            ? path.join(os.tmpdir(), `claude-context-high-${process.env.CLAUDE_LOOP_PID}`)
+          const rawFlagPid = process.env.CLAUDE_LOOP_PID;
+          const validFlagPid = rawFlagPid && /^\d+$/.test(rawFlagPid) ? rawFlagPid : null;
+          const flagPath = validFlagPid
+            ? path.join(os.tmpdir(), `claude-context-high-${validFlagPid}`)
             : path.join(os.tmpdir(), "claude-context-high");
           fs.writeFileSync(
             flagPath,

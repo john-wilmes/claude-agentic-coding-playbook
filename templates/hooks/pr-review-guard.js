@@ -2,7 +2,7 @@
 // Enforces the rule: "Do not merge without a review."
 // Graceful degradation: allows merge if `gh` is unavailable or API call fails.
 
-const { execSync } = require("child_process");
+const { execFileSync } = require("child_process");
 
 let log;
 try { log = require("./log"); } catch { log = { writeLog() {} }; }
@@ -48,8 +48,10 @@ function checkCodeRabbitReview(prNumber) {
   // Check reviews (formal review submissions)
   let reviewOutput = "";
   try {
-    reviewOutput = execSync(
-      `gh pr view ${prArg} --json reviews --jq '.reviews[].author.login'`,
+    const reviewArgs = ["pr", "view"];
+    if (prArg) reviewArgs.push(prArg);
+    reviewArgs.push("--json", "reviews", "--jq", ".reviews[].author.login");
+    reviewOutput = execFileSync("gh", reviewArgs,
       { encoding: "utf8", timeout: 15000, stdio: ["pipe", "pipe", "pipe"] }
     ).trim();
   } catch {
@@ -64,8 +66,10 @@ function checkCodeRabbitReview(prNumber) {
   // Check comments as fallback (CodeRabbit sometimes posts comments, not formal reviews)
   let commentOutput = "";
   try {
-    commentOutput = execSync(
-      `gh pr view ${prArg} --json comments --jq '.comments[].author.login'`,
+    const commentArgs = ["pr", "view"];
+    if (prArg) commentArgs.push(prArg);
+    commentArgs.push("--json", "comments", "--jq", ".comments[].author.login");
+    commentOutput = execFileSync("gh", commentArgs,
       { encoding: "utf8", timeout: 15000, stdio: ["pipe", "pipe", "pipe"] }
     ).trim();
   } catch {

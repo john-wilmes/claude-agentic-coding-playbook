@@ -38,7 +38,8 @@ function test(name, fn) {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const FAKE_PID = `ckgate-test-${process.pid}`;
+// Use a numeric PID — checkpoint-gate validates PID is digits-only (M3 fix)
+const FAKE_PID = String(process.pid);
 
 function sentinelPath() {
   return path.join(os.tmpdir(), `claude-checkpoint-exit-${FAKE_PID}`);

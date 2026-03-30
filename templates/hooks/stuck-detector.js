@@ -53,7 +53,7 @@ const WHITELISTED_PREFIXES = [
 
 function getStateDir() {
   const dir = path.join(os.tmpdir(), "claude-stuck-detector");
-  try { fs.mkdirSync(dir, { recursive: true }); } catch {}
+  try { fs.mkdirSync(dir, { mode: 0o700, recursive: true }); } catch {}
   return dir;
 }
 
