@@ -18,6 +18,14 @@ try { knowledgeDb = require("./knowledge-db"); } catch { knowledgeDb = null; }
 const LOG_DIR = path.join(os.homedir(), ".claude");
 const LOG_FILE = path.join(LOG_DIR, "hooks.log");
 
+function respond(payload = {}) {
+  try {
+    process.stdout.write(JSON.stringify(payload), () => process.exit(0));
+  } catch {
+    process.stdout.write("{}", () => process.exit(0));
+  }
+}
+
 // ─── Retrieval miss detection ─────────────────────────────────────────────────
 
 function extractSalientTerms(text, maxTerms = 8) {
@@ -361,19 +369,17 @@ process.stdin.on("end", () => {
     } catch {}
 
     if (pushFailureMsg) {
-      process.stdout.write(JSON.stringify({
+      return respond({
         hookSpecificOutput: {
           hookEventName: "SessionEnd",
           additionalContext: `WARNING: memory auto-push failed: ${pushFailureMsg}`,
         },
-      }));
+      });
     } else {
-      process.stdout.write("{}");
+      return respond();
     }
   } catch (err) {
     logEntry(`error: ${err.message}`);
-    process.stdout.write("{}");
+    return respond();
   }
-
-  process.exit(0);
 });

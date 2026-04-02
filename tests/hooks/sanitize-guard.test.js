@@ -139,7 +139,7 @@ test("PreToolUse Edit with PII in new_string blocks with deny", (env) => {
   const hookInput = {
     tool_name: "Edit",
     tool_input: {
-      file_path: "/tmp/test.txt",
+      file_path: path.join(projectDir, "test.txt"),
       new_string: "SSN: 123-45-6789",
     },
     cwd: projectDir,
@@ -165,7 +165,7 @@ test("PreToolUse Write with PII in content blocks with deny", (env) => {
   const hookInput = {
     tool_name: "Write",
     tool_input: {
-      file_path: "/tmp/report.txt",
+      file_path: path.join(projectDir, "report.txt"),
       content: "Patient record: SSN 123-45-6789, contact: john@example-hospital.org",
     },
     cwd: projectDir,
@@ -377,7 +377,7 @@ test("PreToolUse denial includes redacted version of the content", (env) => {
   const hookInput = {
     tool_name: "Edit",
     tool_input: {
-      file_path: "/tmp/test.txt",
+      file_path: path.join(projectDir, "test.txt"),
       new_string: "Patient SSN is 123-45-6789, please handle carefully.",
     },
     cwd: projectDir,

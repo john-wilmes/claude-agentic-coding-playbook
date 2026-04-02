@@ -31,6 +31,10 @@ function beforePipe(cmd) {
   return cmd;
 }
 
+function respond(payload = {}) {
+  process.stdout.write(JSON.stringify(payload), () => process.exit(0));
+}
+
 const RULES = [
   // cat <file> — only block when cat has a non-empty file argument (not pure stdin relay)
   // Pass: echo "..." | cat, cat (no args)
@@ -133,8 +137,8 @@ const RULES = [
   },
 
   // find <dir> -name ...
-  // Pass: find . -name (current dir), find -name (no dir)
-  // Block: find /absolute/path -name, find ./subdir -name, find src/ -name
+  // Pass: find . -name (current dir), find -name (no dir), find <path> -maxdepth 1/2 (shallow listing)
+  // Block: find /absolute/path -name (deep recursive search)
   {
     test(cmd) {
       const seg = beforePipe(cmd);
@@ -144,24 +148,71 @@ const RULES = [
       const dirArg = m[1];
       // Allow: bare `.` (current dir), starts with `-` (flag)
       if (dirArg === "." || dirArg.startsWith("-")) return null;
+      // Allow shallow searches (maxdepth 1 or 2) — Glob can't reliably cover large dirs
+      if (/-maxdepth\s+[12](?:\s|$)/.test(seg)) return null;
       return `\`find ${dirArg} ...\` searches for files — use the Glob tool instead`;
     },
   },
 
-  // ls <path>
-  // Pass: ls, ls -la, ls -l (no path arg — listing cwd is fine)
-  // Block: ls /some/path, ls ./subdir, ls src/
+  // ls <path> — not blocked; Glob times out on large/external directories making ls the only fallback
+
+  // mongosh — direct MongoDB shell access
+  // Block: mongosh, mongosh "mongodb+srv://..."
+  // Pass: echo foo | mongosh (piped)
   {
     test(cmd) {
       const seg = beforePipe(cmd);
-      if (!/(?:^|[;&(]\s*|\|\|\s*|&&\s*)ls(?:\s|$)/.test(seg)) return null;
-      // Extract first non-flag argument after ls
-      const m = seg.match(/(?:^|[;&(]\s*|\|\|\s*|&&\s*)ls\s+((?:-\S+\s+)*)(\S+)/);
-      if (!m) return null;
-      const pathArg = m[2];
-      // If it starts with `-`, it's another flag — allow
-      if (pathArg.startsWith("-")) return null;
-      return `\`ls ${pathArg}\` lists a directory — use the Glob tool instead`;
+      if (!/(?:^|[;&(]\s*|\|\|\s*|&&\s*)mongosh(?:\s|$)/.test(seg)) return null;
+      return "`mongosh` bypasses PHI-safe MCP layer — use mcp__mongodb__find / mcp__mongodb__aggregate instead";
+    },
+  },
+
+  // node <mongo script> — bypasses MCP data access
+  // Block: node mongodb_mcp_client.js, node ./scripts/mongoQuery.js
+  // Pass: node server.js, node app.js (no mongo keyword)
+  {
+    test(cmd) {
+      const seg = beforePipe(cmd);
+      if (!/(?:^|[;&(]\s*|\|\|\s*|&&\s*)node\s/.test(seg)) return null;
+      if (!/mongo/i.test(seg)) return null;
+      return "`node ...mongo...` bypasses PHI-safe MCP layer — use mcp__mongodb__find / mcp__mongodb__aggregate instead";
+    },
+  },
+
+  // uv run / python with datadog or snowflake scripts
+  // Block: uv run dd_logs_cli.py, python3 snowflake_query.py
+  // Pass: uv run app.py, python3 server.py
+  {
+    test(cmd) {
+      const seg = beforePipe(cmd);
+      if (!/(?:^|[;&(]\s*|\|\|\s*|&&\s*)(?:uv\s+run|python3?\s)/.test(seg)) return null;
+      if (/dd_logs|datadog/i.test(seg)) {
+        return "`python/uv ...datadog...` bypasses PHI-safe MCP layer — use mcp__datadog__get_logs instead";
+      }
+      if (/snowflake/i.test(seg)) {
+        return "`python/uv ...snowflake...` bypasses PHI-safe MCP layer — use mcp__snowflake__run_sql instead";
+      }
+      return null;
+    },
+  },
+
+  // curl to MongoDB/Datadog/Snowflake endpoints
+  // Block: curl https://cloud.mongodb.com/..., curl https://api.datadoghq.com/...
+  // Pass: curl https://example.com
+  {
+    test(cmd) {
+      const seg = beforePipe(cmd);
+      if (!/(?:^|[;&(]\s*|\|\|\s*|&&\s*)curl\s/.test(seg)) return null;
+      if (/mongodb\.net|mongo.*atlas|cloud\.mongodb/i.test(seg)) {
+        return "`curl` to MongoDB endpoint bypasses PHI-safe MCP layer — use mcp__mongodb__find / mcp__mongodb__aggregate instead";
+      }
+      if (/datadoghq\.com|api\.datadog/i.test(seg)) {
+        return "`curl` to Datadog endpoint bypasses PHI-safe MCP layer — use mcp__datadog__get_logs instead";
+      }
+      if (/snowflakecomputing\.com/i.test(seg)) {
+        return "`curl` to Snowflake endpoint bypasses PHI-safe MCP layer — use mcp__snowflake__run_sql instead";
+      }
+      return null;
     },
   },
 ];
@@ -195,8 +246,7 @@ process.stdin.on("end", () => {
 
     // Only intercept Bash tool calls
     if (toolName !== "Bash") {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     const command = (hookInput.tool_input || {}).command || "";
@@ -212,22 +262,19 @@ process.stdin.on("end", () => {
         project: hookInput.cwd,
         context: { command: log.promptHead ? log.promptHead(command, 100) : command.slice(0, 100) },
       });
-      process.stdout.write(JSON.stringify({
+      return respond({
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
           permissionDecision: "deny",
           permissionDecisionReason: reason,
         },
-      }));
-      process.exit(0);
+      });
     }
 
-    process.stdout.write(JSON.stringify({}));
-    process.exit(0);
+    return respond();
   } catch {
     // Never block tool execution on errors
-    process.stdout.write(JSON.stringify({}));
-    process.exit(0);
+    return respond();
   }
 });
 

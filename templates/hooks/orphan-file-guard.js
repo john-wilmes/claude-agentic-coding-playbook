@@ -26,6 +26,10 @@ const { execFileSync } = require("child_process");
 let log;
 try { log = require("./log"); } catch { log = { writeLog() {} }; }
 
+function respond(payload = {}) {
+  process.stdout.write(JSON.stringify(payload), () => process.exit(0));
+}
+
 // Files that are inherently root-level and don't need references
 const EXEMPT_BASENAMES = new Set([
   ".gitignore", ".env", ".env.local", ".env.example",
@@ -120,35 +124,36 @@ process.stdin.on("end", () => {
 
     // Only inspect Write tool calls
     if (toolName !== "Write") {
-      process.stdout.write("{}");
-      process.exit(0);
+      return respond();
     }
 
     const filePath = toolInput.file_path || "";
     if (!filePath) {
-      process.stdout.write("{}");
-      process.exit(0);
+      return respond();
     }
 
     // Only block NEW file creation (file doesn't exist yet)
     if (fs.existsSync(filePath)) {
-      process.stdout.write("{}");
-      process.exit(0);
+      return respond();
     }
 
     // Check exemptions
     if (isExempt(filePath)) {
-      process.stdout.write("{}");
-      process.exit(0);
+      return respond();
     }
 
     const basename = path.basename(filePath);
     const cwd = event.cwd || "";
 
+    // Files written outside the project cwd (e.g. ~/Documents one-off scripts)
+    // are not part of any project structure — orphan rule doesn't apply
+    if (cwd && !filePath.startsWith(cwd)) {
+      return respond();
+    }
+
     // Search for references
     if (hasReference(basename, cwd)) {
-      process.stdout.write("{}");
-      process.exit(0);
+      return respond();
     }
 
     // No reference found — deny
@@ -164,17 +169,15 @@ process.stdin.on("end", () => {
       context: { filePath, basename, cwd },
     });
 
-    process.stdout.write(JSON.stringify({
+    return respond({
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         permissionDecision: "deny",
         permissionDecisionReason: reason,
       },
-    }));
-    process.exit(0);
+    });
   } catch {
-    process.stdout.write("{}");
-    process.exit(0);
+    return respond();
   }
 });
 

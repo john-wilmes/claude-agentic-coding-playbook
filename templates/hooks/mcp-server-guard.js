@@ -14,6 +14,10 @@
 
 "use strict";
 
+function respond(payload = {}) {
+  process.stdout.write(JSON.stringify(payload), () => process.exit(0));
+}
+
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
@@ -80,8 +84,7 @@ process.stdin.on("end", () => {
 
     // Only warn once per session
     if (alreadyWarned(sessionId)) {
-      process.stdout.write("{}");
-      process.exit(0);
+      return respond();
     }
 
     // Check if project MCP servers are enabled globally
@@ -92,8 +95,7 @@ process.stdin.on("end", () => {
 
     if (!enabled) {
       // Setting is off — no concern
-      process.stdout.write("{}");
-      process.exit(0);
+      return respond();
     }
 
     const warning =
@@ -110,16 +112,14 @@ process.stdin.on("end", () => {
     });
 
     // Advisory only — don't deny, just inform
-    process.stdout.write(JSON.stringify({
+    return respond({
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         additionalContext: warning,
       },
-    }));
-    process.exit(0);
+    });
   } catch {
-    process.stdout.write("{}");
-    process.exit(0);
+    return respond();
   }
 });
 

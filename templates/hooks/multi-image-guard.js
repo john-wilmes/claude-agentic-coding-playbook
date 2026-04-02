@@ -21,6 +21,10 @@ const os = require("os");
 let log;
 try { log = require("./log"); } catch { log = { writeLog() {} }; }
 
+function respond(payload = {}) {
+  process.stdout.write(JSON.stringify(payload), () => process.exit(0));
+}
+
 // Raster image extensions that consume multimodal tokens.
 // SVG and ICO are excluded — they're text-readable, not multimodal image input.
 const IMAGE_EXTENSIONS = new Set([
@@ -85,8 +89,7 @@ process.stdin.on("end", () => {
 
     // Skip subagents — they are the delegation target
     if (event.agent_id) {
-      process.stdout.write("{}");
-      process.exit(0);
+      return respond();
     }
 
     const toolName = event.tool_name;
@@ -94,14 +97,12 @@ process.stdin.on("end", () => {
 
     // Only inspect Read tool calls
     if (toolName !== "Read") {
-      process.stdout.write("{}");
-      process.exit(0);
+      return respond();
     }
 
     const filePath = toolInput.file_path || "";
     if (!isImagePath(filePath)) {
-      process.stdout.write("{}");
-      process.exit(0);
+      return respond();
     }
 
     // This is an image read — check count.
@@ -127,23 +128,20 @@ process.stdin.on("end", () => {
         context: { filePath, count },
       });
 
-      process.stdout.write(JSON.stringify({
+      return respond({
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
           permissionDecision: "deny",
           permissionDecisionReason: reason,
         },
-      }));
-      process.exit(0);
+      });
     }
 
     // First image read — allow and increment
     incrementImageCount(sessionId);
-    process.stdout.write("{}");
-    process.exit(0);
+    return respond();
   } catch {
-    process.stdout.write("{}");
-    process.exit(0);
+    return respond();
   }
 });
 

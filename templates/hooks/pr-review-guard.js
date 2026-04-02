@@ -7,6 +7,10 @@ const { execFileSync } = require("child_process");
 let log;
 try { log = require("./log"); } catch { log = { writeLog() {} }; }
 
+function respond(payload = {}) {
+  process.stdout.write(JSON.stringify(payload), () => process.exit(0));
+}
+
 // ─── Command detection ──────────────────────────────────────────────────────
 
 const GH_PR_MERGE_RE = /(?:^|\s|&&|\|\||;)gh\s+pr\s+merge(?:\s|$)/;
@@ -100,21 +104,18 @@ process.stdin.on("end", () => {
 
     // Only intercept Bash tool calls
     if (toolName !== "Bash") {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     const command = (hookInput.tool_input || {}).command || "";
 
     if (!isMergeCommand(command)) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     // Skip check in subagent context (subagents don't merge PRs meaningfully)
     if (hookInput.agent_id) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     const prNumber = extractPrNumber(command);
@@ -131,8 +132,7 @@ process.stdin.on("end", () => {
         project: hookInput.cwd,
         context: { command: log.promptHead(command, 100) },
       });
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     if (!result.reviewed) {
@@ -145,14 +145,13 @@ process.stdin.on("end", () => {
         project: hookInput.cwd,
         context: { command: log.promptHead(command, 100) },
       });
-      process.stdout.write(JSON.stringify({
+      return respond({
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
           permissionDecision: "deny",
           permissionDecisionReason: result.reason,
         },
-      }));
-      process.exit(0);
+      });
     }
 
     // CodeRabbit has reviewed — allow
@@ -165,12 +164,10 @@ process.stdin.on("end", () => {
       project: hookInput.cwd,
       context: { command: log.promptHead(command, 100) },
     });
-    process.stdout.write(JSON.stringify({}));
-    process.exit(0);
+    return respond();
   } catch {
     // Never block tool execution on errors
-    process.stdout.write(JSON.stringify({}));
-    process.exit(0);
+    return respond();
   }
 });
 

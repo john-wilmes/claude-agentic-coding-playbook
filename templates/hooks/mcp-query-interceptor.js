@@ -7,6 +7,10 @@
 
 "use strict";
 
+function respond(payload = {}) {
+  process.stdout.write(JSON.stringify(payload), () => process.exit(0));
+}
+
 let log;
 try { log = require("./log"); } catch { log = { writeLog() {} }; }
 
@@ -66,11 +70,11 @@ function formatMongoDiscover(input) {
  * @returns {string}
  */
 function formatDatadogLogs(input) {
-  const { query, from, to, limit } = input || {};
+  const { time_range, filters, query, limit } = input || {};
   const lines = ["Datadog Log Query:"];
+  if (time_range != null) lines.push(`  time_range: ${time_range}`);
+  if (filters != null) lines.push(`  filters: ${JSON.stringify(filters)}`);
   if (query != null) lines.push(`  query: ${query}`);
-  if (from != null) lines.push(`  from:  ${from}`);
-  if (to != null) lines.push(`  to:    ${to}`);
   if (limit != null) lines.push(`  limit: ${limit}`);
   return lines.join("\n");
 }
@@ -126,8 +130,7 @@ process.stdin.on("end", () => {
   try {
     // Fast-exit if interception is not enabled
     if (process.env.MCP_QUERY_INTERCEPT !== "1") {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     const hookInput = JSON.parse(input);
@@ -135,8 +138,7 @@ process.stdin.on("end", () => {
 
     // Fast-exit for non-intercepted tools
     if (!isInterceptedTool(toolName)) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     const toolInput = hookInput.tool_input || {};
@@ -154,19 +156,17 @@ process.stdin.on("end", () => {
       project: hookInput.cwd,
     });
 
-    process.stdout.write(JSON.stringify({
+    return respond({
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         permissionDecision: "deny",
         permissionDecisionReason:
           `MCP query intercepted — run manually and paste results back.\n\n${queryBlock}`,
       },
-    }));
-    process.exit(0);
+    });
   } catch {
     // Never block tool execution on errors
-    process.stdout.write(JSON.stringify({}));
-    process.exit(0);
+    return respond();
   }
 });
 

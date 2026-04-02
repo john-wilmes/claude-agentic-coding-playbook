@@ -14,6 +14,10 @@
 
 "use strict";
 
+function respond(payload = {}) {
+  process.stdout.write(JSON.stringify(payload), () => process.exit(0));
+}
+
 const path = require("path");
 
 let log;
@@ -98,15 +102,13 @@ process.stdin.on("end", () => {
 
       const config = piiDetector.loadConfig(cwd);
       if (!config || config.enabled === false) {
-        process.stdout.write(JSON.stringify({}));
-        process.exit(0);
+        return respond();
       }
 
       // Check exclude_paths against the tool's file_path (if any)
       const filePath = hookInput.tool_input && hookInput.tool_input.file_path;
       if (isExcluded(filePath, config.exclude_paths, cwd)) {
-        process.stdout.write(JSON.stringify({}));
-        process.exit(0);
+        return respond();
       }
 
       // Scan both tool_response and tool_input for PII
@@ -115,8 +117,7 @@ process.stdin.on("end", () => {
       const inputDetections = piiDetector.detectPII(inputText, config.entities, config.custom_patterns);
       const detections = [...responseDetections, ...inputDetections];
       if (detections.length === 0) {
-        process.stdout.write(JSON.stringify({}));
-        process.exit(0);
+        return respond();
       }
 
       const summary = buildSummary(detections);
@@ -133,22 +134,20 @@ process.stdin.on("end", () => {
         details: `PostToolUse: ${detections.length} detections (${summary})`,
       });
 
-      process.stdout.write(JSON.stringify({
+      return respond({
         hookSpecificOutput: {
           hookEventName: "PostToolUse",
           additionalContext:
             `\u26a0\ufe0f PII/PHI detected and redacted (${detections.length} items: ${summary}). Use this sanitized version:\n${redacted}`,
         },
-      }));
-      process.exit(0);
+      });
     }
 
     // ── PreToolUse path ───────────────────────────────────────────────────────
 
     const toolName = hookInput.tool_name || "";
     if (toolName !== "Edit" && toolName !== "Write") {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     // Extract write content
@@ -157,26 +156,28 @@ process.stdin.on("end", () => {
       : (hookInput.tool_input && hookInput.tool_input.content);
 
     if (!content) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     const config = piiDetector.loadConfig(cwd);
     if (!config || config.enabled === false) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     const filePath = hookInput.tool_input && hookInput.tool_input.file_path;
+
+    // Don't apply project scan config to files written outside the project cwd
+    if (filePath && cwd && !path.resolve(filePath).startsWith(path.resolve(cwd))) {
+      return respond();
+    }
+
     if (isExcluded(filePath, config.exclude_paths, cwd)) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     const detections = piiDetector.detectPII(content, config.entities, config.custom_patterns);
     if (detections.length === 0) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     const summary = buildSummary(detections);
@@ -193,18 +194,16 @@ process.stdin.on("end", () => {
     });
 
     const redacted = truncate(piiDetector.redact(content, detections));
-    process.stdout.write(JSON.stringify({
+    return respond({
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         permissionDecision: "deny",
         permissionDecisionReason:
           `BLOCKED: PII/PHI detected in content (${detections.length} items: ${summary}). Use this redacted version instead:\n${redacted}`,
       },
-    }));
-    process.exit(0);
+    });
 
   } catch {
-    process.stdout.write(JSON.stringify({}));
-    process.exit(0);
+    return respond();
   }
 });

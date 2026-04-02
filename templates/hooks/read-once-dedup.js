@@ -18,6 +18,10 @@
 // State TTL: 4 hours. On stale state the hook starts fresh.
 // On any unexpected error: outputs {} and exits 0 — never blocks unexpectedly.
 
+function respond(payload = {}) {
+  process.stdout.write(JSON.stringify(payload), () => process.exit(0));
+}
+
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
@@ -206,14 +210,12 @@ process.stdin.on("end", () => {
     // Only intercept Read tool calls
     const toolName = hookInput.tool_name || "";
     if (toolName !== "Read") {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     // Subagents have disposable context — skip dedup
     if (hookInput.agent_id) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     const sessionId = hookInput.session_id || "unknown";
@@ -234,21 +236,18 @@ process.stdin.on("end", () => {
         project: hookInput.cwd,
         context: { file: filePath },
       });
-      process.stdout.write(JSON.stringify({
+      return respond({
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
           permissionDecision: "deny",
           permissionDecisionReason: result.reason,
         },
-      }));
-      process.exit(0);
+      });
     }
 
-    process.stdout.write(JSON.stringify({}));
-    process.exit(0);
+    return respond();
   } catch {
-    process.stdout.write(JSON.stringify({}));
-    process.exit(0);
+    return respond();
   }
 });
 

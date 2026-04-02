@@ -185,23 +185,24 @@ console.log("\nmcp-query-interceptor.js (formatDatadogLogs):");
 
 unitTest("U9. datadog with all params", () => {
   const out = formatDatadogLogs({
-    query: "service:integrator-service @rootId:abc123",
-    from: "now-1h",
-    to: "now",
+    time_range: "1h",
+    filters: { service: "integrator", "@rootId": "abc123" },
+    query: "timeout",
     limit: 50,
   });
   assert.ok(out.startsWith("Datadog Log Query:"), `Got: ${out}`);
-  assert.ok(out.includes("query: service:integrator-service"), `Missing query: ${out}`);
-  assert.ok(out.includes("from:  now-1h"), `Missing from: ${out}`);
-  assert.ok(out.includes("to:    now"), `Missing to: ${out}`);
+  assert.ok(out.includes("time_range: 1h"), `Missing time_range: ${out}`);
+  assert.ok(out.includes("filters:"), `Missing filters: ${out}`);
+  assert.ok(out.includes("integrator"), `Missing service in filters: ${out}`);
+  assert.ok(out.includes("query: timeout"), `Missing query: ${out}`);
   assert.ok(out.includes("limit: 50"), `Missing limit: ${out}`);
 });
 
 unitTest("U10. datadog with partial params omits missing fields", () => {
-  const out = formatDatadogLogs({ query: "service:foo", from: "now-2h" });
-  assert.ok(out.includes("query: service:foo"), `Got: ${out}`);
-  assert.ok(out.includes("from:  now-2h"), `Got: ${out}`);
-  assert.ok(!out.includes("to:"), `Should not include 'to:': ${out}`);
+  const out = formatDatadogLogs({ time_range: "4h", filters: { service: "foo" } });
+  assert.ok(out.includes("time_range: 4h"), `Got: ${out}`);
+  assert.ok(out.includes("filters:"), `Got: ${out}`);
+  assert.ok(!out.includes("query:"), `Should not include 'query:': ${out}`);
   assert.ok(!out.includes("limit:"), `Should not include 'limit:': ${out}`);
 });
 
@@ -301,7 +302,7 @@ test("I1. mongodb find without flag → passes through", (env) => {
 test("I2. datadog get_logs without flag → passes through", (env) => {
   const result = runInterceptor(
     "mcp__datadog__get_logs",
-    { query: "foo", from: "now-1h", to: "now", limit: 10 },
+    { time_range: "1h", filters: { service: "foo" }, limit: 10 },
     { HOME: env.home, USERPROFILE: env.home },
   );
   assertAllowed(result, "datadog without flag");
@@ -395,14 +396,14 @@ test("I8. mongodb discover_collection → blocks with findOne + getIndexes", (en
 test("I9. datadog get_logs → blocks with formatted query block", (env) => {
   const result = runInterceptor(
     "mcp__datadog__get_logs",
-    { query: "service:integrator-service @rootId:abc123", from: "now-1h", to: "now", limit: 50 },
+    { time_range: "1h", filters: { service: "integrator", "@rootId": "abc123" }, limit: 50 },
     { HOME: env.home, USERPROFILE: env.home, MCP_QUERY_INTERCEPT: "1" },
   );
   assertBlocked(result, "datadog get_logs");
   const reason = getDenyReason(result);
   assert.ok(reason.includes("Datadog Log Query:"), `Got: ${reason}`);
-  assert.ok(reason.includes("query: service:integrator-service"), `Got: ${reason}`);
-  assert.ok(reason.includes("from:  now-1h"), `Got: ${reason}`);
+  assert.ok(reason.includes("time_range: 1h"), `Got: ${reason}`);
+  assert.ok(reason.includes("integrator"), `Got: ${reason}`);
   assert.ok(reason.includes("limit: 50"), `Got: ${reason}`);
 });
 

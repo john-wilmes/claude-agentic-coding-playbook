@@ -12,6 +12,10 @@ const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
 
+function respond(payload = {}) {
+  process.stdout.write(JSON.stringify(payload), () => process.exit(0));
+}
+
 const TEST_TIMEOUT_MS = 30000;
 const MAX_OUTPUT_LINES = 20;
 
@@ -134,14 +138,12 @@ process.stdin.on("end", () => {
 
     // Only applies to teammate agents — main agent completions are not gated
     if (!hookInput.agent_id) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     const cwd = validateCwd(hookInput.cwd || process.cwd());
     if (!cwd) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     // Read CLAUDE.md and extract test command
@@ -151,43 +153,39 @@ process.stdin.on("end", () => {
       claudeMdContent = fs.readFileSync(claudeMdPath, "utf8");
     } catch {
       // No CLAUDE.md — skip gate
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     const testCommand = extractTestCommand(claudeMdContent);
     if (!testCommand) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     const validation = validateTestCommand(testCommand);
     if (!validation.valid) {
-      process.stdout.write(JSON.stringify({
+      return respond({
         hookSpecificOutput: {
+          hookEventName: "TaskCompleted",
           additionalContext: `Test command rejected: ${validation.reason}`,
         },
-      }));
-      process.exit(0);
+      });
     }
 
     const { passed, output } = runTests(testCommand, cwd);
 
     if (!passed) {
-      process.stdout.write(JSON.stringify({
+      return respond({
         hookSpecificOutput: {
+          hookEventName: "TaskCompleted",
           additionalContext: `Tests failed. Fix before completing:\n${output}`,
         },
-      }));
-      process.exit(0);
+      });
     }
 
-    process.stdout.write(JSON.stringify({}));
-    process.exit(0);
+    return respond();
   } catch {
     // Never block task completion on hook errors
-    process.stdout.write("{}");
-    process.exit(0);
+    return respond();
   }
 });
 

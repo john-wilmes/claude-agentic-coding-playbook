@@ -172,6 +172,22 @@ Logs tool errors to the shared JSONL log and warns the agent when the same tool 
 - **Example output:** `additionalContext: "Edit has failed 3 times this session. Consider a different approach."`
 - **State files:** `/tmp/claude-tool-failures/`
 
+#### `evidence-gate.js` — PreToolUse
+
+Enforces evidence citation discipline when writing FINDINGS.md and investigation memory files. For FINDINGS.md: hard-denies writes that include a findings/answer section but contain no `Evidence NNN` citations. For `project_*.md` files in memory directories: soft-warns when content heuristically matches investigation findings (root cause, determined that, confirmed at, etc.) but cites no sources (file:line, Evidence NNN, or URL).
+
+- **Configuration:** Works out of the box.
+- **Example trigger:** Writing FINDINGS.md with a "## Findings" section but no `Evidence 001` reference.
+- **Example output:** `{"decision": "deny", "message": "FINDINGS.md must cite collected evidence. Use 'Evidence NNN' to reference evidence files."}`
+
+#### `rejection-advisor.js` — PostToolUseFailure
+
+When the user rejects a tool call (`is_interrupt`), injects immediate advice to analyze and explain the rejection rather than going silent or retrying blindly. Provides domain-specific troubleshooting for MCP data tool rejections (MongoDB, Datadog, Snowflake).
+
+- **Configuration:** Works out of the box. Only fires on user-initiated rejections, not tool errors.
+- **Example trigger:** User rejects a `mcp__mongodb__find` call.
+- **Example output:** `additionalContext` with general "explain what went wrong" instructions plus MongoDB-specific query checklist.
+
 #### `pr-review-guard.js` — PreToolUse
 
 Blocks `gh pr merge` until CodeRabbit has reviewed the PR. Checks for CodeRabbit as the author of a formal review or comment. Degrades gracefully — allows merge if `gh` CLI is unavailable or the API call fails.
@@ -180,9 +196,9 @@ Blocks `gh pr merge` until CodeRabbit has reviewed the PR. Checks for CodeRabbit
 - **Example trigger:** Agent running `gh pr merge 42`.
 - **Example output:** `{"decision": "deny", "message": "CodeRabbit review not found. Do not merge without a review."}`
 
-#### `context-guard.js` — PostToolUse
+#### `context-guard.js` — PreToolUse + PostToolUse
 
-Monitors context window usage by reading the session transcript and computing actual token counts. Issues progressive warnings as context fills up.
+Dual-mode hook: in PreToolUse it passes through all actions (measurement-only pass-through — no hard blocks); in PostToolUse it reads the session transcript, computes actual token counts, and issues progressive advisory warnings. At 60% it writes a `context-high` flag file for `/checkpoint` integration; at 75% it writes a sentinel file for `claude-loop` to detect and trigger an automatic restart. Context-guard never hard-blocks — all enforcement is advisory via `additionalContext`.
 
 - **Configuration:** Works out of the box.
 - **Thresholds:**
@@ -293,6 +309,39 @@ Detects runaway file creation. Warns when the agent creates files matching throw
 - **Example output:** `{"decision": "warn", "message": "New file matches throwaway pattern. Every new file must be referenced by at least one existing file."}`
 - **State files:** `/tmp/claude-bloat-guard/`
 
+#### `dedicated-tool-guard.js` — PreToolUse
+
+Blocks Bash commands that use CLI tools when dedicated Claude Code tools exist. Intercepts `cat`, `head`, `tail`, `grep`/`rg`, `sed`, `find`, and `ls` with file/path operands and redirects to Read, Grep, or Glob. Also blocks direct database CLI access (`mongosh`, `node ...mongo...`, `uv run ...datadog...`, `curl` to MongoDB/Datadog/Snowflake endpoints) to enforce the PHI-safe MCP layer. Prefers false negatives over false positives — only blocks unambiguous direct-operand usage.
+
+- **Configuration:** Works out of the box.
+- **Example trigger:** Agent running `cat src/index.js` or `mongosh "mongodb+srv://..."`.
+- **Example output:** `{"decision": "deny", "message": "\`cat src/index.js\` reads a file — use the Read tool instead"}`
+
+#### `mcp-data-guard.js` — PreToolUse
+
+Validates MCP data tool calls (MongoDB, Datadog, Snowflake) and blocks common mistakes before they silently fail. Guards: phantom collections (`providers`/`patients` → redirect to `users`), bare ObjectIds not wrapped in `$oid`, empty MongoDB filters, Snowflake SELECT without LIMIT, Datadog ranges wider than 1 day, and invalid appointment statuses. Auto-fixes: injects `limit: 20` on MongoDB find calls missing a limit; appends `{ $limit: 20 }` to aggregate pipelines missing a limit stage.
+
+- **Configuration:** Works out of the box. Requires no config.
+- **Example trigger:** `mcp__mongodb__find` with `{ "user": "69b83f..." }` (bare hex string).
+- **Example output:** `{"decision": "deny", "message": "Bare ObjectId ... found without $oid wrapper."}`
+
+#### `mcp-query-interceptor.js` — PreToolUse
+
+When `MCP_QUERY_INTERCEPT=1` is set, blocks MongoDB, Datadog, and Snowflake MCP tool calls and returns the query formatted for manual execution (mongosh syntax for MongoDB, a human-readable block for Datadog, raw SQL for Snowflake). Useful in restricted or air-gapped environments where MCP servers are unavailable but queries can be run out-of-band.
+
+- **Configuration:** Opt-in via `MCP_QUERY_INTERCEPT=1` env var. When unset, fast-exits with zero overhead.
+- **Example trigger:** Any `mcp__mongodb__find` call when `MCP_QUERY_INTERCEPT=1`.
+- **Example output:** `{"decision": "deny", "message": "MCP query intercepted — run manually and paste results back.\n\ndb.users.find(...)"}`
+
+#### `mcp-result-advisor.js` — PostToolUse
+
+Injects advisory context after MCP data tool calls. On the first MCP call per session, injects a cheat sheet of common gotchas (ObjectId wrapping, projection requirements, valid collection names, etc.). On zero-result responses, injects targeted troubleshooting tips (MongoDB: ObjectId form, collection names, field casing; Datadog: service names, filter keys, attribute prefixes).
+
+- **Configuration:** Works out of the box.
+- **Example trigger:** `mcp__mongodb__find` returns "No documents found".
+- **Example output:** `additionalContext` with zero-result troubleshooting checklist.
+- **State files:** `/tmp/claude-hooks/` (per-session cheat-sheet marker).
+
 #### `md-size-guard.js` — PostToolUse
 
 Prevents silent data loss by enforcing a line limit on MEMORY.md. When MEMORY.md exceeds 150 lines after an edit, truncates in-place and writes the overflow to a dated file (`overflow-YYYY-MM-DD.md`). Also warns when CLAUDE.md approaches Claude Code's hard limits.
@@ -305,6 +354,41 @@ Prevents silent data loss by enforcing a line limit on MEMORY.md. When MEMORY.md
 ---
 
 ### Enforcement
+
+#### `protect-main.js` — PreToolUse
+
+Blocks `git commit` directly on the `main` or `master` branch. Checks the current branch via `git branch --show-current` before allowing any commit command. Degrades gracefully — allows the commit if the branch cannot be determined.
+
+- **Configuration:** Works out of the box.
+- **Example trigger:** Agent running `git commit -m "..."` while on `main`.
+- **Example output:** `{"decision": "deny", "message": "Cannot commit directly to main. Create a feature branch first: git checkout -b feat/<name>"}`
+
+#### `checkpoint-discipline.js` — PreToolUse
+
+Two guards in one. Guard 1: when an Agent tool call looks like checkpoint delegation (prompt matches `checkpoint|save.?work|wrap.?up|session.?end`), checks whether any memory topic files were recently written. If not, warns to run Step 0 first; bypass by running `touch /tmp/checkpoint-preflight-ack`. Guard 2: when the parent context writes to `current_work.md` directly (not via a subagent), warns that `/checkpoint` should be used instead of manual memory updates.
+
+- **Configuration:** Works out of the box. Both guards skip subagent contexts.
+- **Recency window:** 2 minutes for topic file freshness check.
+- **Example trigger (Guard 1):** Parent agent delegates checkpoint without first writing topic files.
+- **Example trigger (Guard 2):** Parent agent writes `current_work.md` directly at high context.
+- **Example output:** `additionalContext: "CHECKPOINT PREFLIGHT: No memory topic files were written in the last 2 minutes..."`
+
+#### `memory-accumulation-guard.js` — PreToolUse
+
+Detects and blocks checkpoint accumulation in MEMORY.md. Checkpoint should replace the previous Current Work entry, not append to it. Denies Write/Edit operations on MEMORY.md that would result in multiple session date stamps (`**Date:**`) or duplicate session headers (`### What was done`, `### Current State`, `### Next Steps`).
+
+- **Configuration:** Works out of the box.
+- **Example trigger:** Agent appending a second checkpoint block to MEMORY.md instead of replacing the first.
+- **Example output:** `{"decision": "deny", "message": "MEMORY.md accumulation detected: Found 2 session date stamps..."}`
+
+#### `memory-index-guard.js` — PreToolUse
+
+Enforces a 50-line limit on MEMORY.md to keep it as a pointer index rather than a knowledge base. Denies Write/Edit operations on MEMORY.md that would exceed the line limit. Detailed content belongs in topic files (`project_*.md`, `feedback_*.md`, etc.).
+
+- **Configuration:** Works out of the box.
+- **Line limit:** 50 lines.
+- **Example trigger:** Agent writing a verbose MEMORY.md that would exceed 50 lines.
+- **Example output:** `{"decision": "deny", "message": "MEMORY.md would be 72 lines (limit: 50). Move detailed content to topic files..."}`
 
 #### `checkpoint-gate.js` — PreToolUse
 
@@ -381,6 +465,8 @@ These are shared libraries, not standalone hooks:
 **Path-specific rules:** The playbook installs coding conventions to `~/.claude/rules/` that Claude Code applies automatically when working in matching paths:
 - `hooks.md` — Hook development conventions (globs: `templates/hooks/**`)
 - `testing.md` — Test conventions (globs: `tests/**`)
+- `operations.md` — MCP tool reference and data access policy (org-specific, not included in this repo)
+- Additional org-specific rule files can be added to `~/.claude/rules/` to inject domain conventions
 
 These supplement the global CLAUDE.md with targeted guidance for hook and test authoring without bloating the main instruction file.
 
@@ -403,4 +489,4 @@ These supplement the global CLAUDE.md with targeted guidance for hook and test a
 
 ## Log Analysis
 
-All hook decisions are logged to `~/.claude/logs/YYYY-MM-DD.jsonl`. See the [Log Analysis](../README.md#log-analysis) section in the README for the full list of analysis commands, including `--timeline SESSION_ID` (chronological session timeline merging hook events with transcript tool calls) and `--aggregate` (cross-session metrics: context usage, hook fire rates, session health).
+All hook decisions are logged to `~/.claude/logs/YYYY-MM-DD.jsonl`. Use `scripts/analyze-logs.js` for the full set of analysis commands, including `--timeline SESSION_ID` (chronological session timeline merging hook events with transcript tool calls) and `--aggregate` (cross-session metrics: context usage, hook fire rates, session health).

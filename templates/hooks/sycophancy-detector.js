@@ -25,6 +25,10 @@
 //
 // On any error: outputs {} and exits 0 — never blocks unexpectedly.
 
+function respond(payload = {}) {
+  process.stdout.write(JSON.stringify(payload), () => process.exit(0));
+}
+
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
@@ -69,7 +73,8 @@ function getStateKey(sessionId) {
 }
 
 function getStateFile(sessionId) {
-  return path.join(getStateDir(), `${path.basename(getStateKey(sessionId))}.json`);
+  const safeKey = (getStateKey(sessionId) || "default").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
+  return path.join(getStateDir(), `${safeKey}.json`);
 }
 
 function loadState(stateFile) {
@@ -172,8 +177,7 @@ process.stdin.on("end", () => {
 
     // Skip for subagents — they have disposable context
     if (hookInput.agent_id) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     const sessionId = hookInput.session_id || "unknown";
@@ -185,8 +189,7 @@ process.stdin.on("end", () => {
 
     // Skip uncategorized tools entirely (meta tools, etc.)
     if (category === "other") {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     const stateFile = getStateFile(sessionId);
@@ -293,20 +296,17 @@ process.stdin.on("end", () => {
     saveState(stateFile, state);
 
     if (warningLevel) {
-      process.stdout.write(JSON.stringify({
+      return respond({
         hookSpecificOutput: {
           hookEventName: "PostToolUse",
           additionalContext:
             `Sycophancy detector (${warningLevel}): ${warningReason}`,
         },
-      }));
-      process.exit(0);
+      });
     }
 
-    process.stdout.write(JSON.stringify({}));
-    process.exit(0);
+    return respond();
   } catch {
-    process.stdout.write(JSON.stringify({}));
-    process.exit(0);
+    return respond();
   }
 });

@@ -15,6 +15,18 @@ set -euo pipefail
 # ─── Constants ────────────────────────────────────────────────────────────────
 
 # Project-scoped hash: prevents cross-project collisions for lock file.
+# When --investigation is set, the ID is mixed in so concurrent investigation
+# loops in the same directory get independent locks.
+_LOCK_SCOPE="$(pwd)"
+# INVESTIGATION_ID may be set later by argument parsing; _recompute_lock_hash
+# is called after parsing to incorporate it.
+_recompute_lock_hash() {
+  if [[ -n "${INVESTIGATION_ID:-}" ]]; then
+    _LOCK_SCOPE="$(pwd):investigate:${INVESTIGATION_ID}"
+  fi
+  _CWD_HASH="$(echo "${_LOCK_SCOPE}" | (md5sum 2>/dev/null || md5) | cut -c1-8)"
+  LOCK_FILE="/tmp/claude-loop-${_CWD_HASH}.lock"
+}
 _CWD_HASH="$(pwd | (md5sum 2>/dev/null || md5) | cut -c1-8)"
 # Sentinel is PID-scoped (not CWD-scoped) because Claude Code overrides
 # CLAUDE_LOOP_SENTINEL after changing process.cwd() to the project directory.
@@ -38,6 +50,7 @@ REPORT_MODE=false
 OUTPUT_DIR=""
 SUCCESS_PATTERN=""
 AUTO_MODE=false
+INVESTIGATION_ID=""
 
 # ─── Argument parsing ─────────────────────────────────────────────────────────
 
@@ -56,6 +69,7 @@ Options:
   --output-dir PATH    Mark task done if files in PATH were created during session
   --success-pattern RE Mark task done if session transcript matches regex RE
   --report             Summarize today's log and exit
+  --investigation ID   Scope lock to investigation ID (allows concurrent loops)
   --auto-mode          Pass --enable-auto-mode to claude (classifier-guarded autonomy)
   --dry-run            Show what would be done without running claude
   --version            Print version and exit
@@ -133,6 +147,18 @@ while [[ $# -gt 0 ]]; do
       SUCCESS_PATTERN="$2"
       shift 2
       ;;
+    --investigation)
+      if [[ $# -lt 2 || "$2" == --* ]]; then
+        echo "claude-loop: --investigation requires an ID argument" >&2
+        exit 1
+      fi
+      if [[ ! "$2" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+        echo "claude-loop: investigation ID must be alphanumeric, hyphens, or underscores" >&2
+        exit 1
+      fi
+      INVESTIGATION_ID="$2"
+      shift 2
+      ;;
     --auto-mode)
       AUTO_MODE=true
       shift
@@ -157,6 +183,9 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# Recompute lock hash now that INVESTIGATION_ID may be set
+_recompute_lock_hash
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 
@@ -399,7 +428,13 @@ transcript_matches_pattern() {
   local matched=false
   local session_file
   while IFS= read -r session_file; do
-    if timeout 5 grep -qE "${pattern}" "${session_file}" 2>/dev/null; then
+    local _grep_rc
+    if command -v timeout &>/dev/null; then
+      timeout 5 grep -qE "${pattern}" "${session_file}" 2>/dev/null; _grep_rc=$?
+    else
+      grep -qE "${pattern}" "${session_file}" 2>/dev/null; _grep_rc=$?
+    fi
+    if [[ "${_grep_rc}" -eq 0 ]]; then
       matched=true
       break
     fi
@@ -446,6 +481,7 @@ _lock_is_held() {
 
 show_status() {
   echo "claude-loop status"
+  [[ -n "${INVESTIGATION_ID}" ]] && echo "  Investigation: ${INVESTIGATION_ID}"
   echo "  Lock file : ${LOCK_FILE}"
 
   if [[ -f "${LOCK_FILE}" ]]; then
@@ -536,8 +572,13 @@ show_status_json() {
     fi
   fi
   if [[ "${running}" == "true" ]]; then
-    printf '{"running":true,"lock_file":"%s","sentinel_file":"%s"}\n' \
-      "${LOCK_FILE}" "${SENTINEL_FILE}"
+    if [[ -n "${INVESTIGATION_ID}" ]]; then
+      printf '{"running":true,"lock_file":"%s","sentinel_file":"%s","investigation":"%s"}\n' \
+        "${LOCK_FILE}" "${SENTINEL_FILE}" "${INVESTIGATION_ID}"
+    else
+      printf '{"running":true,"lock_file":"%s","sentinel_file":"%s"}\n' \
+        "${LOCK_FILE}" "${SENTINEL_FILE}"
+    fi
   else
     printf '{"running":false}\n'
   fi
@@ -669,6 +710,9 @@ trap handle_signal SIGINT SIGTERM
 dry_run_show() {
   echo "claude-loop dry-run:"
   echo "  Working dir   : $(pwd)"
+  if [[ -n "${INVESTIGATION_ID}" ]]; then
+    echo "  Investigation : ${INVESTIGATION_ID}"
+  fi
   echo "  Lock file     : ${LOCK_FILE}"
   echo "  Sentinel file : ${SENTINEL_FILE}"
   echo "  Log file      : ${LOG_FILE}"
@@ -779,7 +823,11 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
   if [[ "${AUTO_MODE}" == true ]]; then
     CLAUDE_CMD+=("--enable-auto-mode")
   fi
-  CLAUDE_CMD+=("--append-system-prompt" "claude-loop started this session. SessionStart injected your memory and context. MANDATORY per CLAUDE.md 'claude-loop auto-continue' rule: Start working on the first Next Step from Current Work immediately. Do not wait, summarize, or ask — just begin the work." "Continue working. Start on the first Next Step from Current Work immediately.")
+  if [[ -n "${INVESTIGATION_ID}" && -z "${TASK_QUEUE_FILE}" ]]; then
+    CLAUDE_CMD+=("--append-system-prompt" "claude-loop started this session for investigation ${INVESTIGATION_ID}. Resume the investigation immediately: /investigate ${INVESTIGATION_ID} run" "Continue investigation ${INVESTIGATION_ID}. Run /investigate ${INVESTIGATION_ID} run immediately.")
+  else
+    CLAUDE_CMD+=("--append-system-prompt" "claude-loop started this session. SessionStart injected your memory and context. MANDATORY per CLAUDE.md 'claude-loop auto-continue' rule: Start working on the first Next Step from Current Work immediately. Do not wait, summarize, or ask — just begin the work." "Continue working. Start on the first Next Step from Current Work immediately.")
+  fi
 
   if [[ -n "${TASK_QUEUE_FILE}" ]]; then
     if [[ -n "${RETRY_TASK}" ]]; then
@@ -830,11 +878,14 @@ while [[ "${LOOP_RUNNING}" == "true" ]]; do
   # Run claude in foreground via subshell + exec (preserves terminal access, records PID)
   EXIT_CODE=0
   (
-    # $PPID in sh = this subshell's PID (equivalent to $BASHPID, but portable)
+    # sh -c 'echo $PPID' gets the actual subshell's PID for the PID file
     sh -c 'echo $PPID' > "${CLAUDE_PID_FILE}"
+    # $$ = outer script PID (same as SENTINEL_FILE), NOT the subshell PID
+    # sh -c 'echo $PPID' gets the actual subshell PID for the PID file
     export CLAUDE_LOOP_PID=$$
     export CLAUDE_LOOP_SENTINEL="${SENTINEL_FILE}"
     [[ -n "${TASK_QUEUE_FILE}" ]] && export CLAUDE_LOOP=1
+    [[ -n "${INVESTIGATION_ID}" ]] && export CLAUDE_LOOP_INVESTIGATION="${INVESTIGATION_ID}"
     exec "${CLAUDE_CMD[@]}"
   ) || EXIT_CODE=$?
 

@@ -7,6 +7,10 @@
 //
 // On any error, outputs {} and exits 0 — never blocks post-compaction.
 
+function respond(payload = {}) {
+  process.stdout.write(JSON.stringify(payload), () => process.exit(0));
+}
+
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
@@ -84,19 +88,17 @@ process.stdin.on("end", () => {
     const ctx = buildContext(currentWork, sentinel);
 
     if (!ctx) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
-    process.stdout.write(JSON.stringify({
+    return respond({
       hookSpecificOutput: {
+        hookEventName: "PostCompact",
         additionalContext: ctx,
       },
-    }));
-    process.exit(0);
+    });
   } catch {
-    process.stdout.write(JSON.stringify({}));
-    process.exit(0);
+    return respond();
   }
 });
 

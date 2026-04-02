@@ -29,8 +29,7 @@ const { execSync } = require("child_process");
 // ---------------------------------------------------------------------------
 
 function output(obj) {
-  process.stdout.write(JSON.stringify(obj));
-  process.exit(0);
+  process.stdout.write(JSON.stringify(obj), () => process.exit(0));
 }
 
 function pass() {

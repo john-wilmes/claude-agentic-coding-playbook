@@ -2,6 +2,10 @@
 // Also checks MEMORY.md and CLAUDE.md size thresholds and warns when exceeded.
 // No agent decision needed -- this runs automatically on every session start.
 
+function respond(payload = {}) {
+  process.stdout.write(JSON.stringify(payload), () => process.exit(0));
+}
+
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
@@ -439,12 +443,10 @@ process.stdin.on("end", () => {
       },
     };
 
-    process.stdout.write(JSON.stringify(output));
-    process.exit(0);
+    return respond(output);
   } catch {
     // Don't block session start on errors
-    process.stdout.write(JSON.stringify({}));
-    process.exit(0);
+    return respond();
   }
 });
 

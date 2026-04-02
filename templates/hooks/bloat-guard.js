@@ -128,7 +128,6 @@ function checkNewFile(filePath, sessionId) {
   // Block throwaway filename patterns
   if (isThrowaway(filename)) {
     return {
-      decision: "warn",
       reason:
         `BLOAT WARNING: "${filename}" matches a throwaway file pattern. ` +
         `One-off scripts, debug files, and scratch files should not be created as files. ` +
@@ -140,7 +139,6 @@ function checkNewFile(filePath, sessionId) {
 
   if (count > ESCALATION_THRESHOLD) {
     return {
-      decision: "warn",
       reason:
         `BLOAT WARNING: ${count} new files created this session (threshold: ${ESCALATION_THRESHOLD}). ` +
         `Every new file must be referenced by an existing file. Consider editing existing files instead. ` +
@@ -150,7 +148,6 @@ function checkNewFile(filePath, sessionId) {
 
   // Advisory warning for all new files
   return {
-    decision: "warn",
     reason:
       `New file: "${filename}". Remember: every new file must be referenced by at least one existing file. ` +
       `Orphan files are not allowed.`,
@@ -182,12 +179,11 @@ process.stdin.on("end", () => {
     const result = checkNewFile(filePath, sessionId);
 
     if (result) {
-      log.writeLog({ hook: "bloat-guard", event: result.decision, filePath, reason: result.reason });
+      log.writeLog({ hook: "bloat-guard", event: "warn", filePath, reason: result.reason });
       const output = {
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
-          permissionDecision: result.decision,
-          permissionDecisionReason: result.reason,
+          additionalContext: result.reason,
         },
       };
       process.stdout.write(JSON.stringify(output));
@@ -197,6 +193,7 @@ process.stdin.on("end", () => {
   } catch (_err) {
     process.stdout.write("{}");
   }
+  process.exitCode = 0;
 });
 
 // ---------------------------------------------------------------------------

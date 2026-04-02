@@ -12,6 +12,10 @@
 // Primary: reads actual token counts from the session transcript JSONL.
 // Fallback: estimates from tool I/O sizes when transcript is unavailable.
 
+function respond(payload = {}) {
+  process.stdout.write(JSON.stringify(payload), () => process.exit(0));
+}
+
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
@@ -170,8 +174,7 @@ process.stdin.on("end", () => {
     // agent_id is present only when the hook fires inside a subagent.
     if (hookInput.agent_id) {
       log.writeLog({ hook: "context-guard", event: "skip", details: "Subagent call skipped", session_id: hookInput.session_id, tool_use_id: hookInput.tool_use_id, agent_id: hookInput.agent_id, project: hookInput.cwd });
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     // Mode detection: PreToolUse has no tool_response field.
@@ -183,8 +186,7 @@ process.stdin.on("end", () => {
     // ── PreToolUse pass-through ─────────────────────────────────────────
     // No hard blocks. All enforcement is advisory via PostToolUse.
     if (isPreToolUse) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     // ── PostToolUse path ──────────────────────────────────────────────────
@@ -353,10 +355,8 @@ process.stdin.on("end", () => {
     }
 
     saveState(stateFile, state);
-    process.stdout.write(JSON.stringify(output));
-    process.exit(0);
+    return respond(output);
   } catch {
-    process.stdout.write(JSON.stringify({}));
-    process.exit(0);
+    return respond();
   }
 });

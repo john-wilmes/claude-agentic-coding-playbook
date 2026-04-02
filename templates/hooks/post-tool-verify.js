@@ -1,6 +1,10 @@
 // PostToolUse hook: auto-runs tests after Edit/Write on code files.
 // Reads test command from project CLAUDE.md. Debounces to avoid spam.
 
+function respond(payload = {}) {
+  process.stdout.write(JSON.stringify(payload), () => process.exit(0));
+}
+
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
@@ -204,8 +208,7 @@ process.stdin.on("end", () => {
 
     // Subagents have disposable context — skip verification.
     if (hookInput.agent_id) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     const toolName = hookInput.tool_name || "";
@@ -215,22 +218,19 @@ process.stdin.on("end", () => {
 
     // Only act on Edit or Write tool calls
     if (toolName !== "Edit" && toolName !== "Write") {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     const filePath = toolInput.file_path || "";
 
     // Skip non-code files
     if (shouldSkipFile(filePath)) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     // Skip files outside the project directory (e.g. ~/.wslconfig)
     if (isOutOfProject(filePath, cwd)) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     // Read CLAUDE.md and extract test command
@@ -240,20 +240,17 @@ process.stdin.on("end", () => {
       claudeMdContent = fs.readFileSync(claudeMdPath, "utf8");
     } catch {
       // No CLAUDE.md — can't verify
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     const testCommand = extractTestCommand(claudeMdContent);
     if (!testCommand) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     // Debounce: skip if run too recently for this cwd+session
     if (isDebounced(cwd, sessionId)) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     // Capture previous state before overwriting it
@@ -261,12 +258,12 @@ process.stdin.on("end", () => {
 
     // Validate test command against allowlist before executing
     if (!isAllowedTestCommand(testCommand)) {
-      process.stdout.write(JSON.stringify({
+      return respond({
         hookSpecificOutput: {
+          hookEventName: "PostToolUse",
           additionalContext: `⚠ post-tool-verify: blocked untrusted test command "${testCommand.trim().split(/\s+/)[0]}". Only standard test runners are allowed.`
         }
-      }));
-      process.exit(0);
+      });
     }
 
     // Run tests
@@ -319,14 +316,10 @@ process.stdin.on("end", () => {
       });
     }
 
-    process.stdout.write(
-      JSON.stringify({ hookSpecificOutput: { additionalContext } })
-    );
-    process.exit(0);
+    return respond({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext } });
   } catch {
     // Never block tool execution on hook errors
-    process.stdout.write("{}");
-    process.exit(0);
+    return respond();
   }
 });
 

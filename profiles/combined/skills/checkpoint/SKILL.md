@@ -14,19 +14,30 @@ Delegates heavy work to a subagent to keep parent context lean.
 
 ## Steps
 
+### 0. Persist unsaved findings (parent does this — NOT the subagent)
+
+Before delegating, review the conversation for any research findings, evidence, analysis, or detailed information that was discussed but **not yet written to a memory topic file**. This is the #1 cause of data loss at checkpoint — the subagent cannot see conversation context, so anything not already in a file will be lost.
+
+For each unsaved finding:
+- Write it to an appropriate topic file in the project's memory directory (e.g. `project_<topic>.md`, `feedback_<topic>.md`)
+- Include the full detail — do NOT summarize or abbreviate
+- Add a pointer in `MEMORY.md` if the topic file is new
+
+**If all findings are already persisted in topic files, skip this step.**
+
 ### 1. Delegate save work to a subagent
 
 Spawn a subagent (model: "sonnet") using the Task tool to perform all the heavy I/O.
 Pass it the following context:
 
 - The project's memory file path (e.g. `~/.claude/projects/<project>/memory/MEMORY.md`)
-- What was accomplished this session (summarize briefly)
+- What was accomplished this session (bullet list of concrete outcomes, not a vague summary)
 - `$ARGUMENTS` if provided (use as next-steps summary)
 - The current working directory
 
 The subagent prompt should instruct it to:
 
-1. **Update memory**: Read the project's `MEMORY.md`. Update the "Current Work" section with what was done, current state, and next steps. Replace the previous entry (do not accumulate). Add date stamp. Add any non-obvious discoveries to Lessons Learned. Do not duplicate existing entries. **Clear the `## Recovered from previous session` section entirely if it exists** — its content has been incorporated into Current Work.
+1. **Update memory**: Read the project's `MEMORY.md`. Update the "Current Work" section with what was done, current state, and next steps. Replace the previous entry (do not accumulate). Add date stamp. **Do NOT attempt to summarize research findings here** — detailed findings belong in topic files (written in Step 0), not in MEMORY.md. Current Work should only contain status, outcomes, and next steps. Keep MEMORY.md under 50 lines — it is an index of one-line pointers, not a knowledge base. **Clear the `## Recovered from previous session` section entirely if it exists** — its content has been incorporated into Current Work.
 
 2. **Commit and push**: Run `git status`. If there are uncommitted changes, stage relevant files (not build artifacts, logs, or secrets), commit with a descriptive message, and push to remote. If no changes or not a git repo, skip.
 

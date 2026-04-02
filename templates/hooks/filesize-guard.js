@@ -22,6 +22,10 @@ try {
   log = { writeLog() {}, promptHead(t) { return t; } };
 }
 
+function respond(payload = {}) {
+  process.stdout.write(JSON.stringify(payload), () => process.exit(0));
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -188,29 +192,26 @@ process.stdin.on("end", () => {
 
     if (filePath === null) {
       // Not a tool we inspect, or no extractable path
-      process.stdout.write("{}");
-      return;
+      return respond();
     }
 
     const reason = checkFile(filePath);
 
     if (reason) {
       log.writeLog({ hook: "filesize-guard", event: "block", filePath, reason });
-      const output = {
+      return respond({
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
           permissionDecision: "deny",
           permissionDecisionReason: reason,
         },
-      };
-      process.stdout.write(JSON.stringify(output));
+      });
     } else {
-      process.stdout.write("{}");
+      return respond();
     }
   } catch (_err) {
-    process.stdout.write("{}");
+    return respond();
   }
-  process.exit(0);
 });
 
 // ---------------------------------------------------------------------------

@@ -120,11 +120,52 @@ test("4. Context-high flag exists, tool is Skill -> allow", (env) => {
   }
 });
 
-test("5. Context-high flag exists, tool is Read -> deny", (env) => {
+test("5. Context-high flag exists, checkpoint-needed tools -> allow", (env) => {
   cleanup();
   fs.writeFileSync(contextHighPath(), JSON.stringify({ reason: "context-high", ratio: 0.65, timestamp: Date.now() }));
   try {
-    const result = runGate("Read", {}, { HOME: env.home, USERPROFILE: env.home });
+    // Non-Write/Edit tools are allowed unconditionally
+    for (const tool of ["Bash", "Skill", "Task", "Agent", "Read"]) {
+      const result = runGate(tool, {}, { HOME: env.home, USERPROFILE: env.home });
+      assert.strictEqual(result.status, 0);
+      assert.deepStrictEqual(result.json, {}, `${tool} should be allowed when context-high`);
+    }
+    // Write/Edit targeting a non-checkpoint file: allowed but with a reminder (no permissionDecision)
+    for (const tool of ["Write", "Edit"]) {
+      const result = runHook(HOOK_PATH, {
+        tool_name: tool,
+        tool_input: { file_path: "/tmp/some-other-file.txt" },
+        session_id: "test-session",
+        tool_use_id: "tu-001",
+        cwd: "/tmp/test-project",
+      }, { CLAUDE_LOOP_PID: FAKE_PID, HOME: env.home, USERPROFILE: env.home });
+      assert.strictEqual(result.status, 0);
+      assert.ok(result.json.hookSpecificOutput, `${tool} should return hookSpecificOutput`);
+      assert.ok(result.json.hookSpecificOutput.additionalContext, `${tool} should include additionalContext reminder`);
+      assert.strictEqual(result.json.hookSpecificOutput.permissionDecision, undefined, `${tool} should not deny`);
+    }
+    // Write/Edit targeting a checkpoint-related file (MEMORY.md): allowed silently
+    for (const tool of ["Write", "Edit"]) {
+      const result = runHook(HOOK_PATH, {
+        tool_name: tool,
+        tool_input: { file_path: "/home/user/.claude/projects/foo/memory/MEMORY.md" },
+        session_id: "test-session",
+        tool_use_id: "tu-001",
+        cwd: "/tmp/test-project",
+      }, { CLAUDE_LOOP_PID: FAKE_PID, HOME: env.home, USERPROFILE: env.home });
+      assert.strictEqual(result.status, 0);
+      assert.deepStrictEqual(result.json, {}, `${tool} to checkpoint file should be allowed silently`);
+    }
+  } finally {
+    cleanup();
+  }
+});
+
+test("6. Context-high flag exists, non-checkpoint tool -> deny", (env) => {
+  cleanup();
+  fs.writeFileSync(contextHighPath(), JSON.stringify({ reason: "context-high", ratio: 0.65, timestamp: Date.now() }));
+  try {
+    const result = runGate("Grep", {}, { HOME: env.home, USERPROFILE: env.home });
 
     assert.strictEqual(result.status, 0);
     assert.strictEqual(result.json.hookSpecificOutput.permissionDecision, "deny");
@@ -132,19 +173,6 @@ test("5. Context-high flag exists, tool is Read -> deny", (env) => {
       result.json.hookSpecificOutput.permissionDecisionReason.includes("Context critical"),
       `Reason was: ${result.json.hookSpecificOutput.permissionDecisionReason}`
     );
-  } finally {
-    cleanup();
-  }
-});
-
-test("6. Context-high flag exists, tool is Edit -> deny", (env) => {
-  cleanup();
-  fs.writeFileSync(contextHighPath(), JSON.stringify({ reason: "context-high", ratio: 0.65, timestamp: Date.now() }));
-  try {
-    const result = runGate("Edit", {}, { HOME: env.home, USERPROFILE: env.home });
-
-    assert.strictEqual(result.status, 0);
-    assert.strictEqual(result.json.hookSpecificOutput.permissionDecision, "deny");
   } finally {
     cleanup();
   }
@@ -243,12 +271,12 @@ test("11. Context-high flag from different session -> allow (stale flag cleared)
   }
 });
 
-test("12. Context-high flag from same session -> deny", (env) => {
+test("12. Context-high flag from same session -> deny non-checkpoint tools", (env) => {
   cleanup();
   // Write flag with same session_id as runGate helper's "test-session"
   fs.writeFileSync(contextHighPath(), JSON.stringify({ reason: "context-high", ratio: 0.65, session_id: "test-session", timestamp: Date.now() }));
   try {
-    const result = runGate("Read", {}, { HOME: env.home, USERPROFILE: env.home });
+    const result = runGate("Grep", {}, { HOME: env.home, USERPROFILE: env.home });
 
     assert.strictEqual(result.status, 0);
     assert.strictEqual(result.json.hookSpecificOutput.permissionDecision, "deny");

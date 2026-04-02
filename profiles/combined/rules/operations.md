@@ -12,6 +12,8 @@ The CLI tools (`node mongodb_mcp_client.js`, `uv run dd_logs_cli.py`, direct `mo
 
 Default database: `db` (not `luma`, not `lumahealth`).
 
+**Workflow**: Call `discover_collection` before querying any collection for the first time. Index keys reveal the real field names and which fields to filter on. Do not guess field names.
+
 ```
 mcp__mongodb__find:
   collection: "appointments"     # required
@@ -32,11 +34,14 @@ Key collections: `users`, `patients`, `appointments`, `integrators`, `patientfor
 
 ```
 mcp__datadog__get_logs:
-  query: "service:integrator-service @rootId:abc123"
-  from: "now-1h"     # use narrow ranges — broad queries are expensive
-  to: "now"
+  filters:
+    service: "integrator"   # real names: integrator, rest, chat, followup (NOT integrator-service)
+    "@rootId": "abc123"
+  time_range: "1h"          # use narrow ranges — broad queries are expensive
   limit: 50
 ```
+
+Real service names: `integrator`, `rest`, `chat`, `followup`. Using `integrator-service` or `rest-service` returns 0 results.
 
 Hex IDs embedded in log messages are not reliably found by full-text search. Use attribute filters (`@orgId`, `@rootId`, `service:`) and filter client-side when needed.
 

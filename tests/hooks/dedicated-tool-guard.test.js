@@ -246,21 +246,32 @@ test("find.5 find -name '*.ts' -> allow (no dir arg, starts with flag)", (env) =
   assertAllowed(runGuard("find -name '*.ts'", env), "find -name no dir");
 });
 
+test("find.6 find ./src -maxdepth 1 -name '*.ts' -> allow (shallow search)", (env) => {
+  assertAllowed(runGuard("find ./src -maxdepth 1 -name '*.ts'", env), "find shallow maxdepth 1");
+});
+
+test("find.7 find /absolute -maxdepth 2 -name '*.ts' -> allow (shallow search)", (env) => {
+  assertAllowed(runGuard("find /absolute -maxdepth 2 -name '*.ts'", env), "find shallow maxdepth 2");
+});
+
+test("find.8 find ./src -maxdepth 5 -name '*.ts' -> block (deep search)", (env) => {
+  assertBlocked(runGuard("find ./src -maxdepth 5 -name '*.ts'", env), "find deep maxdepth 5");
+});
+
 // ─── ls tests ────────────────────────────────────────────────────────────────
 
 console.log("\ndedicated-tool-guard.js (ls):");
 
-test("ls.1 ls /some/path -> block", (env) => {
-  assertBlocked(runGuard("ls /some/path", env), "ls absolute");
-  assert.ok(runGuard("ls /some/path", env).json.hookSpecificOutput.permissionDecisionReason.includes("Glob"));
+test("ls.1 ls /some/path -> allow (ls unblocked: Glob times out on large/external dirs)", (env) => {
+  assertAllowed(runGuard("ls /some/path", env), "ls absolute");
 });
 
-test("ls.2 ls ./subdir -> block", (env) => {
-  assertBlocked(runGuard("ls ./subdir", env), "ls relative");
+test("ls.2 ls ./subdir -> allow", (env) => {
+  assertAllowed(runGuard("ls ./subdir", env), "ls relative");
 });
 
-test("ls.3 ls src/ -> block", (env) => {
-  assertBlocked(runGuard("ls src/", env), "ls named dir");
+test("ls.3 ls src/ -> allow", (env) => {
+  assertAllowed(runGuard("ls src/", env), "ls named dir");
 });
 
 test("ls.4 ls (no args) -> allow", (env) => {
@@ -273,6 +284,94 @@ test("ls.5 ls -la -> allow (flags only)", (env) => {
 
 test("ls.6 ls -l -> allow (flag only)", (env) => {
   assertAllowed(runGuard("ls -l", env), "ls -l");
+});
+
+// ─── mongosh tests ───────────────────────────────────────────────────────────
+
+console.log("\ndedicated-tool-guard.js (mongosh):");
+
+test("mongosh.1 mongosh -> block", (env) => {
+  assertBlocked(runGuard("mongosh", env), "mongosh bare");
+});
+
+test("mongosh.2 mongosh 'mongodb+srv://...' -> block", (env) => {
+  assertBlocked(runGuard("mongosh 'mongodb+srv://cluster.example.net'", env), "mongosh uri");
+});
+
+test("mongosh.3 echo foo | mongosh -> allow (piped)", (env) => {
+  assertAllowed(runGuard("echo foo | mongosh", env), "mongosh piped");
+});
+
+test("mongosh.4 git push && mongosh -> block (chained)", (env) => {
+  assertBlocked(runGuard("git push && mongosh", env), "mongosh chained");
+});
+
+// ─── node+mongo tests ────────────────────────────────────────────────────────
+
+console.log("\ndedicated-tool-guard.js (node+mongo):");
+
+test("node-mongo.1 node mongodb_mcp_client.js -> block", (env) => {
+  assertBlocked(runGuard("node mongodb_mcp_client.js", env), "node mongo client");
+});
+
+test("node-mongo.2 node ./scripts/mongoQuery.js -> block", (env) => {
+  assertBlocked(runGuard("node ./scripts/mongoQuery.js", env), "node mongo script");
+});
+
+test("node-mongo.3 node server.js -> allow (no mongo keyword)", (env) => {
+  assertAllowed(runGuard("node server.js", env), "node server");
+});
+
+test("node-mongo.4 node app.js -> allow", (env) => {
+  assertAllowed(runGuard("node app.js", env), "node app");
+});
+
+// ─── python/uv data script tests ─────────────────────────────────────────────
+
+console.log("\ndedicated-tool-guard.js (python/uv data scripts):");
+
+test("pydata.1 uv run dd_logs_cli.py -> block", (env) => {
+  assertBlocked(runGuard("uv run dd_logs_cli.py", env), "uv run datadog");
+});
+
+test("pydata.2 python3 snowflake_query.py -> block", (env) => {
+  assertBlocked(runGuard("python3 snowflake_query.py", env), "python3 snowflake");
+});
+
+test("pydata.3 python datadog_export.py -> block", (env) => {
+  assertBlocked(runGuard("python datadog_export.py", env), "python datadog");
+});
+
+test("pydata.4 uv run app.py -> allow (no data keyword)", (env) => {
+  assertAllowed(runGuard("uv run app.py", env), "uv run generic");
+});
+
+test("pydata.5 python3 server.py -> allow", (env) => {
+  assertAllowed(runGuard("python3 server.py", env), "python3 generic");
+});
+
+// ─── curl data endpoint tests ────────────────────────────────────────────────
+
+console.log("\ndedicated-tool-guard.js (curl data endpoints):");
+
+test("curl.1 curl https://cloud.mongodb.com/api -> block", (env) => {
+  assertBlocked(runGuard("curl https://cloud.mongodb.com/api/atlas/v1/groups", env), "curl mongodb");
+});
+
+test("curl.2 curl https://api.datadoghq.com/v1/logs -> block", (env) => {
+  assertBlocked(runGuard("curl https://api.datadoghq.com/v1/logs", env), "curl datadog");
+});
+
+test("curl.3 curl https://xy12345.snowflakecomputing.com/api -> block", (env) => {
+  assertBlocked(runGuard("curl https://xy12345.snowflakecomputing.com/api/statements", env), "curl snowflake");
+});
+
+test("curl.4 curl https://example.com -> allow", (env) => {
+  assertAllowed(runGuard("curl https://example.com", env), "curl generic");
+});
+
+test("curl.5 curl https://github.com/api -> allow", (env) => {
+  assertAllowed(runGuard("curl https://github.com/api/repos", env), "curl github");
 });
 
 // ─── Non-Bash tool pass-through ──────────────────────────────────────────────
@@ -393,10 +492,9 @@ unitTest("U10. checkCommand detects find ./src -name", () => {
   assert.ok(reason.includes("Glob"), `Reason: ${reason}`);
 });
 
-unitTest("U11. checkCommand detects ls ./src", () => {
+unitTest("U11. checkCommand allows ls ./src (ls unblocked: Glob times out on large/external dirs)", () => {
   const reason = checkCommand("ls ./src");
-  assert.ok(reason, "Should return a reason");
-  assert.ok(reason.includes("Glob"), `Reason: ${reason}`);
+  assert.strictEqual(reason, null, "ls should be allowed (not blocked)");
 });
 
 unitTest("U12. checkCommand allows find . -name (cwd is fine)", () => {
@@ -413,6 +511,38 @@ unitTest("U14. checkCommand allows git diff | grep pattern (piped)", () => {
 
 unitTest("U15. checkCommand allows echo foo | cat (piped)", () => {
   assert.strictEqual(checkCommand("echo foo | cat"), null);
+});
+
+unitTest("U16. checkCommand detects mongosh", () => {
+  assert.ok(checkCommand("mongosh") !== null);
+});
+
+unitTest("U17. checkCommand detects node mongodb_mcp_client.js", () => {
+  assert.ok(checkCommand("node mongodb_mcp_client.js") !== null);
+});
+
+unitTest("U18. checkCommand allows node server.js (no mongo)", () => {
+  assert.strictEqual(checkCommand("node server.js"), null);
+});
+
+unitTest("U19. checkCommand detects uv run dd_logs_cli.py", () => {
+  assert.ok(checkCommand("uv run dd_logs_cli.py") !== null);
+});
+
+unitTest("U20. checkCommand detects python3 snowflake_query.py", () => {
+  assert.ok(checkCommand("python3 snowflake_query.py") !== null);
+});
+
+unitTest("U21. checkCommand allows uv run app.py", () => {
+  assert.strictEqual(checkCommand("uv run app.py"), null);
+});
+
+unitTest("U22. checkCommand detects curl to mongodb.net", () => {
+  assert.ok(checkCommand("curl https://cluster0.mongodb.net/api") !== null);
+});
+
+unitTest("U23. checkCommand allows curl to example.com", () => {
+  assert.strictEqual(checkCommand("curl https://example.com"), null);
 });
 
 // ─── Summary ─────────────────────────────────────────────────────────────────

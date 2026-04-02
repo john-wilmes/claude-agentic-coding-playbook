@@ -79,7 +79,7 @@ test("1. First call: no warning", () => {
     assert.strictEqual(result.status, 0, "Should exit 0");
     assert.ok(result.json, "Should output valid JSON");
     // No decision field means allow; additionalContext absent means no warning
-    assert.strictEqual(result.json.decision, undefined, "Should not block");
+    assert.ok(!result.json?.hookSpecificOutput?.permissionDecision || result.json.hookSpecificOutput.permissionDecision !== "deny", "Should not block");
     assert.strictEqual(result.json.hookSpecificOutput, undefined, "Should not warn");
   } finally {
     cleanupSession(sessionId);
@@ -97,7 +97,7 @@ test("2. 3 identical calls: warning in additionalContext", () => {
 
     assert.strictEqual(result.status, 0, "Should exit 0");
     assert.ok(result.json, "Should output valid JSON");
-    assert.strictEqual(result.json.decision, undefined, "Should not block at 3");
+    assert.ok(!result.json?.hookSpecificOutput?.permissionDecision || result.json.hookSpecificOutput.permissionDecision !== "deny", "Should not block at 3");
     assert.ok(result.json.hookSpecificOutput, "Should have hookSpecificOutput");
     assert.ok(
       result.json.hookSpecificOutput.additionalContext.includes("3 times"),
@@ -142,7 +142,7 @@ test("4. Different calls interspersed: no warning (consecutive count resets)", (
 
     assert.strictEqual(result.status, 0, "Should exit 0");
     assert.ok(result.json, "Should output valid JSON");
-    assert.strictEqual(result.json.decision, undefined, "Should not block");
+    assert.ok(!result.json?.hookSpecificOutput?.permissionDecision || result.json.hookSpecificOutput.permissionDecision !== "deny", "Should not block");
     assert.strictEqual(result.json.hookSpecificOutput, undefined, "Should not warn — only 2 consecutive");
   } finally {
     cleanupSession(sessionId);
@@ -162,7 +162,7 @@ test("5. After block at 5, different call resets (no block, no warning)", () => 
 
     assert.strictEqual(result.status, 0, "Should exit 0");
     assert.ok(result.json, "Should output valid JSON");
-    assert.strictEqual(result.json.decision, undefined, "Should not block after reset");
+    assert.ok(!result.json?.hookSpecificOutput?.permissionDecision || result.json.hookSpecificOutput.permissionDecision !== "deny", "Should not block after reset");
     assert.strictEqual(result.json.hookSpecificOutput, undefined, "Should not warn after reset");
   } finally {
     cleanupSession(sessionId);
@@ -178,7 +178,7 @@ test("7. Whitelisted test commands: never warned or blocked", () => {
       const result = runDetector(sessionId, "Bash", payload);
       assert.strictEqual(result.status, 0, `Call ${i + 1} should exit 0`);
       assert.ok(result.json, `Call ${i + 1} should output valid JSON`);
-      assert.strictEqual(result.json.decision, undefined, `Call ${i + 1} should not block`);
+      assert.ok(!result.json?.hookSpecificOutput?.permissionDecision || result.json.hookSpecificOutput.permissionDecision !== "deny", `Call ${i + 1} should not block`);
       assert.strictEqual(result.json.hookSpecificOutput, undefined, `Call ${i + 1} should not warn`);
     }
   } finally {

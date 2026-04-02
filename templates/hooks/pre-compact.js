@@ -8,6 +8,10 @@
 //
 // On any error, outputs {} and exits 0 — never blocks compaction.
 
+function respond(payload = {}) {
+  process.stdout.write(JSON.stringify(payload), () => process.exit(0));
+}
+
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
@@ -101,8 +105,7 @@ process.stdin.on("end", () => {
 
     // Deduplicate: one snapshot per session is enough
     if (alreadySnapshotted(sessionId)) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     const branch = runGit(["rev-parse", "--abbrev-ref", "HEAD"], cwd);
@@ -116,16 +119,14 @@ process.stdin.on("end", () => {
     const snapshotSection = buildSnapshotSection(trigger, branch, modifiedFiles);
     upsertSnapshot(memFile, snapshotSection);
 
-    process.stdout.write(JSON.stringify({
+    return respond({
       hookSpecificOutput: {
         hookEventName: "PreCompact",
         additionalContext:
           "Pre-compact snapshot saved. SessionStart will restore memory context on the next session.",
       },
-    }));
-    process.exit(0);
+    });
   } catch {
-    process.stdout.write(JSON.stringify({}));
-    process.exit(0);
+    return respond();
   }
 });

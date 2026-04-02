@@ -2,6 +2,10 @@
 // Classifies task prompts by keyword signals and injects the cheapest sufficient model.
 // Cost ratios: 1x (haiku) : 3x (sonnet) : 5x (opus).
 
+function respond(payload = {}) {
+  process.stdout.write(JSON.stringify(payload), () => process.exit(0));
+}
+
 const HAIKU_AGENT_TYPES = new Set(["Explore", "claude-code-guide"]);
 
 const READ_SIGNALS = [
@@ -77,14 +81,12 @@ process.stdin.on("end", () => {
 
     // Only intercept Task and Agent tool calls
     if (toolName !== "Task" && toolName !== "Agent") {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     // If model is already set, respect the agent's explicit choice
     if (toolInput.model) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     // Classify and inject model
@@ -122,12 +124,10 @@ process.stdin.on("end", () => {
       },
     };
 
-    process.stdout.write(JSON.stringify(output));
-    process.exit(0);
+    return respond(output);
   } catch {
     // Never block tool execution on errors
-    process.stdout.write(JSON.stringify({}));
-    process.exit(0);
+    return respond();
   }
 });
 
