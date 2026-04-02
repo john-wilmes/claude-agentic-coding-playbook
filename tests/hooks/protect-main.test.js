@@ -208,6 +208,49 @@ test("7. git commit in non-git directory: allow (graceful degradation)", () => {
   }
 });
 
+// 8. `cd <feature-repo> && git commit` with session cwd on master → allow
+// This covers the case where the agent's session cwd is a different repo on master,
+// but the command targets a feature branch repo via `cd <path> &&`.
+test("8. cd <feature-branch-repo> && git commit: allow (cd path takes priority over hookInput.cwd)", () => {
+  const env = createTempHome();
+  const featureRepo = makeTempRepo("feat/my-feature");
+  const masterRepo = makeTempRepo("master");
+  try {
+    const result = runHook(PROTECT_MAIN, {
+      tool_name: "Bash",
+      // hookInput.cwd points to a master-branch repo (simulating session root)
+      tool_input: { command: `cd ${featureRepo.dir} && git commit -m "test"` },
+      cwd: masterRepo.dir,
+    }, { HOME: env.home, USERPROFILE: env.home });
+    assert.strictEqual(result.status, 0, "Should exit 0");
+    assert.ok(result.json, "Should output valid JSON");
+    assert.ok(!result.json?.hookSpecificOutput?.permissionDecision || result.json.hookSpecificOutput.permissionDecision !== "deny", "Should allow commit on feature branch even when session cwd is master");
+  } finally {
+    featureRepo.cleanup();
+    masterRepo.cleanup();
+    env.cleanup();
+  }
+});
+
+// 9. `cd <master-repo> && git commit` → block
+test("9. cd <master-repo> && git commit: block", () => {
+  const env = createTempHome();
+  const masterRepo = makeTempRepo("master");
+  try {
+    const result = runHook(PROTECT_MAIN, {
+      tool_name: "Bash",
+      tool_input: { command: `cd ${masterRepo.dir} && git commit -m "test"` },
+    }, { HOME: env.home, USERPROFILE: env.home });
+    assert.strictEqual(result.status, 0, "Should exit 0");
+    assert.ok(result.json, "Should output valid JSON");
+    const hso = result.json?.hookSpecificOutput;
+    assert.strictEqual(hso?.permissionDecision, "deny", "Should deny commit on master via cd path");
+  } finally {
+    masterRepo.cleanup();
+    env.cleanup();
+  }
+});
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
 console.log(`\n${"─".repeat(60)}`);

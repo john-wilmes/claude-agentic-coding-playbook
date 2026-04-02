@@ -12,18 +12,25 @@ process.stdin.on("end", () => {
     const hookInput = JSON.parse(input);
     const cmd = (hookInput.tool_input?.command || "").normalize("NFKD");
 
-    // Only care about git commit commands
-    if (!/\bgit\s+commit\b/.test(cmd)) {
+    // Only care about top-level git commit invocations.
+    // Strip a leading `cd <path> &&` prefix before checking, to avoid matching
+    // `git commit` text inside strings passed to node/bash -e/c flags.
+    const cdMatch = cmd.match(/^\s*cd\s+(\S+)\s*&&\s*([\s\S]*)$/);
+    const effectiveCmd = cdMatch ? cdMatch[2].trim() : cmd.trim();
+    if (!/^git\s+commit\b/.test(effectiveCmd)) {
       return process.stdout.write(JSON.stringify({}), () => { process.exitCode = 0; });
     }
 
-    // Check current branch
+    // Check current branch.
+    // If the command starts with `cd <path> &&`, that path takes priority over
+    // hookInput.cwd (which reflects the session root, not the target repo).
+    const resolvedCwd = cdMatch ? cdMatch[1] : (hookInput.cwd || process.cwd());
     let branch = "";
     try {
       branch = execSync("git branch --show-current", {
         encoding: "utf8",
         timeout: 3000,
-        cwd: hookInput.cwd || process.cwd(),
+        cwd: resolvedCwd,
       }).trim();
     } catch {
       // Can't determine branch — allow (don't block on git errors)
