@@ -1891,6 +1891,64 @@ if [ -f "$SCRIPT_DIR/templates/hooks/protect-main.js" ]; then
   fi
 fi
 
+# Build-before-push hook (PreToolUse:Bash -- blocks git push without recent build)
+# Also has a PostToolUse:Bash companion to record successful builds.
+if [ -f "$SCRIPT_DIR/templates/hooks/build-before-push.js" ]; then
+  install_symlink "$SCRIPT_DIR/templates/hooks/build-before-push.js" "$CLAUDE_DIR/hooks/build-before-push.js" "build-before-push hook: build-before-push.js"
+
+  echo ""
+  echo "--- Configuring build-before-push in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  BBP_CMD="node $CLAUDE_DIR/hooks/build-before-push.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add build-before-push PreToolUse:Bash hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+    node -e "
+      const fs = require('fs');
+      const settingsPath = process.argv[1];
+      const bbpCmd = process.argv[2];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.hooks) settings.hooks = {};
+
+      // PreToolUse entry
+      if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+      const preExists = settings.hooks.PreToolUse.some(e =>
+        e.hooks && e.hooks.some(h => h.command && h.command.includes('build-before-push'))
+      );
+      if (!preExists) {
+        settings.hooks.PreToolUse.push({
+          matcher: 'Bash',
+          hooks: [{ type: 'command', command: bbpCmd }]
+        });
+        console.log('CONFIGURED: build-before-push PreToolUse hook (matcher: Bash)');
+      } else {
+        console.log('ALREADY CONFIGURED: build-before-push PreToolUse hook');
+      }
+
+      // PostToolUse entry
+      if (!settings.hooks.PostToolUse) settings.hooks.PostToolUse = [];
+      const postExists = settings.hooks.PostToolUse.some(e =>
+        e.hooks && e.hooks.some(h => h.command && h.command.includes('build-before-push'))
+      );
+      if (!postExists) {
+        settings.hooks.PostToolUse.push({
+          matcher: 'Bash',
+          hooks: [{ type: 'command', command: bbpCmd }]
+        });
+        console.log('CONFIGURED: build-before-push PostToolUse hook (matcher: Bash)');
+      } else {
+        console.log('ALREADY CONFIGURED: build-before-push PostToolUse hook');
+      }
+
+      fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+    " "$SETTINGS_FILE" "$BBP_CMD"
+  fi
+fi
+
 # Checkpoint discipline hook (PreToolUse Agent|Write|Edit -- checkpoint preflight + fake checkpoint detection)
 if [ -f "$SCRIPT_DIR/templates/hooks/checkpoint-discipline.js" ]; then
   install_symlink "$SCRIPT_DIR/templates/hooks/checkpoint-discipline.js" "$CLAUDE_DIR/hooks/checkpoint-discipline.js" "checkpoint discipline: checkpoint-discipline.js"
