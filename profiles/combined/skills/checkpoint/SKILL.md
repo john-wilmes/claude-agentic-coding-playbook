@@ -37,7 +37,7 @@ Pass it the following context:
 
 The subagent prompt should instruct it to:
 
-1. **Update memory**: Read the project's `MEMORY.md`. Update the "Current Work" section with what was done, current state, and next steps. Replace the previous entry (do not accumulate). Add date stamp. **Do NOT attempt to summarize research findings here** — detailed findings belong in topic files (written in Step 0), not in MEMORY.md. Current Work should only contain status, outcomes, and next steps. Keep MEMORY.md under 50 lines — it is an index of one-line pointers, not a knowledge base. **Clear the `## Recovered from previous session` section entirely if it exists** — its content has been incorporated into Current Work.
+1. **Update memory**: Read the project's `MEMORY.md`. Update the "Current Work" section with what was done, current state, and next steps. Replace the previous entry (do not accumulate). Add date stamp. **Do NOT attempt to summarize research findings here** — detailed findings belong in topic files (written in Step 0), not in MEMORY.md. Current Work should only contain status, outcomes, and next steps. Keep MEMORY.md under 80 lines (hard stop: 120) — it is an index of one-line pointers, not a knowledge base. **Clear the `## Recovered from previous session` section entirely if it exists** — its content has been incorporated into Current Work.
 
 2. **Commit and push**: Run `git status`. If there are uncommitted changes, stage relevant files (not build artifacts, logs, or secrets), commit with a descriptive message, and push to remote. If no changes or not a git repo, skip.
 

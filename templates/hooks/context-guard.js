@@ -29,7 +29,8 @@ const CHARS_PER_TOKEN = 4;
 const CONTEXT_WINDOW = 200000;
 
 const SUBAGENT_THRESHOLD = 0.35;
-const WARN_THRESHOLD = 0.50;
+const PERSIST_THRESHOLD = 0.42; // One-shot: persist unsaved findings before pressure hits
+const WARN_THRESHOLD = 0.57;
 const BLOCK_THRESHOLD = 0.60;
 const FAILSAFE_THRESHOLD = 0.75; // Last resort: write sentinel directly under claude-loop
 
@@ -57,6 +58,7 @@ function loadState(stateFile) {
     const raw = JSON.parse(fs.readFileSync(stateFile, "utf8"));
     return {
       subagentWarned: raw.subagentWarned || false,
+      persistWarned: raw.persistWarned || false,
       warned: raw.warned || false,
       warnedAtCall: raw.warnedAtCall || 0,
       cumulativeEstimatedTokens: raw.cumulativeEstimatedTokens || 0,
@@ -64,7 +66,7 @@ function loadState(stateFile) {
       baselineRatio: raw.baselineRatio || 0,
     };
   } catch {
-    return { subagentWarned: false, warned: false, warnedAtCall: 0, cumulativeEstimatedTokens: 0, toolCalls: 0, baselineRatio: 0 };
+    return { subagentWarned: false, persistWarned: false, warned: false, warnedAtCall: 0, cumulativeEstimatedTokens: 0, toolCalls: 0, baselineRatio: 0 };
   }
 }
 
@@ -203,7 +205,7 @@ process.stdin.on("end", () => {
     // Per-call size warning: flag individual large tool results
     const responseStr = JSON.stringify(hookInput.tool_response || {});
     const responseChars = responseStr.length;
-    const PER_CALL_WARN_CHARS = 10000;
+    const PER_CALL_WARN_CHARS = 25000;
     const perCallWarning = responseChars > PER_CALL_WARN_CHARS
       ? ` Large tool output (~${Math.round(responseChars / CHARS_PER_TOKEN)} tokens this call). Delegate multi-file work to subagents.`
       : "";
@@ -293,7 +295,7 @@ process.stdin.on("end", () => {
       } else if (ctx.ratio >= WARN_THRESHOLD) {
         // Re-fire every WARN_REFIRE_INTERVAL calls after first warning to maintain pressure.
         // One-shot warnings have 0% effectiveness — agents ignore and forget them.
-        const WARN_REFIRE_INTERVAL = 5;
+        const WARN_REFIRE_INTERVAL = 15;
         const shouldFire = !state.warned || (state.toolCalls - (state.warnedAtCall || 0)) % WARN_REFIRE_INTERVAL === 0;
         if (!state.warned) {
           state.warned = true;
@@ -323,6 +325,17 @@ process.stdin.on("end", () => {
             hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: `Context note:${perCallWarning}` },
           } : {};
         }
+      } else if (ctx.ratio >= PERSIST_THRESHOLD && !state.persistWarned) {
+        state.persistWarned = true;
+        state.subagentWarned = true; // 42% implies 35% already passed
+        output = {
+          hookSpecificOutput: {
+            hookEventName: "PostToolUse",
+            additionalContext:
+              `Context at ${pct}% ${ctx.stats}. If you have unsaved findings from this session, ` +
+              `write them to topic files now while you have comfortable headroom — before checkpoint pressure hits.` + perCallWarning,
+          },
+        };
       } else if (ctx.ratio >= SUBAGENT_THRESHOLD && !state.subagentWarned) {
         state.subagentWarned = true;
         log.writeLog({

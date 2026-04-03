@@ -76,8 +76,10 @@ function guardCheckpointDelegation(hookInput) {
       additionalContext:
         "CHECKPOINT PREFLIGHT: No memory topic files were written in the last 2 minutes. " +
         "Step 0 requires persisting unsaved findings to memory topic files before delegating. " +
-        "If all findings are already saved (or there are none to save), acknowledge by running: " +
-        "Bash: touch /tmp/checkpoint-preflight-ack — then retry the checkpoint delegation.",
+        "If all findings are already saved, acknowledge by writing a JSON ack file and then retry:\n" +
+        '  Bash: echo \'{"persisted":["file1.md","file2.md"]}\' > /tmp/checkpoint-preflight-ack\n' +
+        "If there is genuinely nothing to persist:\n" +
+        '  Bash: echo \'{"nothing_to_persist":true}\' > /tmp/checkpoint-preflight-ack',
     },
   });
 }
@@ -131,6 +133,17 @@ function checkBypassMarker() {
     const stat = fs.statSync(ACK_MARKER);
     const age = Date.now() - stat.mtimeMs;
     if (age < ACK_MAX_AGE_MS) {
+      // Validate JSON ack — must have either persisted[] or nothing_to_persist:true
+      try {
+        const content = fs.readFileSync(ACK_MARKER, "utf8").trim();
+        const ack = JSON.parse(content);
+        const valid = ack.nothing_to_persist === true ||
+          (Array.isArray(ack.persisted) && ack.persisted.length > 0);
+        if (!valid) return false;
+      } catch {
+        // Not valid JSON — reject the bypass
+        return false;
+      }
       try { fs.unlinkSync(ACK_MARKER); } catch { /* ignore */ }
       return true;
     }
