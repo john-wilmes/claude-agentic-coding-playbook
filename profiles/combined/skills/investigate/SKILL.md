@@ -666,6 +666,40 @@ Write `FIX.md` to the investigation folder:
 **Status**: open
 ```
 
+### Step 4.5: ClickUp deployment fields (requires approval)
+
+After the PR is created, draft values for the ClickUp deployment fields below. Present **all fields as a single draft block** to the user for approval. Do not update until explicitly approved.
+
+| Field | Custom Field ID | Type | How to set |
+|-------|----------------|------|------------|
+| Docs Reqd | `a5db3e15-e90c-4745-bfda-5940d356aa2d` | drop_down | Set `value` to option UUID. Options: Yes `ca17abc8`, No `8ed29cc4`, Internal Only `53d3b517`, Unsure `cc2e4604` |
+| Resolution Notes | `944fcc3a-513c-4b5e-9e83-fd9544024a6d` | text | 2-3 sentence summary — root cause + what the fix does |
+| Steps to validate | `d9294b15-04f3-4d79-b151-1156782375e3` | text | Concrete steps to verify the fix in the target environment |
+| Risk assessment | `c40b9575-1e78-4d05-9b8c-d718c14adfcc` | drop_down | Set `value` to option UUID. Options: Low `a696d3a3-3ba4-4f19-8d7f-b8198271c6c2`, Medium `0a322467-6c12-4e98-b9d2-efeaf19c8e0c`, High `10aacfe3-9ce5-481d-b17f-5dcbd4ec352a` |
+| Risk Notes | `828c069d-3eda-4b7c-960b-d26c5cf39e82` | short_text | One-line rationale for the risk level (e.g., "typo fix, no behavioral change until credential enabled") |
+| Monitoring Notes | `41cd18b5-9489-4e1e-bcb0-6ef671366ae1` | text | What to watch post-deploy: Datadog filters, error patterns, key metrics |
+| PRs to main | `3aa8a28f-ca6a-4108-b451-346aa84384ab` | text | PR URL(s) targeting main/master |
+| PRs to pod branch | `0e724e65-648b-4952-9b29-82713cfd36a8` | text | PR URL(s) targeting emerald or other pod branches |
+
+Draft format:
+
+```
+Draft ClickUp deployment fields for #<TASK_ID>:
+
+  Docs Reqd:         <dropdown value>
+  Resolution Notes:  <text>
+  Steps to validate: <text>
+  Risk assessment:   <dropdown value>
+  Risk Notes:        <text>
+  Monitoring Notes:  <text>
+  PRs to main:       <URL(s)>
+  PRs to pod branch: <URL(s)> (if applicable)
+
+Update these fields? [y/n]
+```
+
+Only after explicit approval, update each field via `mcp__clickup__set_custom_field`. For drop_down fields, pass the option UUID as `value`.
+
 ### Step 5: CodeRabbit loop (post-PR)
 
 Wait ~2 minutes after PR creation, then check for CodeRabbit comments:
