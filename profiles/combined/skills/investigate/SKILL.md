@@ -560,6 +560,143 @@ Show current investigation state.
 
 ---
 
+## Subcommand: `fix`
+
+Turn investigation findings into a reviewed, PR-ready code fix. User-initiated only — never auto-triggered from `close` or `run`.
+
+**Prerequisite:** Investigation must be `"closed"` or `"synthesizing"` with a populated FINDINGS.md. If not, warn and suggest `/investigate <id> close` first.
+
+**ClickUp task ID:** Strip any leading `clickup-` prefix from the investigation ID (e.g., `clickup-86b92rn2q` → `86b92rn2q`). If the remaining ID does not look like a ClickUp task ID, ask the user.
+
+### Step 1: Fix brief
+
+Read FINDINGS.md and BRIEF.md. Extract:
+- Root cause (Answer section of FINDINGS.md)
+- Affected files (from evidence citations and Implications)
+- Repo path (from BRIEF.md `## Repo`)
+
+Produce a one-paragraph fix proposal:
+- What changes (specific files and lines if known)
+- Why this is the minimal effective change (tied directly to root cause, no more)
+- What is explicitly NOT changing and why
+
+Present to user. **Wait for explicit confirmation before writing any code.**
+
+### Step 2: Branch and implement
+
+```bash
+TASK_ID=$(echo "<id>" | sed 's/^clickup-//')
+git -C "<REPO_PATH>" checkout -b "fix/${TASK_ID}"
+```
+
+Implement the minimal fix. Hard rules:
+- Change only what the root cause requires
+- No refactoring of surrounding code
+- No new error handling for cases unrelated to the root cause
+- No formatting or comment changes to unchanged lines
+- Every changed line must be explainable by a direct link from root cause → fix
+
+Run the project's type-check and lint commands if available.
+
+### Step 3: Devil's advocate loop (pre-PR)
+
+Spawn a DA subagent (`model: "opus"`) with:
+- The full `git -C "<REPO_PATH>" diff` output
+- The root cause text from FINDINGS.md
+- The full content of each modified file
+
+DA instruction: *"You are a skeptical senior engineer. Challenge this fix on four axes: (1) Does it actually address the stated root cause — or does it treat a symptom? (2) Is it truly minimal — any line not directly required by the root cause? (3) Edge cases or regressions in the affected code paths? (4) Is this the right insertion point, or would another location be safer? Return VERDICT: PASS or VERDICT: FAIL with specific issues as file:line observations."*
+
+If VERDICT: FAIL → address each issue, re-run DA. Repeat until VERDICT: PASS. Record round count.
+
+### Step 4: Create PR
+
+Commit and push:
+
+```bash
+git -C "<REPO_PATH>" add <changed files>
+git -C "<REPO_PATH>" commit -m "<fix description> #${TASK_ID}"
+git -C "<REPO_PATH>" push -u origin "fix/${TASK_ID}"
+```
+
+Create PR with ClickUp task ID in a structured template field:
+
+```bash
+gh pr create --title "<fix title>" --body "$(cat <<'EOF'
+## Root Cause
+
+<from FINDINGS.md Answer section>
+
+## Change
+
+<minimal description — what changed and the direct reason>
+
+## Investigation
+
+`~/.claude/investigations/<id>/FINDINGS.md`
+
+ClickUp: #<TASK_ID>
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+EOF
+)"
+```
+
+Post the PR URL back to the ClickUp task:
+
+```
+mcp__claude_ai_ClickUp__clickup_create_task_comment:
+  task_id: "<TASK_ID>"
+  comment_text: "PR opened: <PR_URL>"
+```
+
+Write `FIX.md` to the investigation folder:
+
+```markdown
+# Fix: <id>
+
+**Branch**: fix/<task-id>
+**PR**: <URL>
+**ClickUp**: #<task-id>
+**DA rounds**: <N>
+**CR rounds**: 0 (pending)
+**Status**: open
+```
+
+### Step 5: CodeRabbit loop (post-PR)
+
+Wait ~2 minutes after PR creation, then check for CodeRabbit comments:
+
+```bash
+gh pr view <pr-number> --comments
+```
+
+For each open CodeRabbit finding:
+1. Address it in code
+2. If the change is non-trivial (not purely cosmetic), run another DA pass on the new diff
+3. Commit, push, re-check CR
+
+Repeat until `gh pr view --comments` shows no unresolved CodeRabbit findings. Update `FIX.md` with final CR round count.
+
+### Step 6: Report
+
+```
+Fix complete for investigation <id>.
+  Branch:    fix/<task-id>
+  PR:        <URL>
+  ClickUp:   #<task-id>
+  DA rounds: <N>
+  CR rounds: <N>
+  Status:    ready for human review
+```
+
+Update STATUS.md history:
+```
+| <today> | fix | PR <URL>, <N> DA rounds, <N> CR rounds |
+```
+
+---
+
 ## Auto-detect (no subcommand)
 
 When `/investigate <id>` is called without a subcommand:
