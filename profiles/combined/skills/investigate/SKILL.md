@@ -218,6 +218,14 @@ Count existing evidence files in EVIDENCE/ using Glob(`EVIDENCE/???-*.md`). Call
 
 If `HAS_REPO = false`, skip to Step 4 with all capability flags false.
 
+Refresh the repo before reading it:
+
+```bash
+git -C "<REPO_PATH>" pull --ff-only 2>/dev/null || true
+```
+
+(Silent no-op if no remote, no network, or local changes prevent fast-forward.)
+
 Run these checks in parallel (Bash):
 
 ```bash
