@@ -601,11 +601,12 @@ Run the project's type-check and lint commands if available.
 ### Step 3: Devil's advocate loop (pre-PR)
 
 Spawn a DA subagent (`model: "opus"`) with:
+- The fix brief from Step 1 (root cause, affected files, what is NOT changing)
 - The full `git -C "<REPO_PATH>" diff` output
 - The root cause text from FINDINGS.md
 - The full content of each modified file
 
-DA instruction: *"You are a skeptical senior engineer. Challenge this fix on four axes: (1) Does it actually address the stated root cause — or does it treat a symptom? (2) Is it truly minimal — any line not directly required by the root cause? (3) Edge cases or regressions in the affected code paths? (4) Is this the right insertion point, or would another location be safer? Return VERDICT: PASS or VERDICT: FAIL with specific issues as file:line observations."*
+DA instruction: *"You are a skeptical senior engineer. The fix brief below defines the scope boundary — any change outside it is a FAIL. Challenge this fix on five axes: (1) Does it actually address the stated root cause — or does it treat a symptom? (2) Is it truly minimal — any line not directly required by the root cause? Flag refactoring, renaming, or reformatting of unchanged logic as scope creep. (3) Edge cases or regressions in the affected code paths? (4) Is this the right insertion point, or would another location be safer? (5) Does the diff contain ANY changes to files, functions, or patterns not listed in the fix brief's affected files? If so, FAIL with 'scope creep' and list each out-of-scope change. Return VERDICT: PASS or VERDICT: FAIL with specific issues as file:line observations."*
 
 If VERDICT: FAIL → address each issue, re-run DA. Repeat until VERDICT: PASS. Record round count.
 
