@@ -642,13 +642,16 @@ EOF
 )"
 ```
 
-Post the PR URL back to the ClickUp task:
+**ClickUp update (requires approval):** Draft a comment for the ClickUp task and present it to the user. **Do not post until the user explicitly approves.** Example draft:
 
 ```
-mcp__claude_ai_ClickUp__clickup_create_task_comment:
-  task_id: "<TASK_ID>"
-  comment_text: "PR opened: <PR_URL>"
+Draft ClickUp comment for #<TASK_ID>:
+  "PR opened: <PR_URL>"
+
+Post this comment? [y/n]
 ```
+
+Only after explicit approval, post via `mcp__clickup__create_task_comment`.
 
 Write `FIX.md` to the investigation folder:
 
