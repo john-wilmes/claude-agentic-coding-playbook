@@ -166,11 +166,11 @@ test("2. Transcript at 35%: subagent warning fires once", () => {
   }
 });
 
-// Test 3: Transcript at 50% → checkpoint warning fires once
+// Test 3: Transcript at 58% → checkpoint warning fires once (WARN_THRESHOLD=0.57)
 test("3. Transcript at 50%: checkpoint warning fires once", () => {
   const sessionId = newSessionId();
-  // 50% of 200k = 100,000 tokens
-  const transcript = createFakeTranscript([makeAssistantMessage(100000)]);
+  // 58% of 200k = 116,000 tokens — above WARN_THRESHOLD (0.57)
+  const transcript = createFakeTranscript([makeAssistantMessage(116000)]);
   try {
     const result1 = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(result1.status, 0);
@@ -324,8 +324,8 @@ test("10. Per-call large-output warning fires independently", () => {
   // Transcript at 30% — below all thresholds
   const transcript = createFakeTranscript([makeAssistantMessage(60000)]);
   try {
-    // Large tool_response > 10000 chars
-    const bigResponse = "x".repeat(15000);
+    // Large tool_response > 25000 chars (PER_CALL_WARN_CHARS threshold)
+    const bigResponse = "x".repeat(30000);
     const result = runGuard(sessionId, {
       transcriptPath: transcript,
       toolResponse: { data: bigResponse },
@@ -647,11 +647,11 @@ test("31. At 75% without CLAUDE_LOOP, normal CRITICAL block (no failsafe)", () =
 // Test 32: Combined per-call large-output warning + threshold warning in same invocation
 test("32. Combined per-call large-output + threshold warning in same invocation", () => {
   const sessionId = newSessionId();
-  // Transcript at 50% — triggers threshold warning
-  const transcript = createFakeTranscript([makeAssistantMessage(100000)]);
+  // Transcript at 58% — triggers threshold warning (WARN_THRESHOLD=0.57)
+  const transcript = createFakeTranscript([makeAssistantMessage(116000)]);
   try {
-    // Large tool_response > 10000 chars — also triggers per-call warning
-    const bigResponse = "x".repeat(15000);
+    // Large tool_response > 25000 chars — also triggers per-call warning
+    const bigResponse = "x".repeat(30000);
     const result = runGuard(sessionId, {
       transcriptPath: transcript,
       toolResponse: { data: bigResponse },
@@ -671,18 +671,19 @@ test("32. Combined per-call large-output + threshold warning in same invocation"
   }
 });
 
-// Test 33: 50% warning re-fires every 5 tool calls instead of once
+// Test 33: warn re-fires every 15 tool calls after first (WARN_REFIRE_INTERVAL=15)
 test("33. 50% warning re-fires every 5 calls after first", () => {
   const sessionId = newSessionId();
-  const transcript = createFakeTranscript([makeAssistantMessage(100000)]); // 50%
+  // 58% of 200k = 116,000 tokens — above WARN_THRESHOLD (0.57)
+  const transcript = createFakeTranscript([makeAssistantMessage(116000)]);
   try {
     // Call 1: fires (first warning)
     const r1 = runGuard(sessionId, { transcriptPath: transcript });
     assert.ok(r1.json.hookSpecificOutput, "Call 1 should fire warning");
     assert.ok(r1.json.hookSpecificOutput.additionalContext.includes("Context warning"), "Call 1: context warning");
 
-    // Calls 2-5: should NOT fire (interval=5, so next fire at call 6)
-    for (let i = 2; i <= 5; i++) {
+    // Calls 2-15: should NOT fire (interval=15, so next fire at call 16)
+    for (let i = 2; i <= 15; i++) {
       const r = runGuard(sessionId, { transcriptPath: transcript });
       const hasWarning = r.json.hookSpecificOutput &&
         r.json.hookSpecificOutput.additionalContext &&
@@ -690,10 +691,10 @@ test("33. 50% warning re-fires every 5 calls after first", () => {
       assert.ok(!hasWarning, `Call ${i} should NOT fire context warning`);
     }
 
-    // Call 6: should re-fire (5 calls after first)
-    const r6 = runGuard(sessionId, { transcriptPath: transcript });
-    assert.ok(r6.json.hookSpecificOutput, "Call 6 should fire warning");
-    assert.ok(r6.json.hookSpecificOutput.additionalContext.includes("Context warning"), "Call 6: re-fired context warning");
+    // Call 16: should re-fire (15 calls after first)
+    const r16 = runGuard(sessionId, { transcriptPath: transcript });
+    assert.ok(r16.json.hookSpecificOutput, "Call 16 should fire warning");
+    assert.ok(r16.json.hookSpecificOutput.additionalContext.includes("Context warning"), "Call 16: re-fired context warning");
   } finally {
     cleanupSession(sessionId);
     try { fs.rmSync(transcript); } catch {}

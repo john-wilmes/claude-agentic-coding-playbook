@@ -113,7 +113,7 @@ test("warns on 'session end' keyword", () => {
 // --- Guard 1: Bypass marker tests ---
 
 test("allows when bypass marker exists and is fresh", () => {
-  fs.writeFileSync(ACK_MARKER, "");
+  fs.writeFileSync(ACK_MARKER, JSON.stringify({ nothing_to_persist: true }));
   const result = runHook(HOOK, {
     tool_name: "Agent",
     tool_input: { prompt: "Run checkpoint" },
