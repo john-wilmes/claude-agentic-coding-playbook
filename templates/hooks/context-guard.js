@@ -23,10 +23,13 @@ const os = require("os");
 let log;
 try { log = require("./log"); } catch { log = { writeLog() {}, promptHead(t) { return t; } }; }
 
+let modelConfig;
+try { modelConfig = require("./model-config"); } catch { modelConfig = null; }
+
 // Approximate tokens per character (conservative estimate, used in fallback only)
 const CHARS_PER_TOKEN = 4;
-// Default context window size in tokens
-const CONTEXT_WINDOW = 200000;
+// Fallback context window when model-config is unavailable
+const DEFAULT_CONTEXT_WINDOW = 200_000;
 
 const SUBAGENT_THRESHOLD = 0.35;
 const PERSIST_THRESHOLD = 0.42; // One-shot: persist unsaved findings before pressure hits
@@ -129,7 +132,7 @@ function readTranscriptUsage(transcriptPath) {
  * Primary: transcript-based actual token counts.
  * Fallback: cumulative estimation from tool I/O sizes.
  */
-function getContextUsage(hookInput, state) {
+function getContextUsage(hookInput, state, contextWindow) {
   const usage = readTranscriptUsage(hookInput.transcript_path);
 
   if (usage) {
@@ -140,9 +143,9 @@ function getContextUsage(hookInput, state) {
                         (usage.cache_creation_input_tokens || 0) +
                         (usage.output_tokens || 0);
     return {
-      ratio: totalTokens / CONTEXT_WINDOW,
+      ratio: totalTokens / contextWindow,
       tokens: totalTokens,
-      stats: `(${totalTokens} actual tokens)`,
+      stats: `(${totalTokens} actual tokens, ${contextWindow / 1000}k window)`,
     };
   }
 
@@ -158,9 +161,9 @@ function getContextUsage(hookInput, state) {
   state.cumulativeEstimatedTokens += Math.round((ioChars / CHARS_PER_TOKEN) * IO_OVERHEAD_MULTIPLIER);
 
   return {
-    ratio: state.cumulativeEstimatedTokens / CONTEXT_WINDOW,
+    ratio: state.cumulativeEstimatedTokens / contextWindow,
     tokens: state.cumulativeEstimatedTokens,
-    stats: `(~${state.cumulativeEstimatedTokens} tokens estimated from tool I/O x${IO_OVERHEAD_MULTIPLIER}, ${state.toolCalls} calls)`,
+    stats: `(~${state.cumulativeEstimatedTokens} tokens estimated from tool I/O x${IO_OVERHEAD_MULTIPLIER}, ${state.toolCalls} calls, ${contextWindow / 1000}k window)`,
   };
 }
 
@@ -195,17 +198,25 @@ process.stdin.on("end", () => {
     const state = loadState(stateFile);
     state.toolCalls += 1;
 
-    const ctx = getContextUsage(hookInput, state);
+    // Derive context window from session model (set by session-start hook).
+    // Falls back to 200k if model-config is unavailable or session has no model state.
+    const sessionModelCfg = modelConfig
+      ? modelConfig.getSessionModel(sessionId)
+      : { contextWindow: DEFAULT_CONTEXT_WINDOW };
+    const contextWindow = sessionModelCfg.contextWindow || DEFAULT_CONTEXT_WINDOW;
+
+    const ctx = getContextUsage(hookInput, state, contextWindow);
 
     if (state.toolCalls === 1) {
       state.baselineRatio = ctx.ratio;
     }
     const pct = Math.round(ctx.ratio * 100);
 
-    // Per-call size warning: flag individual large tool results
+    // Per-call size warning: flag individual large tool results.
+    // Scale threshold with context window: 25k chars at 200k window → 125k at 1M.
     const responseStr = JSON.stringify(hookInput.tool_response || {});
     const responseChars = responseStr.length;
-    const PER_CALL_WARN_CHARS = 25000;
+    const PER_CALL_WARN_CHARS = Math.round(25000 * (contextWindow / DEFAULT_CONTEXT_WINDOW));
     const perCallWarning = responseChars > PER_CALL_WARN_CHARS
       ? ` Large tool output (~${Math.round(responseChars / CHARS_PER_TOKEN)} tokens this call). Delegate multi-file work to subagents.`
       : "";

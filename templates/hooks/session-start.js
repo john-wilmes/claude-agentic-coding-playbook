@@ -14,6 +14,9 @@ const { execSync } = require("child_process");
 let log;
 try { log = require("./log"); } catch { log = { writeLog() {} }; }
 
+let modelConfig;
+try { modelConfig = require("./model-config"); } catch { modelConfig = null; }
+
 // Detect project context from working directory
 function detectProjectContext(cwd) {
   const context = { tools: new Set(), tags: new Set() };
@@ -228,6 +231,11 @@ process.stdin.on("end", () => {
     const sessionId = hookInput.session_id || "";
     const cwd = hookInput.cwd || process.cwd();
 
+    // Persist model ID for downstream hooks (context-guard, etc.)
+    if (modelConfig && sessionId) {
+      modelConfig.saveSessionModel(sessionId, hookInput.model || "");
+    }
+
     // Clear stale hook state directories — only delete files older than 2 hours
     // to preserve state for concurrent sessions.
     const hookStateDirs = [
@@ -238,6 +246,8 @@ process.stdin.on("end", () => {
       "claude-subagent-recovery",
       "claude-tool-failures",
       "claude-pre-compact",
+      "claude-model-config",
+      "claude-model-upgrade",
     ];
     const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
     const now = Date.now();
