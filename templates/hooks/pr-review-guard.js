@@ -2,10 +2,14 @@
 // Enforces the rule: "Do not merge without a review."
 // Graceful degradation: allows merge if `gh` is unavailable or API call fails.
 
-const { execSync } = require("child_process");
+const { execFileSync } = require("child_process");
 
 let log;
 try { log = require("./log"); } catch { log = { writeLog() {} }; }
+
+function respond(payload = {}) {
+  process.stdout.write(JSON.stringify(payload), () => process.exit(0));
+}
 
 // ─── Command detection ──────────────────────────────────────────────────────
 
@@ -48,30 +52,35 @@ function checkCodeRabbitReview(prNumber) {
   // Check reviews (formal review submissions)
   let reviewOutput = "";
   try {
-    reviewOutput = execSync(
-      `gh pr view ${prArg} --json reviews --jq '.reviews[].author.login'`,
+    const reviewArgs = ["pr", "view"];
+    if (prArg) reviewArgs.push(prArg);
+    reviewArgs.push("--json", "reviews", "--jq", ".reviews[].author.login");
+    reviewOutput = execFileSync("gh", reviewArgs,
       { encoding: "utf8", timeout: 15000, stdio: ["pipe", "pipe", "pipe"] }
     ).trim();
   } catch {
     return { reviewed: false, error: true, reason: "gh API call failed (allowing merge)" };
   }
 
-  if (reviewOutput.split("\n").some(l => l.trim() === "coderabbitai[bot]")) {
+  const isCR = (l) => ["coderabbitai", "coderabbitai[bot]"].includes(l.trim());
+  if (reviewOutput.split("\n").some(isCR)) {
     return { reviewed: true, error: false, reason: "CodeRabbit review found" };
   }
 
   // Check comments as fallback (CodeRabbit sometimes posts comments, not formal reviews)
   let commentOutput = "";
   try {
-    commentOutput = execSync(
-      `gh pr view ${prArg} --json comments --jq '.comments[].author.login'`,
+    const commentArgs = ["pr", "view"];
+    if (prArg) commentArgs.push(prArg);
+    commentArgs.push("--json", "comments", "--jq", ".comments[].author.login");
+    commentOutput = execFileSync("gh", commentArgs,
       { encoding: "utf8", timeout: 15000, stdio: ["pipe", "pipe", "pipe"] }
     ).trim();
   } catch {
     return { reviewed: false, error: true, reason: "gh API call failed on comments check (allowing merge)" };
   }
 
-  if (commentOutput.split("\n").some(l => l.trim() === "coderabbitai[bot]")) {
+  if (commentOutput.split("\n").some(isCR)) {
     return { reviewed: true, error: false, reason: "CodeRabbit comment found" };
   }
 
@@ -95,21 +104,18 @@ process.stdin.on("end", () => {
 
     // Only intercept Bash tool calls
     if (toolName !== "Bash") {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     const command = (hookInput.tool_input || {}).command || "";
 
     if (!isMergeCommand(command)) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     // Skip check in subagent context (subagents don't merge PRs meaningfully)
     if (hookInput.agent_id) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     const prNumber = extractPrNumber(command);
@@ -126,8 +132,7 @@ process.stdin.on("end", () => {
         project: hookInput.cwd,
         context: { command: log.promptHead(command, 100) },
       });
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     if (!result.reviewed) {
@@ -140,14 +145,13 @@ process.stdin.on("end", () => {
         project: hookInput.cwd,
         context: { command: log.promptHead(command, 100) },
       });
-      process.stdout.write(JSON.stringify({
+      return respond({
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
           permissionDecision: "deny",
           permissionDecisionReason: result.reason,
         },
-      }));
-      process.exit(0);
+      });
     }
 
     // CodeRabbit has reviewed — allow
@@ -160,12 +164,10 @@ process.stdin.on("end", () => {
       project: hookInput.cwd,
       context: { command: log.promptHead(command, 100) },
     });
-    process.stdout.write(JSON.stringify({}));
-    process.exit(0);
+    return respond();
   } catch {
     // Never block tool execution on errors
-    process.stdout.write(JSON.stringify({}));
-    process.exit(0);
+    return respond();
   }
 });
 

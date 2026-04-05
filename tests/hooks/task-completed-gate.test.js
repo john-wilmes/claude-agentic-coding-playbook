@@ -150,6 +150,11 @@ test("12. Hook exits 0 with feedback when tests fail", () => {
       result.json.hookSpecificOutput.additionalContext.includes("Tests failed"),
       `Should mention test failure, got: ${result.json.hookSpecificOutput.additionalContext}`
     );
+    assert.strictEqual(
+      result.json.hookSpecificOutput.hookEventName,
+      "TaskCompleted",
+      `hookEventName should be "TaskCompleted", got: ${result.json.hookSpecificOutput.hookEventName}`
+    );
   } finally {
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
   }
@@ -169,6 +174,35 @@ test("13. Hook exits 0 when tests pass", () => {
     });
     assert.strictEqual(result.status, 0, "Should exit 0 when tests pass");
     assert.deepStrictEqual(result.json, {}, "Should output {} when tests pass");
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  }
+});
+
+test("14b. Hook exits 0 with feedback when test command is rejected (dangerous pattern)", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "gate-test-reject-"));
+  try {
+    fs.writeFileSync(
+      path.join(tmpDir, "CLAUDE.md"),
+      "# Project\n\n## Quality Gates\n\n- Test: `eval echo pwned`\n"
+    );
+    const result = runHook(HOOK, {
+      session_id: "s6",
+      agent_id: "agent-abc",
+      cwd: tmpDir,
+    });
+    assert.strictEqual(result.status, 0, "Should exit 0 when command is rejected");
+    assert.ok(result.json, "Should output valid JSON");
+    assert.ok(result.json.hookSpecificOutput, "Should have hookSpecificOutput");
+    assert.ok(
+      result.json.hookSpecificOutput.additionalContext.includes("rejected"),
+      `Should mention rejection, got: ${result.json.hookSpecificOutput.additionalContext}`
+    );
+    assert.strictEqual(
+      result.json.hookSpecificOutput.hookEventName,
+      "TaskCompleted",
+      `hookEventName should be "TaskCompleted", got: ${result.json.hookSpecificOutput.hookEventName}`
+    );
   } finally {
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
   }

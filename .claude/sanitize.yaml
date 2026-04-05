@@ -1,0 +1,14 @@
+sanitization:
+  enabled: true
+  entities:
+    - US_SSN
+    - EMAIL
+    - PHONE_US
+    - CREDIT_CARD
+    - IP_ADDRESS
+    - MRN
+    - DOB
+  exclude_paths:
+    - "tests/fixtures/**"
+    - "tests/hooks/pii-detector.test.js"
+    - "../../../.mcp/shared/canary-tokens.json"

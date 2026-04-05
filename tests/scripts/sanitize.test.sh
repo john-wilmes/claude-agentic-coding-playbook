@@ -175,7 +175,7 @@ rm -f "${TMP_CC}"
 echo ""
 echo "sanitize.sh — check mode:"
 
-TMP_PII="$(make_temp_file "SSN: 987-65-4321 in this document.")"
+TMP_PII="$(make_temp_file "SSN: 456-78-9012 in this document.")"
 
 assert_exit "--check with PII exits 1" 1 "${SANITIZE}" --check "${TMP_PII}"
 assert_stdout_contains "--check prints PII_FOUND" "PII_FOUND" "${SANITIZE}" --check "${TMP_PII}"

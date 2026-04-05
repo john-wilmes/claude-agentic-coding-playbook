@@ -41,21 +41,96 @@ function isPrivateOrLoopbackIP(ip) {
   return false;
 }
 
+// ─── Text normalization (encoding bypass defense) ────────────────────────────
+
+/**
+ * Normalize text to defeat encoding-based PII evasion.
+ * Strips zero-width characters, normalizes full-width digits,
+ * decodes HTML numeric entities, and detects base64-encoded JSON blobs.
+ *
+ * Returns an array of strings to scan: [original, ...normalized variants].
+ * The original text is always included so that match indices remain valid.
+ */
+function normalizeText(text) {
+  if (!text || typeof text !== "string") return [text];
+
+  let normalized = text;
+
+  // 1. Strip zero-width characters (U+200B, U+200C, U+200D, U+FEFF, U+00AD)
+  normalized = normalized.replace(/[\u200B\u200C\u200D\uFEFF\u00AD]/g, "");
+
+  // 2. Normalize full-width digits (U+FF10-U+FF19) to ASCII digits
+  normalized = normalized.replace(/[\uFF10-\uFF19]/g, (ch) =>
+    String.fromCharCode(ch.charCodeAt(0) - 0xFF10 + 0x30)
+  );
+
+  // 3. Decode HTML numeric entities (&#NNN; and &#xHHH;)
+  normalized = normalized.replace(/&#(\d+);/g, (_, dec) => {
+    const code = parseInt(dec, 10);
+    return code > 0 && code < 0x10000 ? String.fromCharCode(code) : _;
+  });
+  normalized = normalized.replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => {
+    const code = parseInt(hex, 16);
+    return code > 0 && code < 0x10000 ? String.fromCharCode(code) : _;
+  });
+
+  const results = [text];
+  if (normalized !== text) results.push(normalized);
+
+  // 4. Detect base64-encoded JSON blobs
+  const b64Re = /[A-Za-z0-9+/]{20,}={0,2}/g;
+  let m;
+  while ((m = b64Re.exec(text)) !== null) {
+    try {
+      const decoded = Buffer.from(m[0], "base64").toString("utf8");
+      // Heuristic: if it parses as JSON, scan the stringified content
+      try {
+        JSON.parse(decoded);
+        results.push(decoded);
+      } catch {
+        // Not valid JSON — check if it's mostly printable ASCII text (e.g. SSNs, emails)
+        if (decoded.length >= 8) {
+          let printable = 0;
+          for (let i = 0; i < decoded.length; i++) {
+            const c = decoded.charCodeAt(i);
+            if (c >= 32 && c <= 126) printable++;
+          }
+          if (printable / decoded.length > 0.8) {
+            results.push(decoded);
+          }
+        }
+      }
+    } catch {
+      // Not valid base64 — skip
+    }
+  }
+
+  return results;
+}
+
 // ─── Built-in patterns ───────────────────────────────────────────────────────
 
-const PATTERNS = {
+const ENTITIES = {
+  // ── Regex-based (always available) ──────────────────────────────────────────
   US_SSN: {
     regex: /\b\d{3}-\d{2}-\d{4}\b/g,
     placeholder: "[SSN]",
+    validate(match) {
+      // Reject invalid SSN area numbers: 000, 666, and 900-999
+      const area = parseInt(match.slice(0, 3), 10);
+      if (area === 0 || area === 666 || area >= 900) return false;
+      return true;
+    },
   },
   EMAIL: {
-    // Standard email — excludes user@example.com, config@localhost, noreply@example.com, etc.
-    regex: /\b[a-zA-Z0-9._%+\-]+@(?!example\.com\b|localhost\b|example\.org\b|example\.net\b)[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b/g,
+    // Standard email — excludes user@example.com, config@localhost, noreply@example.com,
+    // and *.invalid TLD (RFC 2606 reserved for testing, e.g. canary tokens).
+    regex: /\b[a-zA-Z0-9._%+\-]+@(?!example\.com\b|localhost\b|example\.org\b|example\.net\b|[a-zA-Z0-9.\-]+\.invalid\b)[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}\b/g,
     placeholder: "[EMAIL]",
   },
   PHONE_US: {
     // \b before the area code only applies when it starts with a digit (no parens).
-    // The alternation handles both "(555) 867-5309" and "555-867-5309".
+    // The alternation handles both paren-prefix and plain-digit area code formats.
     // Dot removed from separators to avoid matching version strings like "2.0.0-1234".
     // Negative lookbehind (?<![.\d]) rejects matches like "v1.800.555.1234" where
     // the area code is preceded by a dot (version-string context).
@@ -70,8 +145,8 @@ const PATTERNS = {
   },
   CREDIT_CARD: {
     // Requires separator pattern (spaces or hyphens between groups) like real card numbers.
-    // Matches: 4111-1111-1111-1111, 4111 1111 1111 1111
-    // Does NOT match: 4111111111111111 (unseparated digits — too many false positives in code)
+    // Matches: digit groups separated by spaces or hyphens (e.g. NNNN-NNNN-NNNN-NNNN).
+    // Does NOT match unseparated digit strings — too many false positives in code.
     regex: /\b\d{4}[- ]\d{4}[- ]\d{4}[- ]\d{1,7}(?:[- ]\d{1,4})?\b/g,
     placeholder: "[CREDIT_CARD]",
     validate(match) {
@@ -94,9 +169,156 @@ const PATTERNS = {
     regex: /\b(?:DOB|Date of Birth|Birth\s?Date)[:\s]+\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4}\b/g,
     placeholder: "[DOB]",
   },
+  IBAN_CODE: {
+    // International Bank Account Number: 2-letter country code, 2 check digits, up to 30 alphanum
+    regex: /\b[A-Z]{2}\d{2}[A-Z0-9]{4,30}\b/g,
+    placeholder: "[IBAN_CODE]",
+    validate(match) {
+      // Valid IBANs are 15–34 chars total
+      return match.length >= 15 && match.length <= 34;
+    },
+  },
+  US_ITIN: {
+    // Individual Taxpayer ID: starts with 9, middle two digits in 70-88, 90-92, or 94-99
+    regex: /\b9\d{2}[-\s]?(?:7[0-9]|8[0-8]|9[0-2]|9[4-9])[-\s]?\d{4}\b/g,
+    placeholder: "[US_ITIN]",
+  },
+  US_PASSPORT: {
+    // US passport: one uppercase letter followed by 8 digits
+    regex: /\b[A-Z]\d{8}\b/g,
+    placeholder: "[US_PASSPORT]",
+  },
+  CRYPTO: {
+    // Ethereum address (0x + 40 hex chars), Bitcoin legacy (25–34 base58 chars), Bech32 (bc1 prefix)
+    regex: /\b(?:0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-z0-9]{39,59})\b/g,
+    placeholder: "[CRYPTO]",
+  },
+  DATE_TIME: {
+    // Bare date patterns without a label: MM/DD/YYYY, DD-MM-YY, etc.
+    // Also matches spelled-out month formats: Jan 15, 2024 / January 15, 2024
+    regex: /\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}\b/gi,
+    placeholder: "[DATE_TIME]",
+    validate(match) {
+      // Basic date range validation for numeric formats (MM/DD/YYYY or DD-MM-YY).
+      // Supports both MM/DD (US) and DD/MM (international) formats.
+      // Reject if either component exceeds 31 (impossible in any format).
+      // Reject if BOTH components exceed 12 (neither can be a month).
+      const numMatch = match.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-]/);
+      if (!numMatch) return true; // Spelled-out month format — always valid
+      const first = parseInt(numMatch[1], 10);
+      const second = parseInt(numMatch[2], 10);
+      if (first > 31 || second > 31) return false;
+      if (first > 12 && second > 12) return false;
+      return true;
+    },
+  },
+  URL: {
+    // HTTP/HTTPS URLs — excludes localhost and example domains
+    regex: /https?:\/\/(?!localhost\b|127\.0\.0\.1\b|example\.com\b|example\.org\b|example\.net\b)[^\s"'<>]+/g,
+    placeholder: "[URL]",
+  },
+  UK_NHS: {
+    // NHS number: three groups of digits (3-3-4) separated by spaces or hyphens
+    regex: /\b\d{3}[-\s]\d{3}[-\s]\d{4}\b/g,
+    placeholder: "[UK_NHS]",
+  },
+  SG_NRIC_FIN: {
+    // Singapore NRIC/FIN: S/T/F/G/M prefix + 7 digits + checksum letter
+    regex: /\b[STFGM]\d{7}[A-Z]\b/g,
+    placeholder: "[SG_NRIC_FIN]",
+  },
+  AU_ABN: {
+    // Australian Business Number: 11 digits optionally space-grouped as NN NNN NNN NNN
+    regex: /\b\d{2}\s?\d{3}\s?\d{3}\s?\d{3}\b/g,
+    placeholder: "[AU_ABN]",
+    validate(match) {
+      return match.replace(/\s/g, "").length === 11;
+    },
+  },
+  AU_TFN: {
+    // Australian Tax File Number: 9 digits optionally grouped as NNN NNN NNN
+    regex: /\b\d{3}[-\s]?\d{3}[-\s]?\d{3}\b/g,
+    placeholder: "[AU_TFN]",
+    validate(match) {
+      return match.replace(/[-\s]/g, "").length === 9;
+    },
+  },
+  IN_PAN: {
+    // Indian Permanent Account Number: 5 uppercase letters + 4 digits + 1 uppercase letter
+    regex: /\b[A-Z]{5}\d{4}[A-Z]\b/g,
+    placeholder: "[IN_PAN]",
+  },
+  IN_AADHAAR: {
+    // Indian Aadhaar: 12 digits optionally in XXXX XXXX XXXX format
+    regex: /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g,
+    placeholder: "[IN_AADHAAR]",
+    validate(match) {
+      return match.replace(/[-\s]/g, "").length === 12;
+    },
+  },
+  AU_MEDICARE: {
+    // Australian Medicare card: 10 digits optionally followed by a sub-number digit
+    regex: /\b\d{10}[\/\s]?\d?\b/g,
+    placeholder: "[AU_MEDICARE]",
+    validate(match) {
+      const digits = match.replace(/[\/\s]/g, "");
+      return digits.length === 10 || digits.length === 11;
+    },
+  },
+  IN_VEHICLE_REGISTRATION: {
+    // Indian vehicle registration plate: state code + district number + series + number
+    regex: /\b[A-Z]{2}[-\s]\d{1,2}[-\s][A-Z]{1,3}[-\s]\d{4}\b/g,
+    placeholder: "[IN_VEHICLE_REGISTRATION]",
+  },
+
+  // ── NLP-only types (presidioOnly: true) ─────────────────────────────────────
+  // Require the Presidio MCP server. Set PRESIDIO_AVAILABLE=1 in environment to enable.
+  // These are skipped by detectPII() unless { includePresidioOnly: true } is passed.
+  PERSON: {
+    presidioOnly: true,
+    placeholder: "[PERSON]",
+  },
+  LOCATION: {
+    presidioOnly: true,
+    placeholder: "[LOCATION]",
+  },
+  NRP: {
+    // Nationality, religion, or political group
+    presidioOnly: true,
+    placeholder: "[NRP]",
+  },
+  ORGANIZATION: {
+    presidioOnly: true,
+    placeholder: "[ORGANIZATION]",
+  },
+  PHONE_NUMBER: {
+    // International phone numbers — NLP preferred to avoid high false positive rate
+    presidioOnly: true,
+    placeholder: "[PHONE_NUMBER]",
+  },
+  MEDICAL_LICENSE: {
+    // Medical license numbers vary by jurisdiction — NLP preferred
+    presidioOnly: true,
+    placeholder: "[MEDICAL_LICENSE]",
+  },
+  US_DRIVER_LICENSE: {
+    // US driver's license numbers vary by state — NLP preferred
+    presidioOnly: true,
+    placeholder: "[US_DRIVER_LICENSE]",
+  },
+  AU_ACN: {
+    // Australian Company Number — NLP preferred for context disambiguation
+    presidioOnly: true,
+    placeholder: "[AU_ACN]",
+  },
 };
 
-const DEFAULT_ENTITIES = Object.keys(PATTERNS);
+// PATTERNS is an alias for ENTITIES kept for backward compatibility.
+const PATTERNS = ENTITIES;
+
+// DEFAULT_ENTITIES: regex-capable types only (excludes presidioOnly).
+// Used when no explicit entity list is provided to detectPII().
+const DEFAULT_ENTITIES = Object.keys(ENTITIES).filter(k => !ENTITIES[k].presidioOnly);
 
 // ─── detectPII ────────────────────────────────────────────────────────────────
 
@@ -108,36 +330,104 @@ const DEFAULT_ENTITIES = Object.keys(PATTERNS);
  * @param {Array} [customPatterns] - additional patterns from config
  * @returns {Array<{entity: string, match: string, index: number, length: number}>}
  */
+/**
+ * Check if a regex pattern has ReDoS risk (nested quantifiers, backreferences with quantifiers).
+ * @param {string} pattern - regex source string
+ * @returns {boolean} true if the pattern is a ReDoS risk
+ */
+function isReDoSRisk(pattern) {
+  // Detect nested quantifiers: (a+)+, (a*)*,  (a?)+ etc.
+  if (/([+*?])\)[+*?{]/.test(pattern)) return true;
+  // Backreferences with quantifiers
+  if (/\\[0-9]/.test(pattern)) return true;
+  // Overlapping alternation in quantified groups: (a|a)+, (\w|\w+)* etc.
+  if (/\([^)]*\|[^)]*\)[+*?{]/.test(pattern)) return true;
+  // Quantified groups containing word/space class combos: (\w+\s+)+
+  if (/\([^)]*\\[wWdDsS][+*][^)]*\\[wWdDsS][+*][^)]*\)[+*?{]/.test(pattern)) return true;
+  return false;
+}
+
 function detectPII(text, enabledEntities, customPatterns) {
   if (!text || typeof text !== "string") return [];
 
   const entities = Array.isArray(enabledEntities) ? enabledEntities : DEFAULT_ENTITIES;
   const detections = [];
 
+  // Normalize text and scan both raw and normalized variants
+  const textVariants = normalizeText(text);
+
   // Built-in patterns
+  const presidioAvailable = process.env.PRESIDIO_AVAILABLE === "1";
   for (const entity of entities) {
     const pattern = PATTERNS[entity];
     if (!pattern) continue;
 
-    // Clone regex with global flag to reset lastIndex each call
-    const re = new RegExp(pattern.regex.source, pattern.regex.flags.includes("g") ? pattern.regex.flags : pattern.regex.flags + "g");
-    let m;
-    while ((m = re.exec(text)) !== null) {
-      const match = m[0];
-      // Run optional validator (Luhn, private IP exclusion)
-      if (pattern.validate && !pattern.validate(match)) continue;
-      detections.push({ entity, match, index: m.index, length: match.length });
+    // Skip presidioOnly entities unless PRESIDIO_AVAILABLE=1 is set
+    if (pattern.presidioOnly && !presidioAvailable) continue;
+    // presidioOnly entities have no regex — nothing to do without Presidio
+    if (!pattern.regex) continue;
+
+    const seenMatches = new Set();
+    for (const variant of textVariants) {
+      if (!variant) continue;
+      const isOriginal = variant === text;
+      // Clone regex with global flag to reset lastIndex each call
+      const re = new RegExp(pattern.regex.source, pattern.regex.flags.includes("g") ? pattern.regex.flags : pattern.regex.flags + "g");
+      let m;
+      while ((m = re.exec(variant)) !== null) {
+        const match = m[0];
+        // Run optional validator (Luhn, private IP exclusion, date range)
+        if (pattern.validate && !pattern.validate(match)) continue;
+        // Deduplicate: use entity:match:index to allow the same value at different positions.
+        // For normalized variants, use entity:match:variant to avoid double-reporting
+        // matches already found in the original text.
+        const key = isOriginal ? `${entity}:${m.index}` : `${entity}:${match}:variant`;
+        if (seenMatches.has(key)) continue;
+        seenMatches.add(key);
+        // For normalized variants, find the match position in the original text.
+        // Use indexOf with a search-start offset to handle duplicate matches correctly.
+        let originalIndex = m.index;
+        if (!isOriginal) {
+          // Search from last-known position to avoid always returning first occurrence
+          const searchFrom = detections.filter(d => d.entity === entity).reduce((max, d) => Math.max(max, d.index + d.length), 0);
+          const idx = text.indexOf(match, searchFrom);
+          // If not found at offset, try from start; if still not found, flag as variant-only
+          originalIndex = idx >= 0 ? idx : text.indexOf(match);
+          if (originalIndex < 0) {
+            // PII found in decoded/normalized text but not in original — still report it
+            // with index -1 so redact() can handle it (append placeholder rather than splice)
+            originalIndex = -1;
+          }
+        }
+        detections.push({ entity, match, index: originalIndex, length: match.length });
+      }
     }
   }
 
-  // Custom patterns (from config)
+  // Custom patterns (from config).
+  // Intentional limitation: custom patterns scan only the original text, NOT
+  // normalized variants (decoded base64, full-width ASCII, etc.). User-defined
+  // regexes are repo-specific and may produce false positives on pre-processed
+  // text. Built-in patterns cover normalized variants for higher recall.
   if (Array.isArray(customPatterns)) {
     for (const cp of customPatterns) {
       if (!cp.name || !cp.regex) continue;
+      // ReDoS validation (M6): reject dangerous patterns
+      if (isReDoSRisk(cp.regex)) {
+        process.stderr.write(`pii-detector: skipping custom pattern "${cp.name}" — ReDoS risk detected\n`);
+        continue;
+      }
       try {
         const re = new RegExp(cp.regex, "g");
         let m;
+        let matchCount = 0;
+        const MAX_MATCHES = 1000;
         while ((m = re.exec(text)) !== null) {
+          matchCount++;
+          if (matchCount > MAX_MATCHES) {
+            process.stderr.write(`pii-detector: custom pattern "${cp.name}" exceeded ${MAX_MATCHES} matches — stopping early\n`);
+            break;
+          }
           detections.push({
             entity: cp.name,
             match: m[0],
@@ -169,8 +459,12 @@ function redact(text, detections) {
   if (!text || typeof text !== "string") return text;
   if (!detections || detections.length === 0) return text;
 
+  // Separate variant-only detections (index === -1) from normal ones
+  const normal = detections.filter(d => d.index >= 0);
+  const variantOnly = detections.filter(d => d.index < 0);
+
   // Work in reverse index order to keep earlier indices valid
-  const sorted = [...detections].sort((a, b) => b.index - a.index);
+  const sorted = [...normal].sort((a, b) => b.index - a.index);
   let result = text;
   for (const d of sorted) {
     // Determine placeholder: built-in pattern or entity name fallback
@@ -181,6 +475,12 @@ function redact(text, detections) {
       placeholder = `[${d.entity}]`;
     }
     result = result.slice(0, d.index) + placeholder + result.slice(d.index + d.length);
+  }
+
+  // Append warnings for PII found only in decoded/normalized variants
+  if (variantOnly.length > 0) {
+    const types = [...new Set(variantOnly.map(d => d.entity))];
+    result += ` [PII detected in encoded content: ${types.join(", ")}]`;
   }
   return result;
 }
@@ -394,4 +694,6 @@ module.exports = {
   // Exposed for testing
   _luhnCheck: luhnCheck,
   _isPrivateOrLoopbackIP: isPrivateOrLoopbackIP,
+  _normalizeText: normalizeText,
+  _isReDoSRisk: isReDoSRisk,
 };

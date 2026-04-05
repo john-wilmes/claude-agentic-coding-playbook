@@ -30,6 +30,10 @@ const DIGEST_FILE   = process.env.FLEET_DIGEST_FILE
   || path.join(DEFAULT_FLEET, "fleet-digest.txt");
 
 // ─── Load fleet-index module (try installed path first, then source tree) ────
+// TRUST ASSUMPTION: ~/.claude/fleet/ is user-controlled and trusted.
+// Manifests and the fleet-index module are loaded from this directory without
+// sandboxing. Compromising this directory is equivalent to compromising the
+// user's shell profile. Do not load modules from untrusted paths.
 
 let fleetIndex = null;
 
@@ -345,7 +349,7 @@ function replyError(id, code, message) {
   process.stdout.write(msg + "\n");
 }
 
-function log(msg) {
+function serverLog(msg) {
   process.stderr.write(`[fleet-index-server] ${msg}\n`);
 }
 
@@ -362,7 +366,7 @@ function dispatch(req) {
         reply(id, {
           protocolVersion: "2025-03-26",
           capabilities:    { tools: {}, resources: {} },
-          serverInfo:      { name: "fleet-index", version: "1.1.0" },
+          serverInfo:      { name: "fleet-index", version: "1.2.0" },
         });
         break;
 
@@ -378,27 +382,27 @@ function dispatch(req) {
         const toolName = params.name;
         const args     = params.arguments || {};
 
-        let result;
-        switch (toolName) {
-          case "search_repos":
-            result = toolSearchRepos(args);
-            break;
-          case "get_manifest":
-            result = toolGetManifest(args);
-            break;
-          case "list_repos":
-            result = toolListRepos(args);
-            break;
-          case "get_digest":
-            result = toolGetDigest();
-            break;
-          default:
-            replyError(id, -32601, `Unknown tool: ${toolName}`);
-            return;
-        }
+        const runTool = () => {
+          switch (toolName) {
+            case "search_repos":           return toolSearchRepos(args);
+            case "get_manifest":           return toolGetManifest(args);
+            case "list_repos":             return toolListRepos(args);
+            case "get_digest":             return toolGetDigest();
+            default:
+              replyError(id, -32601, `Unknown tool: ${toolName}`);
+              return undefined;
+          }
+        };
 
-        reply(id, {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        const result = runTool();
+        if (result === undefined) break; // error already sent
+
+        Promise.resolve(result).then((resolved) => {
+          reply(id, {
+            content: [{ type: "text", text: JSON.stringify(resolved, null, 2) }],
+          });
+        }).catch((err) => {
+          replyError(id, -32603, `Tool error: ${err.message}`);
         });
         break;
       }
@@ -467,15 +471,15 @@ function dispatch(req) {
         replyError(id, -32601, `Method not found: ${method}`);
     }
   } catch (err) {
-    log(`Error handling ${method}: ${err.message}`);
-    replyError(id, -32603, `Internal error: ${err.message}`);
+    process.stderr.write(`Internal error: ${err.message}\n`);
+    replyError(id, -32603, "Internal server error");
   }
 }
 
 // ─── Stdin reader ─────────────────────────────────────────────────────────────
 
 function main() {
-  log("starting (manifests: " + MANIFESTS_DIR + ")");
+  serverLog("starting (manifests: " + MANIFESTS_DIR + ")");
 
   const reader = rl.createInterface({
     input:     process.stdin,
@@ -504,17 +508,17 @@ function main() {
   });
 
   reader.on("close", () => {
-    log("stdin closed, shutting down");
+    serverLog("stdin closed, shutting down");
     process.exit(0);
   });
 
   // Never crash on unhandled errors — log to stderr and continue
   process.on("uncaughtException", (err) => {
-    log(`uncaughtException: ${err.message}`);
+    serverLog(`uncaughtException: ${err.message}`);
   });
 
   process.on("unhandledRejection", (reason) => {
-    log(`unhandledRejection: ${reason}`);
+    serverLog(`unhandledRejection: ${reason}`);
   });
 }
 

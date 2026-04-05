@@ -2,6 +2,10 @@
 // Also checks MEMORY.md and CLAUDE.md size thresholds and warns when exceeded.
 // No agent decision needed -- this runs automatically on every session start.
 
+function respond(payload = {}) {
+  process.stdout.write(JSON.stringify(payload), () => process.exit(0));
+}
+
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
@@ -99,6 +103,22 @@ function safeParseJson(str, fallback) {
   try { return JSON.parse(str); } catch { return fallback; }
 }
 
+// Dangerous env var names that must never be overridden by project env.yaml.
+// A malicious project could override PATH, LD_PRELOAD, etc. to hijack execution.
+const BLOCKED_ENV_VARS = new Set([
+  "PATH", "HOME", "LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES",
+  "BASH_ENV", "ENV",
+  "NODE_PATH", "NODE_OPTIONS", "PYTHONPATH", "PRESIDIO_AVAILABLE",
+  "MCP_QUERY_INTERCEPT", "CLAUDE_LOOP", "CLAUDE_LOOP_PID",
+  "CLAUDE_LOOP_SENTINEL", "SHELL", "USER", "LOGNAME", "TERM", "SSH_AUTH_SOCK",
+  "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL",
+  "GH_TOKEN", "GITHUB_TOKEN", "GH_HOST",
+  "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
+  "CLAUDE_ENV_FILE",
+  "npm_config_registry", "PIP_INDEX_URL", "PIP_EXTRA_INDEX_URL",
+  "DOCKER_HOST", "KUBECONFIG",
+]);
+
 // Parse simple YAML key-value pairs (one level deep, no nested objects/arrays)
 function parseEnvYaml(content) {
   const result = {};
@@ -108,12 +128,18 @@ function parseEnvYaml(content) {
     if (!trimmed || trimmed.startsWith("#")) continue;
     const m = trimmed.match(KEY_RE);
     if (!m) continue;
+    const key = m[1];
+    // Block dangerous env var names
+    if (BLOCKED_ENV_VARS.has(key)) {
+      process.stderr.write(`session-start: blocked dangerous env var "${key}" from project env.yaml\n`);
+      continue;
+    }
     let val = m[2].trim();
     // Strip surrounding quotes
     if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
       val = val.slice(1, -1);
     }
-    result[m[1]] = val;
+    result[key] = val;
   }
   return result;
 }
@@ -202,7 +228,8 @@ process.stdin.on("end", () => {
     const sessionId = hookInput.session_id || "";
     const cwd = hookInput.cwd || process.cwd();
 
-    // Clear stale hook state directories so a fresh session starts clean
+    // Clear stale hook state directories — only delete files older than 2 hours
+    // to preserve state for concurrent sessions.
     const hookStateDirs = [
       "claude-context-guard",
       "claude-stuck-detector",
@@ -212,12 +239,30 @@ process.stdin.on("end", () => {
       "claude-tool-failures",
       "claude-pre-compact",
     ];
+    const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+    const now = Date.now();
     for (const dirName of hookStateDirs) {
       try {
         const dir = path.join(os.tmpdir(), dirName);
         if (fs.existsSync(dir)) {
           for (const f of fs.readdirSync(dir)) {
-            fs.unlinkSync(path.join(dir, f));
+            const filePath = path.join(dir, f);
+            try {
+              const mtime = fs.statSync(filePath).mtimeMs;
+              // Only delete files older than 2 hours or matching current session.
+              // Use boundary-aware regex so a session id that is a substring of
+              // another id does not accidentally delete unrelated files.
+              // Only delete by session ID if we actually have one — an empty
+              // sessionId would make "".includes(anything) always return true,
+              // deleting every file regardless of age.
+              const safeId = sessionId ? path.basename(sessionId).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : null;
+              const sessionPattern = safeId ? new RegExp("(^|[-._])" + safeId + "([-._]|$)") : null;
+              if ((now - mtime) > TWO_HOURS_MS || (sessionPattern && sessionPattern.test(f))) {
+                fs.unlinkSync(filePath);
+              }
+            } catch {
+              // stat or unlink failed — skip
+            }
           }
         }
       } catch {}
@@ -284,7 +329,7 @@ process.stdin.on("end", () => {
         const claudeEnvFile = process.env.CLAUDE_ENV_FILE;
         if (claudeEnvFile && Object.keys(envVars).length > 0) {
           const exports = Object.entries(envVars)
-            .map(([k, v]) => `export ${k}=${JSON.stringify(v)}`)
+            .map(([k, v]) => `export ${k}='${String(v).replace(/'/g, "'\\''")}'`)
             .join("\n");
           fs.appendFileSync(claudeEnvFile, exports + "\n");
         }
@@ -354,9 +399,11 @@ process.stdin.on("end", () => {
     try {
       const stateDir = path.join(os.tmpdir(), "claude-session-start");
       fs.mkdirSync(stateDir, { recursive: true });
-      const stateFile = path.join(stateDir, `${sessionId}.json`);
-      const injectedIds = relevantEntries.map(e => e.fm && e.fm.id).filter(Boolean);
-      fs.writeFileSync(stateFile, JSON.stringify({ injectedIds }));
+      if (sessionId) {
+        const stateFile = path.join(stateDir, `${sessionId}.json`);
+        const injectedIds = relevantEntries.map(e => e.fm && e.fm.id).filter(Boolean);
+        fs.writeFileSync(stateFile, JSON.stringify({ injectedIds }));
+      }
     } catch {}
 
     if (relevantEntries.length > 0) {
@@ -396,16 +443,14 @@ process.stdin.on("end", () => {
       },
     };
 
-    process.stdout.write(JSON.stringify(output));
-    process.exit(0);
+    return respond(output);
   } catch {
     // Don't block session start on errors
-    process.stdout.write(JSON.stringify({}));
-    process.exit(0);
+    return respond();
   }
 });
 
 // Export for testing
 if (typeof module !== "undefined") {
-  module.exports = { detectProjectContext, parseFrontmatter, scoreEntry, getRelevantKnowledge, parseEnvYaml, extractSalientTerms };
+  module.exports = { detectProjectContext, parseFrontmatter, scoreEntry, getRelevantKnowledge, parseEnvYaml, extractSalientTerms, BLOCKED_ENV_VARS };
 }

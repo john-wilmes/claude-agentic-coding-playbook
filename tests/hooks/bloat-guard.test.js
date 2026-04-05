@@ -60,7 +60,7 @@ function isWarned(result) {
   return (
     obj &&
     obj.hookSpecificOutput &&
-    obj.hookSpecificOutput.permissionDecision === "warn"
+    typeof obj.hookSpecificOutput.additionalContext === "string"
   );
 }
 
@@ -75,7 +75,7 @@ function warnReason(result) {
   return (
     obj &&
     obj.hookSpecificOutput &&
-    obj.hookSpecificOutput.permissionDecisionReason
+    obj.hookSpecificOutput.additionalContext
   );
 }
 

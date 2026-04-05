@@ -14,6 +14,10 @@
 //
 // On any error: outputs {} and exits 0 — never crashes.
 
+function respond(payload = {}) {
+  process.stdout.write(JSON.stringify(payload), () => process.exit(0));
+}
+
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
@@ -88,20 +92,17 @@ process.stdin.on("end", () => {
 
     // Skip subagent context — only monitor from parent agent.
     if (hookInput.agent_id) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     // Only care about Task tool calls.
     if (hookInput.tool_name !== "Task") {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     // Skip PreToolUse (no tool_response).
     if (!("tool_response" in hookInput)) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     const sessionId = hookInput.session_id || "unknown";
@@ -113,8 +114,7 @@ process.stdin.on("end", () => {
     // Check for truncation.
     const truncation = detectTruncation(toolResponse);
     if (!truncation) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     // Truncation detected — extract context and write recovery state.
@@ -146,17 +146,15 @@ process.stdin.on("end", () => {
       ? "Consider: (1) retry with smaller scope, (2) split into multiple subagents, or (3) increase max_turns."
       : "Consider: (1) retry with smaller scope, (2) split into multiple subagents, or (3) use /compact first.";
 
-    process.stdout.write(JSON.stringify({
+    return respond({
       hookSpecificOutput: {
         hookEventName: "PostToolUse",
         additionalContext:
           `Subagent truncated (${truncation.reason}). Original task: "${description}". ` +
           `Partial result preserved in recovery state. ${advice}`,
       },
-    }));
-    process.exit(0);
+    });
   } catch {
-    process.stdout.write(JSON.stringify({}));
-    process.exit(0);
+    return respond();
   }
 });

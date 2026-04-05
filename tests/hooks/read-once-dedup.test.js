@@ -44,8 +44,13 @@ function newSessionId() {
   return `test-${crypto.randomUUID()}`;
 }
 
+// Mirror the hook's session key derivation so tests can find state files.
+function sessionToKey(sessionId) {
+  return crypto.createHash("sha256").update(sessionId || "").digest("hex").slice(0, 16);
+}
+
 function cleanupSession(sessionId) {
-  const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
+  const stateFile = path.join(STATE_DIR, `${sessionToKey(sessionId)}.json`);
   try { fs.rmSync(stateFile, { force: true }); } catch {}
 }
 
@@ -371,7 +376,7 @@ test("14. State file older than 4h: state discarded, allow", () => {
     runReadHook(sessionId, tmp.filePath);
 
     // Manually age the state file beyond TTL
-    const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
+    const stateFile = path.join(STATE_DIR, `${sessionToKey(sessionId)}.json`);
     const oldTime = new Date(Date.now() - STATE_TTL_MS - 1000);
     fs.utimesSync(stateFile, oldTime, oldTime);
 

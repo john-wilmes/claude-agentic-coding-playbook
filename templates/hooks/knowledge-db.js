@@ -766,6 +766,28 @@ if (require.main === module) {
         if (!jsonStr) { process.stderr.write("Usage: insert '<json>'\n"); break; }
         try {
           const entry = JSON.parse(jsonStr);
+          // Validate required fields
+          if (!entry.id || typeof entry.id !== "string") {
+            process.stderr.write("Error: entry.id is required and must be a string\n"); break;
+          }
+          if (!entry.category || typeof entry.category !== "string") {
+            process.stderr.write("Error: entry.category is required and must be a string\n"); break;
+          }
+          if (!entry.context_text || typeof entry.context_text !== "string") {
+            process.stderr.write("Error: entry.context_text is required and must be a string\n"); break;
+          }
+          // Enforce reasonable max length on text fields (100KB)
+          const MAX_TEXT = 100 * 1024;
+          let oversizeField = null;
+          for (const field of ["context_text", "fix_text", "evidence_text"]) {
+            if (typeof entry[field] === "string" && Buffer.byteLength(entry[field], "utf8") > MAX_TEXT) {
+              oversizeField = field;
+              break;
+            }
+          }
+          if (oversizeField) {
+            process.stderr.write(`Error: ${oversizeField} exceeds maximum length of ${MAX_TEXT} bytes\n`); break;
+          }
           insertEntry(db, entry);
           process.stdout.write(JSON.stringify({ ok: true, id: entry.id }) + "\n");
         } catch (e) {

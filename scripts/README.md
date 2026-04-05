@@ -17,3 +17,4 @@ Utility and testing scripts for the agentic coding playbook.
 | `transcript-parser.js` | Parses Claude Code session transcripts from `~/.claude/projects/`. | Node.js 18+ |
 | `repo-fleet-index.sh` | CLI wrapper for repo fleet indexer (build, refresh, search, list, MCP server mode). | Node.js 18+ |
 | `claude-loop.sh` | Supervisor that wraps `claude` CLI in a restart loop with sentinel detection, optional markdown task queue, JSONL logging, and flock-based single-instance locking. | `claude` CLI, `python3`, `flock` |
+| `sanitize.sh` | Redacts PII/PHI from investigation files. Uses Presidio if available, falls back to regex. Pass `--check` to detect without modifying. | `python3`; optional: `presidio-analyzer` |

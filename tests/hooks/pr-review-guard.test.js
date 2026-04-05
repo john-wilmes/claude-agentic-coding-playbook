@@ -26,14 +26,14 @@ function extractFunction(hookPath, funcName) {
   const declarations = boundary > 0 ? src.slice(0, boundary) : src;
 
   const tmpFile = path.join(os.tmpdir(), `hook-extract-${Date.now()}-${_extractCounter++}.js`);
-  // Stub out execSync and log so extracted functions don't hit real APIs
+  // Stub out execFileSync and log so extracted functions don't hit real APIs
   const stubbed = `
-const { execSync: _realExecSync } = require("child_process");
+const { execFileSync: _realExecFileSync } = require("child_process");
 let _execSyncMock = null;
 function setExecSyncMock(fn) { _execSyncMock = fn; }
 const origSrc = ${JSON.stringify(declarations)};
 ` + declarations
-    .replace(/require\("child_process"\)/, '{ execSync: (...args) => _execSyncMock ? _execSyncMock(...args) : _realExecSync(...args) }')
+    .replace(/require\("child_process"\)/, '{ execFileSync: (cmd, args, ...rest) => _execSyncMock ? _execSyncMock(cmd, args, ...rest) : _realExecFileSync(cmd, args, ...rest) }')
     .replace(/require\("\.\/log"\)/, '{ writeLog() {} }') +
     `\nmodule.exports = { ${funcName}, setExecSyncMock };\n`;
 
@@ -189,8 +189,8 @@ const checkCodeRabbitReview = reviewMod.checkCodeRabbitReview;
 const setExecSyncMock = reviewMod.setExecSyncMock;
 
 unitTest("R1. CodeRabbit review found -> reviewed:true", () => {
-  setExecSyncMock((cmd) => {
-    if (cmd.includes("reviews")) return "coderabbitai[bot]\ngithub-actions[bot]\n";
+  setExecSyncMock((cmd, args) => {
+    if (args && args.includes("reviews")) return "coderabbitai[bot]\ngithub-actions[bot]\n";
     return "";
   });
   const result = checkCodeRabbitReview("42");
@@ -200,9 +200,9 @@ unitTest("R1. CodeRabbit review found -> reviewed:true", () => {
 });
 
 unitTest("R2. No CodeRabbit review, but CodeRabbit comment -> reviewed:true", () => {
-  setExecSyncMock((cmd) => {
-    if (cmd.includes("reviews")) return "some-human\n";
-    if (cmd.includes("comments")) return "coderabbitai[bot]\n";
+  setExecSyncMock((cmd, args) => {
+    if (args && args.includes("reviews")) return "some-human\n";
+    if (args && args.includes("comments")) return "coderabbitai[bot]\n";
     return "";
   });
   const result = checkCodeRabbitReview("42");
@@ -212,9 +212,9 @@ unitTest("R2. No CodeRabbit review, but CodeRabbit comment -> reviewed:true", ()
 });
 
 unitTest("R3. No CodeRabbit activity at all -> reviewed:false, error:false", () => {
-  setExecSyncMock((cmd) => {
-    if (cmd.includes("reviews")) return "some-human\n";
-    if (cmd.includes("comments")) return "some-human\n";
+  setExecSyncMock((cmd, args) => {
+    if (args && args.includes("reviews")) return "some-human\n";
+    if (args && args.includes("comments")) return "some-human\n";
     return "";
   });
   const result = checkCodeRabbitReview("42");
@@ -234,7 +234,7 @@ unitTest("R4. API error on reviews -> error:true (graceful degradation)", () => 
 
 unitTest("R5. Reviews OK but comments API fails -> error:true (graceful degradation)", () => {
   let callCount = 0;
-  setExecSyncMock((cmd) => {
+  setExecSyncMock((cmd, args) => {
     callCount++;
     if (callCount === 1) return "some-human\n"; // reviews OK, no coderabbit
     throw new Error("API timeout"); // comments fail
@@ -245,9 +245,9 @@ unitTest("R5. Reviews OK but comments API fails -> error:true (graceful degradat
 });
 
 unitTest("R6. Empty review output -> checks comments", () => {
-  setExecSyncMock((cmd) => {
-    if (cmd.includes("reviews")) return "";
-    if (cmd.includes("comments")) return "coderabbitai[bot]\n";
+  setExecSyncMock((cmd, args) => {
+    if (args && args.includes("reviews")) return "";
+    if (args && args.includes("comments")) return "coderabbitai[bot]\n";
     return "";
   });
   const result = checkCodeRabbitReview("42");

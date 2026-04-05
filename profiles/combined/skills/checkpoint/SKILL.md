@@ -14,19 +14,30 @@ Delegates heavy work to a subagent to keep parent context lean.
 
 ## Steps
 
+### 0. Persist unsaved findings (parent does this — NOT the subagent)
+
+Before delegating, review the conversation for any research findings, evidence, analysis, or detailed information that was discussed but **not yet written to a memory topic file**. This is the #1 cause of data loss at checkpoint — the subagent cannot see conversation context, so anything not already in a file will be lost.
+
+For each unsaved finding:
+- Write it to an appropriate topic file in the project's memory directory (e.g. `project_<topic>.md`, `feedback_<topic>.md`)
+- Include the full detail — do NOT summarize or abbreviate
+- Add a pointer in `MEMORY.md` if the topic file is new
+
+**If all findings are already persisted in topic files, skip this step.**
+
 ### 1. Delegate save work to a subagent
 
 Spawn a subagent (model: "sonnet") using the Task tool to perform all the heavy I/O.
 Pass it the following context:
 
 - The project's memory file path (e.g. `~/.claude/projects/<project>/memory/MEMORY.md`)
-- What was accomplished this session (summarize briefly)
+- What was accomplished this session (bullet list of concrete outcomes, not a vague summary)
 - `$ARGUMENTS` if provided (use as next-steps summary)
 - The current working directory
 
 The subagent prompt should instruct it to:
 
-1. **Update memory**: Read the project's `MEMORY.md`. Update the "Current Work" section with what was done, current state, and next steps. Replace the previous entry (do not accumulate). Add date stamp. Add any non-obvious discoveries to Lessons Learned. Do not duplicate existing entries. **Clear the `## Recovered from previous session` section entirely if it exists** — its content has been incorporated into Current Work.
+1. **Update memory**: Read the project's `MEMORY.md`. Update the "Current Work" section with what was done, current state, and next steps. Replace the previous entry (do not accumulate). Add date stamp. **Do NOT attempt to summarize research findings here** — detailed findings belong in topic files (written in Step 0), not in MEMORY.md. Current Work should only contain status, outcomes, and next steps. Keep MEMORY.md under 80 lines (hard stop: 120) — it is an index of one-line pointers, not a knowledge base. **Clear the `## Recovered from previous session` section entirely if it exists** — its content has been incorporated into Current Work.
 
 2. **Commit and push**: Run `git status`. If there are uncommitted changes, stage relevant files (not build artifacts, logs, or secrets), commit with a descriptive message, and push to remote. If no changes or not a git repo, skip.
 
@@ -51,31 +62,18 @@ The subagent prompt should instruct it to:
    fi
    rm -f "$PROJECT_DIR/session-marker.json"
    rm -f "$PROJECT_DIR/loop-detector.json"
-   rm -rf /tmp/claude-subagent-recovery/
+   # Only delete session-specific state, not the entire shared recovery directory
+   # (other concurrent sessions may be using it)
+   if [ -n "${CLAUDE_LOOP_PID:-}" ] && [[ "${CLAUDE_LOOP_PID}" =~ ^[0-9]+$ ]]; then
+     rm -f "/tmp/claude-subagent-recovery/recovery-${CLAUDE_LOOP_PID}.json"
+   fi
    ```
 
 6. **Return a one-line summary** of what was done (e.g. "Memory updated, committed abc1234, pushed to origin").
 
-### 2. Devil's advocate check
+### 2. Exit decision
 
-After the subagent returns, run:
-
-```bash
-INSTALL_ROOT="$(bash ~/.claude/scripts/skills/find-install-root.sh)"
-bash "${INSTALL_ROOT}/scripts/skills/da-check.sh"
-```
-
-If the output is `DA_NEEDED`, print:
-
-```text
-Note: This branch is 5+ commits ahead with docs/config changes. Consider running a devil's advocate review before merging.
-```
-
-If `DA_NOT_NEEDED` or the script fails, continue silently.
-
-### 3. Exit decision
-
-After the DA check, print exactly:
+After the subagent returns, print exactly:
 ```
 CHECKPOINT COMPLETE
 ```
@@ -89,6 +87,7 @@ echo "CLAUDE_LOOP=${CLAUDE_LOOP:-0} SENTINEL=${CLAUDE_LOOP_SENTINEL:-}"
 **If `CLAUDE_LOOP=1` (headless/task-queue mode):** Write the sentinel and exit.
 
 ```bash
+[[ "${CLAUDE_LOOP_PID}" =~ ^[0-9]+$ ]] || exit 0
 SENTINEL="/tmp/claude-checkpoint-exit-${CLAUDE_LOOP_PID}"
 echo '{"reason":"checkpoint","timestamp":'$(date +%s)'}' > "${SENTINEL}"
 ```
@@ -98,6 +97,7 @@ Print exactly "Exiting — claude-loop will respawn." Then STOP. Do not make any
 **If `CLAUDE_LOOP_SENTINEL` is set (interactive mode under claude-loop):** Write the sentinel.
 
 ```bash
+[[ "${CLAUDE_LOOP_PID}" =~ ^[0-9]+$ ]] || exit 0
 SENTINEL="/tmp/claude-checkpoint-exit-${CLAUDE_LOOP_PID}"
 echo '{"reason":"checkpoint","timestamp":'$(date +%s)'}' > "${SENTINEL}"
 ```

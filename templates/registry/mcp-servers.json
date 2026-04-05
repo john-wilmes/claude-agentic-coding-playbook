@@ -17,7 +17,7 @@
       "disabled": true
     },
     "env_required": ["DATADOG_API_KEY", "DATADOG_APP_KEY"],
-    "notes": "Official remote MCP also available at docs.datadoghq.com"
+    "notes": "PHI-sanitizing server available in mcp-servers/datadog/server.py. Launch via a shell script that injects DD_API_KEY and DD_APP_KEY from your keychain and sets PHI_CONFIG_PATH. Register the script in ~/.claude.json mcpServers. Strips PHI attribute keys and redacts emails/phones/SSNs/JWTs before output. See mcp-servers/datadog/README.md."
   },
   "snowflake": {
     "description": "Data warehouse queries and schema inspection",
@@ -27,7 +27,7 @@
       "disabled": true
     },
     "env_required": ["SNOWFLAKE_ACCOUNT", "SNOWFLAKE_USER", "SNOWFLAKE_PASSWORD"],
-    "notes": "Requires Snowflake account credentials"
+    "notes": "PHI-sanitizing server available in mcp-servers/snowflake/server.js. Launch via a shell script that injects SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_PASSWORD from your keychain. Register the script in ~/.claude.json mcpServers. Enforces SELECT-only (LIMIT required), strips PHI fields, redacts strings via Presidio (or regex fallback). See mcp-servers/snowflake/README.md."
   },
   "postgres": {
     "description": "PostgreSQL database queries (restricted mode)",
@@ -87,7 +87,7 @@
       "disabled": true
     },
     "env_required": [],
-    "notes": "OAuth flow on first use"
+    "notes": "PHI-sanitizing server available in mcp-servers/slack/server.js. Launch via a shell script that injects SLACK_BOT_TOKEN from your keychain. Register the script in ~/.claude.json mcpServers. Strictly read-only (GET-only), redacts strings via Presidio (or regex fallback). Note: search_messages requires a user token (xoxp-) with search:read scope. See mcp-servers/slack/README.md."
   },
   "cloudwatch": {
     "description": "AWS CloudWatch logs, metrics, alarms",
@@ -158,11 +158,11 @@
     "description": "Multi-repo fleet index — search, manifests, dependency topology",
     "config": {
       "command": "node",
-      "args": ["~/.claude/mcp/fleet-index-server.js"],
+      "args": ["/path/to/.claude/mcp/fleet-index-server.js"],
       "disabled": false
     },
     "env_required": [],
-    "notes": "Reads pre-built manifests from ~/.claude/fleet/. Run 'repo-fleet-index --build' first. Always enabled when fleet is indexed."
+    "notes": "Reads pre-built manifests from ~/.claude/fleet/. Run 'repo-fleet-index --build' first. Always enabled when fleet is indexed. Update the args path to point to your installed fleet-index-server.js."
   },
   "zendesk": {
     "description": "Zendesk tickets, users, organizations",
@@ -182,7 +182,7 @@
       "disabled": true
     },
     "env_required": [],
-    "notes": "OAuth flow on first use. Official ClickUp MCP (Public Beta)."
+    "notes": "PHI-sanitizing server available in mcp-servers/clickup/server.js. Launch via a shell script that injects CLICKUP_API_TOKEN from your keychain. Register the script in ~/.claude.json mcpServers. Strictly read-only (GET-only), redacts strings via Presidio (or regex fallback). Exposes get_task, get_tasks, search_tasks. See mcp-servers/clickup/README.md."
   },
   "mongodb": {
     "description": "MongoDB queries and collection inspection",
@@ -192,7 +192,7 @@
       "disabled": true
     },
     "env_required": ["MDB_MCP_CONNECTION_STRING"],
-    "notes": "Read-only mode prevents mutations. Requires MongoDB connection string."
+    "notes": "PHI-sanitizing server available in mcp-servers/mongodb/server.js. Launch via a shell script that injects MONGODB_URI from your keychain. Register the script in ~/.claude.json mcpServers. Enforces read-only mode, strips PHI fields, batch-redacts strings via Presidio (or regex fallback), 30s timeout. See mcp-servers/mongodb/README.md."
   },
   "presidio": {
     "description": "On-demand PII/PHI detection and anonymization",

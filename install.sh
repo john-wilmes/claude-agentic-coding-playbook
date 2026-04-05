@@ -97,7 +97,7 @@ do_uninstall() {
     [ -f "$src" ] || continue
     hook_name=$(basename "$src")
     dest="$CLAUDE_DIR/hooks/$hook_name"
-    if [ -f "$dest" ]; then
+    if [ -f "$dest" ] || [ -L "$dest" ]; then
       rm -f "$dest"
       echo "REMOVED: $dest"
     fi
@@ -371,6 +371,48 @@ install_file() {
   fi
 }
 
+install_symlink() {
+  local src="$1"
+  local dest="$2"
+  local label="$3"
+
+  if [ "$DRY_RUN" = true ]; then
+    if [ -e "$dest" ] || [ -L "$dest" ]; then
+      echo "[DRY RUN] CONFLICT: $label -> $dest (exists)"
+    else
+      echo "[DRY RUN] SYMLINK:  $label -> $dest"
+    fi
+    return
+  fi
+
+  if ([ -e "$dest" ] || [ -L "$dest" ]) && [ "$FORCE" != true ]; then
+    echo "EXISTS: $dest"
+    read -r -p "  [s]kip, [o]verwrite? " choice
+    case $choice in
+      o|O)
+        [ -d "$dest" ] && rm -rf "$dest"
+        # Atomic symlink: create at temp path then mv to avoid TOCTOU
+        ln -sf "$src" "$dest.tmp" && mv -f "$dest.tmp" "$dest"
+        echo "  -> Symlinked (overwritten)."
+        ;;
+      *)
+        echo "  -> Skipped."
+        ;;
+    esac
+  else
+    mkdir -p "$(dirname "$dest")"
+    # Remove existing file/symlink before creating new symlink to prevent
+    # ln -sf from creating the symlink *inside* the destination if it's a directory.
+    if [[ -d "$dest" ]] && [[ ! -L "$dest" ]]; then
+      echo "WARNING: $dest is a directory — skipping to avoid data loss. Remove manually and re-run."
+      return
+    fi
+    # Atomic symlink creation: ln to temp path then mv (avoids TOCTOU race)
+    ln -sf "$src" "$dest.tmp" && mv -f "$dest.tmp" "$dest"
+    echo "INSTALLED: $label -> $dest (symlink)"
+  fi
+}
+
 copy_skill_subdirs() {
   local skill_name="$1"
   local dest_dir="$2"
@@ -571,28 +613,28 @@ fi
 
 # Shared logging module (installed first; hooks require it)
 if [ -f "$SCRIPT_DIR/templates/hooks/log.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/log.js" "$CLAUDE_DIR/hooks/log.js" "shared logging module: log.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/log.js" "$CLAUDE_DIR/hooks/log.js" "shared logging module: log.js"
 fi
 
 # BM25 search module (installed before knowledge-db which depends on it)
 if [ -f "$SCRIPT_DIR/templates/hooks/bm25.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/bm25.js" "$CLAUDE_DIR/hooks/bm25.js" "bm25 search module: bm25.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/bm25.js" "$CLAUDE_DIR/hooks/bm25.js" "bm25 search module: bm25.js"
 fi
 
 # Knowledge database module (installed before hooks that depend on it)
 if [ -f "$SCRIPT_DIR/templates/hooks/knowledge-db.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/knowledge-db.js" "$CLAUDE_DIR/hooks/knowledge-db.js" "knowledge database module: knowledge-db.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/knowledge-db.js" "$CLAUDE_DIR/hooks/knowledge-db.js" "knowledge database module: knowledge-db.js"
 fi
 
 # Knowledge capture module (installed before hooks that depend on it)
 if [ -f "$SCRIPT_DIR/templates/hooks/knowledge-capture.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/knowledge-capture.js" "$CLAUDE_DIR/hooks/knowledge-capture.js" "knowledge capture module: knowledge-capture.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/knowledge-capture.js" "$CLAUDE_DIR/hooks/knowledge-capture.js" "knowledge capture module: knowledge-capture.js"
 fi
 
 for hook_file in "$SCRIPT_DIR/templates/hooks"/session-*.js; do
   [ -f "$hook_file" ] || continue
   hook_name=$(basename "$hook_file")
-  install_file "$hook_file" "$CLAUDE_DIR/hooks/$hook_name" "session hook: $hook_name"
+  install_symlink "$hook_file" "$CLAUDE_DIR/hooks/$hook_name" "session hook: $hook_name"
 
   # Register session hooks in settings.json
   # Derive hook event from filename: session-start.js -> SessionStart
@@ -635,7 +677,7 @@ done
 
 # Model router hook (PreToolUse -- auto-selects model for Task tool calls)
 if [ -f "$SCRIPT_DIR/templates/hooks/model-router.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/model-router.js" "$CLAUDE_DIR/hooks/model-router.js" "model router hook: model-router.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/model-router.js" "$CLAUDE_DIR/hooks/model-router.js" "model router hook: model-router.js"
 
   # Merge PreToolUse hook entry into settings.json
   echo ""
@@ -676,48 +718,118 @@ if [ -f "$SCRIPT_DIR/templates/hooks/model-router.js" ]; then
   fi
 fi
 
-# Prompt injection guard hook (PreToolUse -- blocks high-confidence injection patterns in Bash)
-if [ -f "$SCRIPT_DIR/templates/hooks/prompt-injection-guard.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/prompt-injection-guard.js" "$CLAUDE_DIR/hooks/prompt-injection-guard.js" "prompt injection guard: prompt-injection-guard.js"
+# Dedicated tool guard hook (PreToolUse:Bash -- blocks CLI file-reading tools in favour of Read/Grep/Glob)
+if [ -f "$SCRIPT_DIR/templates/hooks/dedicated-tool-guard.js" ]; then
+  install_symlink "$SCRIPT_DIR/templates/hooks/dedicated-tool-guard.js" "$CLAUDE_DIR/hooks/dedicated-tool-guard.js" "dedicated tool guard: dedicated-tool-guard.js"
 
-  # Merge PreToolUse hook entry into settings.json
+  echo ""
+  echo "--- Configuring dedicated-tool-guard in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  DTG_CMD="node $CLAUDE_DIR/hooks/dedicated-tool-guard.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add dedicated-tool-guard PreToolUse:Bash hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    node -e "
+      const fs = require('fs');
+      const path = require('path');
+      const settingsPath = path.resolve(process.argv[1]);
+      const hookCmd = process.argv[2];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.hooks) settings.hooks = {};
+      if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+      const exists = settings.hooks.PreToolUse.some(e =>
+        e.hooks && e.hooks.some(h => h.command && h.command.includes('dedicated-tool-guard'))
+      );
+      if (!exists) {
+        settings.hooks.PreToolUse.push({
+          matcher: 'Bash',
+          hooks: [{ type: 'command', command: hookCmd }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+        console.log('CONFIGURED: dedicated-tool-guard PreToolUse hook (matcher: Bash)');
+      } else {
+        console.log('ALREADY CONFIGURED: dedicated-tool-guard hook in settings.json');
+      }
+    " "$SETTINGS_FILE" "$DTG_CMD"
+  fi
+fi
+
+# Prompt injection guard hook (dual-mode: PreToolUse Bash + PostToolUse Read/Grep/MCP)
+if [ -f "$SCRIPT_DIR/templates/hooks/prompt-injection-guard.js" ]; then
+  install_symlink "$SCRIPT_DIR/templates/hooks/prompt-injection-guard.js" "$CLAUDE_DIR/hooks/prompt-injection-guard.js" "prompt injection guard: prompt-injection-guard.js"
+
+  # Merge PreToolUse and PostToolUse hook entries into settings.json
   echo ""
   echo "--- Configuring prompt-injection-guard in settings.json ---"
   SETTINGS_FILE="$CLAUDE_DIR/settings.json"
   GUARD_CMD="node $CLAUDE_DIR/hooks/prompt-injection-guard.js"
 
   if [ "$DRY_RUN" = true ]; then
-    echo "[DRY RUN] Would add PreToolUse hook to $SETTINGS_FILE"
+    echo "[DRY RUN] Would add PreToolUse and PostToolUse hooks to $SETTINGS_FILE"
   else
     if [ ! -f "$SETTINGS_FILE" ]; then
       echo "{}" > "$SETTINGS_FILE"
     fi
 
-    if grep -q "prompt-injection-guard" "$SETTINGS_FILE" 2>/dev/null; then
-      echo "ALREADY CONFIGURED: prompt-injection-guard hook in settings.json"
-    else
-      node -e "
-        const fs = require('fs');
-        const path = require('path');
-        const settingsPath = path.resolve(process.argv[1]);
-        const hookCmd = process.argv[2];
-        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-        if (!settings.hooks) settings.hooks = {};
-        if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+    # Register PreToolUse (Bash matcher) — blocks injection patterns in commands
+    node -e "
+      const fs = require('fs');
+      const path = require('path');
+      const settingsPath = path.resolve(process.argv[1]);
+      const hookCmd = process.argv[2];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.hooks) settings.hooks = {};
+      if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+      // Check if a Bash-matcher prompt-injection-guard entry already exists
+      const hasPreEntry = settings.hooks.PreToolUse.some(e =>
+        e.matcher === 'Bash' && e.hooks && e.hooks.some(h => h.command && h.command.includes('prompt-injection-guard'))
+      );
+      if (!hasPreEntry) {
         settings.hooks.PreToolUse.push({
           matcher: 'Bash',
           hooks: [{ type: 'command', command: hookCmd }]
         });
         fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
-      " "$SETTINGS_FILE" "$GUARD_CMD"
-      echo "CONFIGURED: prompt-injection-guard hook in settings.json"
-    fi
+        console.log('CONFIGURED: prompt-injection-guard PreToolUse hook (Bash matcher)');
+      } else {
+        console.log('ALREADY CONFIGURED: prompt-injection-guard PreToolUse hook in settings.json');
+      }
+    " "$SETTINGS_FILE" "$GUARD_CMD"
+
+    # Register PostToolUse (no matcher) — scans Read/Grep/MCP output for injection patterns
+    node -e "
+      const fs = require('fs');
+      const path = require('path');
+      const settingsPath = path.resolve(process.argv[1]);
+      const hookCmd = process.argv[2];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.hooks) settings.hooks = {};
+      if (!settings.hooks.PostToolUse) settings.hooks.PostToolUse = [];
+      // Check if a no-matcher prompt-injection-guard PostToolUse entry already exists
+      const hasPostEntry = settings.hooks.PostToolUse.some(e =>
+        !e.matcher && e.hooks && e.hooks.some(h => h.command && h.command.includes('prompt-injection-guard'))
+      );
+      if (!hasPostEntry) {
+        settings.hooks.PostToolUse.push({
+          hooks: [{ type: 'command', command: hookCmd }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+        console.log('CONFIGURED: prompt-injection-guard PostToolUse hook (no matcher, all tools)');
+      } else {
+        console.log('ALREADY CONFIGURED: prompt-injection-guard PostToolUse hook in settings.json');
+      }
+    " "$SETTINGS_FILE" "$GUARD_CMD"
   fi
 fi
 
 # PR review guard hook (PreToolUse -- blocks gh pr merge until CodeRabbit has reviewed)
 if [ -f "$SCRIPT_DIR/templates/hooks/pr-review-guard.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/pr-review-guard.js" "$CLAUDE_DIR/hooks/pr-review-guard.js" "pr review guard: pr-review-guard.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/pr-review-guard.js" "$CLAUDE_DIR/hooks/pr-review-guard.js" "pr review guard: pr-review-guard.js"
 
   # Merge PreToolUse hook entry into settings.json
   echo ""
@@ -756,7 +868,7 @@ fi
 
 # Post-tool verify hook (PostToolUse -- auto-runs tests after Edit/Write on code files)
 if [ -f "$SCRIPT_DIR/templates/hooks/post-tool-verify.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/post-tool-verify.js" "$CLAUDE_DIR/hooks/post-tool-verify.js" "post-tool verify: post-tool-verify.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/post-tool-verify.js" "$CLAUDE_DIR/hooks/post-tool-verify.js" "post-tool verify: post-tool-verify.js"
 
   # Merge PostToolUse hook entries into settings.json
   echo ""
@@ -799,7 +911,7 @@ fi
 
 # MEMORY.md size guard hook (PostToolUse -- enforces line limit on MEMORY.md writes)
 if [ -f "$SCRIPT_DIR/templates/hooks/md-size-guard.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/md-size-guard.js" "$CLAUDE_DIR/hooks/md-size-guard.js" "md size guard: md-size-guard.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/md-size-guard.js" "$CLAUDE_DIR/hooks/md-size-guard.js" "md size guard: md-size-guard.js"
 
   echo ""
   echo "--- Configuring md-size-guard in settings.json ---"
@@ -841,7 +953,7 @@ fi
 
 # Context guard hook (dual-mode: PostToolUse all tools + PreToolUse Edit/Write)
 if [ -f "$SCRIPT_DIR/templates/hooks/context-guard.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/context-guard.js" "$CLAUDE_DIR/hooks/context-guard.js" "context guard: context-guard.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/context-guard.js" "$CLAUDE_DIR/hooks/context-guard.js" "context guard: context-guard.js"
 
   echo ""
   echo "--- Configuring context-guard in settings.json ---"
@@ -917,7 +1029,7 @@ fi
 
 # Checkpoint gate hook (PreToolUse all tools -- blocks tool calls after checkpoint/context-critical)
 if [ -f "$SCRIPT_DIR/templates/hooks/checkpoint-gate.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/checkpoint-gate.js" "$CLAUDE_DIR/hooks/checkpoint-gate.js" "checkpoint gate: checkpoint-gate.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/checkpoint-gate.js" "$CLAUDE_DIR/hooks/checkpoint-gate.js" "checkpoint gate: checkpoint-gate.js"
 
   echo ""
   echo "--- Configuring checkpoint-gate in settings.json ---"
@@ -961,9 +1073,91 @@ if [ -f "$SCRIPT_DIR/templates/hooks/checkpoint-gate.js" ]; then
   fi
 fi
 
+# Memory index guard hook (PreToolUse Write/Edit -- enforces MEMORY.md line limit)
+if [ -f "$SCRIPT_DIR/templates/hooks/memory-index-guard.js" ]; then
+  install_symlink "$SCRIPT_DIR/templates/hooks/memory-index-guard.js" "$CLAUDE_DIR/hooks/memory-index-guard.js" "memory index guard: memory-index-guard.js"
+
+  echo ""
+  echo "--- Configuring memory-index-guard in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  MEMGUARD_CMD="node $CLAUDE_DIR/hooks/memory-index-guard.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add memory-index-guard PreToolUse hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    node -e "
+      const fs = require('fs');
+      const path = require('path');
+      const settingsPath = path.resolve(process.argv[1]);
+      const hookCmd = process.argv[2];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.hooks) settings.hooks = {};
+      if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+      const exists = settings.hooks.PreToolUse.some(e =>
+        e.hooks && e.hooks.some(h => h.command && h.command.includes('memory-index-guard'))
+      );
+      if (!exists) {
+        settings.hooks.PreToolUse.push({
+          matcher: 'Write|Edit',
+          hooks: [{ type: 'command', command: hookCmd, timeout: 5 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+        console.log('CONFIGURED: memory-index-guard PreToolUse hook (Write|Edit)');
+      } else {
+        console.log('ALREADY CONFIGURED: memory-index-guard PreToolUse hook in settings.json');
+      }
+    " "$SETTINGS_FILE" "$MEMGUARD_CMD"
+  fi
+fi
+
+# Memory accumulation guard hook (PreToolUse Write/Edit -- detects accumulating session state in MEMORY.md)
+if [ -f "$SCRIPT_DIR/templates/hooks/memory-accumulation-guard.js" ]; then
+  install_symlink "$SCRIPT_DIR/templates/hooks/memory-accumulation-guard.js" "$CLAUDE_DIR/hooks/memory-accumulation-guard.js" "memory accumulation guard: memory-accumulation-guard.js"
+
+  echo ""
+  echo "--- Configuring memory-accumulation-guard in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  MEMACCUM_CMD="node $CLAUDE_DIR/hooks/memory-accumulation-guard.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add memory-accumulation-guard PreToolUse hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    node -e "
+      const fs = require('fs');
+      const path = require('path');
+      const settingsPath = path.resolve(process.argv[1]);
+      const hookCmd = process.argv[2];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.hooks) settings.hooks = {};
+      if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+      const exists = settings.hooks.PreToolUse.some(e =>
+        e.hooks && e.hooks.some(h => h.command && h.command.includes('memory-accumulation-guard'))
+      );
+      if (!exists) {
+        settings.hooks.PreToolUse.push({
+          matcher: 'Write|Edit',
+          hooks: [{ type: 'command', command: hookCmd, timeout: 5 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+        console.log('CONFIGURED: memory-accumulation-guard PreToolUse hook (Write|Edit)');
+      } else {
+        console.log('ALREADY CONFIGURED: memory-accumulation-guard PreToolUse hook in settings.json');
+      }
+    " "$SETTINGS_FILE" "$MEMACCUM_CMD"
+  fi
+fi
+
 # Sycophancy detector hook (PostToolUse all tools -- detects sycophantic patterns)
 if [ -f "$SCRIPT_DIR/templates/hooks/sycophancy-detector.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/sycophancy-detector.js" "$CLAUDE_DIR/hooks/sycophancy-detector.js" "sycophancy detector: sycophancy-detector.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/sycophancy-detector.js" "$CLAUDE_DIR/hooks/sycophancy-detector.js" "sycophancy detector: sycophancy-detector.js"
 
   echo ""
   echo "--- Configuring sycophancy-detector in settings.json ---"
@@ -1009,7 +1203,7 @@ fi
 
 # Multi-image guard hook (PreToolUse Read -- blocks reading multiple images in one session)
 if [ -f "$SCRIPT_DIR/templates/hooks/multi-image-guard.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/multi-image-guard.js" "$CLAUDE_DIR/hooks/multi-image-guard.js" "multi-image guard: multi-image-guard.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/multi-image-guard.js" "$CLAUDE_DIR/hooks/multi-image-guard.js" "multi-image guard: multi-image-guard.js"
 
   echo ""
   echo "--- Configuring multi-image-guard in settings.json ---"
@@ -1051,7 +1245,7 @@ fi
 
 # Orphan file guard hook (PreToolUse Write -- blocks creating unreferenced files)
 if [ -f "$SCRIPT_DIR/templates/hooks/orphan-file-guard.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/orphan-file-guard.js" "$CLAUDE_DIR/hooks/orphan-file-guard.js" "orphan file guard: orphan-file-guard.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/orphan-file-guard.js" "$CLAUDE_DIR/hooks/orphan-file-guard.js" "orphan file guard: orphan-file-guard.js"
 
   echo ""
   echo "--- Configuring orphan-file-guard in settings.json ---"
@@ -1093,7 +1287,7 @@ fi
 
 # MCP server guard hook (PreToolUse all -- warns when project MCP servers are enabled globally)
 if [ -f "$SCRIPT_DIR/templates/hooks/mcp-server-guard.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/mcp-server-guard.js" "$CLAUDE_DIR/hooks/mcp-server-guard.js" "MCP server guard: mcp-server-guard.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/mcp-server-guard.js" "$CLAUDE_DIR/hooks/mcp-server-guard.js" "MCP server guard: mcp-server-guard.js"
 
   echo ""
   echo "--- Configuring mcp-server-guard in settings.json ---"
@@ -1132,9 +1326,49 @@ if [ -f "$SCRIPT_DIR/templates/hooks/mcp-server-guard.js" ]; then
   fi
 fi
 
+# MCP query interceptor (PreToolUse -- blocks MongoDB/Datadog/Snowflake calls when MCP_QUERY_INTERCEPT=1)
+if [ -f "$SCRIPT_DIR/templates/hooks/mcp-query-interceptor.js" ]; then
+  install_symlink "$SCRIPT_DIR/templates/hooks/mcp-query-interceptor.js" "$CLAUDE_DIR/hooks/mcp-query-interceptor.js" "MCP query interceptor: mcp-query-interceptor.js"
+
+  echo ""
+  echo "--- Configuring mcp-query-interceptor in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  MQI_CMD="node $CLAUDE_DIR/hooks/mcp-query-interceptor.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add mcp-query-interceptor PreToolUse hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    node -e "
+      const fs = require('fs');
+      const path = require('path');
+      const settingsPath = path.resolve(process.argv[1]);
+      const hookCmd = process.argv[2];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.hooks) settings.hooks = {};
+      if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+      const exists = settings.hooks.PreToolUse.some(e =>
+        e.hooks && e.hooks.some(h => h.command && h.command.includes('mcp-query-interceptor'))
+      );
+      if (!exists) {
+        settings.hooks.PreToolUse.push({
+          hooks: [{ type: 'command', command: hookCmd, timeout: 5 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+        console.log('CONFIGURED: mcp-query-interceptor PreToolUse hook (no matcher, all tools)');
+      } else {
+        console.log('ALREADY CONFIGURED: mcp-query-interceptor PreToolUse hook in settings.json');
+      }
+    " "$SETTINGS_FILE" "$MQI_CMD"
+  fi
+fi
+
 # Pre-compact snapshot hook (PreCompact -- saves emergency MEMORY.md snapshot before compaction)
 if [ -f "$SCRIPT_DIR/templates/hooks/pre-compact.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/pre-compact.js" "$CLAUDE_DIR/hooks/pre-compact.js" "pre-compact hook: pre-compact.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/pre-compact.js" "$CLAUDE_DIR/hooks/pre-compact.js" "pre-compact hook: pre-compact.js"
 
   echo ""
   echo "--- Configuring pre-compact in settings.json ---"
@@ -1171,7 +1405,7 @@ fi
 
 # Post-compact context injection hook (PostCompact -- re-injects memory context after compaction)
 if [ -f "$SCRIPT_DIR/templates/hooks/post-compact.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/post-compact.js" "$CLAUDE_DIR/hooks/post-compact.js" "post-compact hook: post-compact.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/post-compact.js" "$CLAUDE_DIR/hooks/post-compact.js" "post-compact hook: post-compact.js"
 
   echo ""
   echo "--- Configuring post-compact in settings.json ---"
@@ -1208,7 +1442,7 @@ fi
 
 # Stuck detector hook (PreToolUse -- blocks/warns when agent repeats the same action in a row)
 if [ -f "$SCRIPT_DIR/templates/hooks/stuck-detector.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/stuck-detector.js" "$CLAUDE_DIR/hooks/stuck-detector.js" "stuck detector: stuck-detector.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/stuck-detector.js" "$CLAUDE_DIR/hooks/stuck-detector.js" "stuck detector: stuck-detector.js"
 
   echo ""
   echo "--- Configuring stuck-detector in settings.json ---"
@@ -1245,7 +1479,7 @@ fi
 
 # Subagent recovery hook (PostToolUse Task -- detects truncated subagent output, writes recovery state)
 if [ -f "$SCRIPT_DIR/templates/hooks/subagent-recovery.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/subagent-recovery.js" "$CLAUDE_DIR/hooks/subagent-recovery.js" "subagent recovery: subagent-recovery.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/subagent-recovery.js" "$CLAUDE_DIR/hooks/subagent-recovery.js" "subagent recovery: subagent-recovery.js"
 
   echo ""
   echo "--- Configuring subagent-recovery in settings.json ---"
@@ -1283,7 +1517,7 @@ fi
 
 # Subagent context hook (SubagentStart -- injects project context and loop warnings into spawned subagents)
 if [ -f "$SCRIPT_DIR/templates/hooks/subagent-context.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/subagent-context.js" "$CLAUDE_DIR/hooks/subagent-context.js" "subagent context: subagent-context.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/subagent-context.js" "$CLAUDE_DIR/hooks/subagent-context.js" "subagent context: subagent-context.js"
 
   echo ""
   echo "--- Configuring subagent-context in settings.json ---"
@@ -1320,7 +1554,7 @@ fi
 
 # Tool failure logger hook (PostToolUseFailure -- logs tool errors to ~/.claude/logs/tool-failures.jsonl)
 if [ -f "$SCRIPT_DIR/templates/hooks/tool-failure-logger.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/tool-failure-logger.js" "$CLAUDE_DIR/hooks/tool-failure-logger.js" "tool failure logger: tool-failure-logger.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/tool-failure-logger.js" "$CLAUDE_DIR/hooks/tool-failure-logger.js" "tool failure logger: tool-failure-logger.js"
 
   echo ""
   echo "--- Configuring tool-failure-logger in settings.json ---"
@@ -1357,12 +1591,12 @@ fi
 
 # PII detector shared module (installed before sanitize-guard which depends on it)
 if [ -f "$SCRIPT_DIR/templates/hooks/pii-detector.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/pii-detector.js" "$CLAUDE_DIR/hooks/pii-detector.js" "pii detector module: pii-detector.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/pii-detector.js" "$CLAUDE_DIR/hooks/pii-detector.js" "pii detector module: pii-detector.js"
 fi
 
 # Sanitize guard hook (dual-mode: PostToolUse all tools + PreToolUse Edit/Write)
 if [ -f "$SCRIPT_DIR/templates/hooks/sanitize-guard.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/sanitize-guard.js" "$CLAUDE_DIR/hooks/sanitize-guard.js" "sanitize guard: sanitize-guard.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/sanitize-guard.js" "$CLAUDE_DIR/hooks/sanitize-guard.js" "sanitize guard: sanitize-guard.js"
 
   echo ""
   echo "--- Configuring sanitize-guard in settings.json ---"
@@ -1405,7 +1639,7 @@ fi
 
 # Filesize guard hook (PreToolUse: blocks oversized/binary file reads)
 if [ -f "$SCRIPT_DIR/templates/hooks/filesize-guard.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/filesize-guard.js" "$CLAUDE_DIR/hooks/filesize-guard.js" "filesize guard: filesize-guard.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/filesize-guard.js" "$CLAUDE_DIR/hooks/filesize-guard.js" "filesize guard: filesize-guard.js"
 
   echo ""
   echo "--- Configuring filesize-guard in settings.json ---"
@@ -1443,7 +1677,7 @@ fi
 
 # Read-once dedup hook (PreToolUse: blocks re-reads of unchanged files)
 if [ -f "$SCRIPT_DIR/templates/hooks/read-once-dedup.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/read-once-dedup.js" "$CLAUDE_DIR/hooks/read-once-dedup.js" "read-once dedup: read-once-dedup.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/read-once-dedup.js" "$CLAUDE_DIR/hooks/read-once-dedup.js" "read-once dedup: read-once-dedup.js"
 
   echo ""
   echo "--- Configuring read-once-dedup in settings.json ---"
@@ -1481,7 +1715,7 @@ fi
 
 # Bloat guard hook (PreToolUse: blocks oversized file writes)
 if [ -f "$SCRIPT_DIR/templates/hooks/bloat-guard.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/bloat-guard.js" "$CLAUDE_DIR/hooks/bloat-guard.js" "bloat guard: bloat-guard.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/bloat-guard.js" "$CLAUDE_DIR/hooks/bloat-guard.js" "bloat guard: bloat-guard.js"
 
   echo ""
   echo "--- Configuring bloat-guard in settings.json ---"
@@ -1519,7 +1753,7 @@ fi
 
 # Skill guard hook (PreToolUse: blocks unregistered skills, warns on repeats)
 if [ -f "$SCRIPT_DIR/templates/hooks/skill-guard.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/skill-guard.js" "$CLAUDE_DIR/hooks/skill-guard.js" "skill guard: skill-guard.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/skill-guard.js" "$CLAUDE_DIR/hooks/skill-guard.js" "skill guard: skill-guard.js"
 
   # Merge PreToolUse hook entry into settings.json (matcher: Skill)
   echo ""
@@ -1553,7 +1787,7 @@ fi
 
 # Task-completed gate hook (TaskCompleted -- quality gate that blocks teammate task completion if tests fail)
 if [ -f "$SCRIPT_DIR/templates/hooks/task-completed-gate.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/task-completed-gate.js" "$CLAUDE_DIR/hooks/task-completed-gate.js" "task completed gate: task-completed-gate.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/task-completed-gate.js" "$CLAUDE_DIR/hooks/task-completed-gate.js" "task completed gate: task-completed-gate.js"
 
   # Merge TaskCompleted hook entry into settings.json
   echo ""
@@ -1586,7 +1820,7 @@ fi
 
 # Teammate idle nudge hook (TeammateIdle -- nudges idle teammates to check TaskList)
 if [ -f "$SCRIPT_DIR/templates/hooks/teammate-idle.js" ]; then
-  install_file "$SCRIPT_DIR/templates/hooks/teammate-idle.js" "$CLAUDE_DIR/hooks/teammate-idle.js" "teammate idle hook: teammate-idle.js"
+  install_symlink "$SCRIPT_DIR/templates/hooks/teammate-idle.js" "$CLAUDE_DIR/hooks/teammate-idle.js" "teammate idle hook: teammate-idle.js"
 
   echo ""
   echo "--- Configuring teammate-idle in settings.json ---"
@@ -1613,6 +1847,245 @@ if [ -f "$SCRIPT_DIR/templates/hooks/teammate-idle.js" ]; then
       " "$SETTINGS_FILE" "$TEAMIDLE_CMD"
       echo "CONFIGURED: teammate-idle hook in settings.json (TeammateIdle)"
     fi
+  fi
+fi
+
+# Protect-main hook (PreToolUse:Bash -- blocks git commit on main/master branch)
+if [ -f "$SCRIPT_DIR/templates/hooks/protect-main.js" ]; then
+  install_symlink "$SCRIPT_DIR/templates/hooks/protect-main.js" "$CLAUDE_DIR/hooks/protect-main.js" "protect-main hook: protect-main.js"
+
+  echo ""
+  echo "--- Configuring protect-main in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  PM_CMD="node $CLAUDE_DIR/hooks/protect-main.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add protect-main PreToolUse:Bash hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    node -e "
+      const fs = require('fs');
+      const path = require('path');
+      const settingsPath = path.resolve(process.argv[1]);
+      const hookCmd = process.argv[2];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.hooks) settings.hooks = {};
+      if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+      const exists = settings.hooks.PreToolUse.some(e =>
+        e.hooks && e.hooks.some(h => h.command && h.command.includes('protect-main'))
+      );
+      if (!exists) {
+        settings.hooks.PreToolUse.push({
+          matcher: 'Bash',
+          hooks: [{ type: 'command', command: hookCmd, timeout: 5 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+        console.log('CONFIGURED: protect-main PreToolUse hook (matcher: Bash)');
+      } else {
+        console.log('ALREADY CONFIGURED: protect-main hook in settings.json');
+      }
+    " "$SETTINGS_FILE" "$PM_CMD"
+  fi
+fi
+
+# Checkpoint discipline hook (PreToolUse Agent|Write|Edit -- checkpoint preflight + fake checkpoint detection)
+if [ -f "$SCRIPT_DIR/templates/hooks/checkpoint-discipline.js" ]; then
+  install_symlink "$SCRIPT_DIR/templates/hooks/checkpoint-discipline.js" "$CLAUDE_DIR/hooks/checkpoint-discipline.js" "checkpoint discipline: checkpoint-discipline.js"
+
+  echo ""
+  echo "--- Configuring checkpoint-discipline in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  CPD_CMD="node $CLAUDE_DIR/hooks/checkpoint-discipline.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add checkpoint-discipline PreToolUse hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    node -e "
+      const fs = require('fs');
+      const path = require('path');
+      const settingsPath = path.resolve(process.argv[1]);
+      const hookCmd = process.argv[2];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.hooks) settings.hooks = {};
+      if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+      const exists = settings.hooks.PreToolUse.some(e =>
+        e.hooks && e.hooks.some(h => h.command && h.command.includes('checkpoint-discipline'))
+      );
+      if (!exists) {
+        settings.hooks.PreToolUse.push({
+          matcher: 'Agent|Write|Edit',
+          hooks: [{ type: 'command', command: hookCmd, timeout: 5 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+        console.log('CONFIGURED: checkpoint-discipline PreToolUse hook (Agent|Write|Edit)');
+      } else {
+        console.log('ALREADY CONFIGURED: checkpoint-discipline hook in settings.json');
+      }
+    " "$SETTINGS_FILE" "$CPD_CMD"
+  fi
+fi
+
+# Evidence gate hook (PreToolUse Write/Edit -- enforces citation in findings and memory files)
+if [ -f "$SCRIPT_DIR/templates/hooks/evidence-gate.js" ]; then
+  install_symlink "$SCRIPT_DIR/templates/hooks/evidence-gate.js" "$CLAUDE_DIR/hooks/evidence-gate.js" "evidence gate: evidence-gate.js"
+
+  echo ""
+  echo "--- Configuring evidence-gate in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  EG_CMD="node $CLAUDE_DIR/hooks/evidence-gate.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add evidence-gate PreToolUse:Write|Edit hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    node -e "
+      const fs = require('fs');
+      const path = require('path');
+      const settingsPath = path.resolve(process.argv[1]);
+      const hookCmd = process.argv[2];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.hooks) settings.hooks = {};
+      if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+      const exists = settings.hooks.PreToolUse.some(e =>
+        e.hooks && e.hooks.some(h => h.command && h.command.includes('evidence-gate'))
+      );
+      if (!exists) {
+        settings.hooks.PreToolUse.push({
+          matcher: 'Write|Edit',
+          hooks: [{ type: 'command', command: hookCmd, timeout: 5 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+        console.log('CONFIGURED: evidence-gate PreToolUse hook (Write|Edit)');
+      } else {
+        console.log('ALREADY CONFIGURED: evidence-gate hook in settings.json');
+      }
+    " "$SETTINGS_FILE" "$EG_CMD"
+  fi
+fi
+
+# MCP data guard hook (PreToolUse -- validates MongoDB/Datadog/Snowflake inputs, blocks phantom collections/bare ObjectIds/empty filters/missing LIMIT/wide Datadog ranges, auto-fixes missing limits)
+if [ -f "$SCRIPT_DIR/templates/hooks/mcp-data-guard.js" ]; then
+  install_symlink "$SCRIPT_DIR/templates/hooks/mcp-data-guard.js" "$CLAUDE_DIR/hooks/mcp-data-guard.js" "MCP data guard: mcp-data-guard.js"
+
+  echo ""
+  echo "--- Configuring mcp-data-guard in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  MDG_CMD="node $CLAUDE_DIR/hooks/mcp-data-guard.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add mcp-data-guard PreToolUse hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    node - "$SETTINGS_FILE" "$MDG_CMD" <<'NODEJS'
+      const fs = require('fs');
+      const settingsPath = process.argv[2];
+      const hookCmd = process.argv[3];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.hooks) settings.hooks = {};
+      if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+      const exists = settings.hooks.PreToolUse.some(e =>
+        e.hooks && e.hooks.some(h => h.command && h.command.includes('mcp-data-guard'))
+      );
+      if (!exists) {
+        settings.hooks.PreToolUse.push({
+          hooks: [{ type: 'command', command: hookCmd, timeout: 5 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+        console.log('CONFIGURED: mcp-data-guard PreToolUse hook');
+      } else {
+        console.log('ALREADY CONFIGURED: mcp-data-guard hook in settings.json');
+      }
+NODEJS
+  fi
+fi
+
+if [ -f "$SCRIPT_DIR/templates/hooks/mcp-result-advisor.js" ]; then
+  install_symlink "$SCRIPT_DIR/templates/hooks/mcp-result-advisor.js" "$CLAUDE_DIR/hooks/mcp-result-advisor.js" "MCP result advisor: mcp-result-advisor.js"
+
+  echo ""
+  echo "--- Configuring mcp-result-advisor in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  MRA_CMD="node $CLAUDE_DIR/hooks/mcp-result-advisor.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add mcp-result-advisor PostToolUse hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    node - "$SETTINGS_FILE" "$MRA_CMD" <<'NODEJS'
+      const fs = require('fs');
+      const settingsPath = process.argv[2];
+      const hookCmd = process.argv[3];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.hooks) settings.hooks = {};
+      if (!settings.hooks.PostToolUse) settings.hooks.PostToolUse = [];
+      const exists = settings.hooks.PostToolUse.some(e =>
+        e.hooks && e.hooks.some(h => h.command && h.command.includes('mcp-result-advisor'))
+      );
+      if (!exists) {
+        settings.hooks.PostToolUse.push({
+          matcher: 'mcp__mongodb__|mcp__datadog__|mcp__snowflake__',
+          hooks: [{ type: 'command', command: hookCmd, timeout: 5 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+        console.log('CONFIGURED: mcp-result-advisor PostToolUse hook');
+      } else {
+        console.log('ALREADY CONFIGURED: mcp-result-advisor hook in settings.json');
+      }
+NODEJS
+  fi
+fi
+
+# Rejection advisor hook (PostToolUseFailure -- injects analysis advice when user rejects a tool call)
+if [ -f "$SCRIPT_DIR/templates/hooks/rejection-advisor.js" ]; then
+  install_symlink "$SCRIPT_DIR/templates/hooks/rejection-advisor.js" "$CLAUDE_DIR/hooks/rejection-advisor.js" "Rejection advisor: rejection-advisor.js"
+
+  echo ""
+  echo "--- Configuring rejection-advisor in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  RA_CMD="node $CLAUDE_DIR/hooks/rejection-advisor.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add rejection-advisor PostToolUseFailure hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo '{"hooks":{}}' > "$SETTINGS_FILE"
+    fi
+    node -e '
+      const fs = require("fs");
+      const settingsPath = process.argv[1];
+      const hookCmd = process.argv[2];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+      if (!settings.hooks) settings.hooks = {};
+      if (!settings.hooks.PostToolUseFailure) settings.hooks.PostToolUseFailure = [];
+      const exists = settings.hooks.PostToolUseFailure.some(e =>
+        e.hooks && e.hooks.some(h => h.command && h.command.includes("rejection-advisor"))
+      );
+      if (!exists) {
+        settings.hooks.PostToolUseFailure.push({
+          hooks: [{ type: "command", command: hookCmd, timeout: 3 }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
+        console.log("CONFIGURED: rejection-advisor PostToolUseFailure hook");
+      } else {
+        console.log("ALREADY CONFIGURED: rejection-advisor hook in settings.json");
+      }
+    ' "$SETTINGS_FILE" "$RA_CMD"
   fi
 fi
 
@@ -1750,6 +2223,38 @@ if [ -f "$SCRIPT_DIR/scripts/repo-fleet-index.sh" ]; then
   fi
 else
   echo "SKIPPED: scripts/repo-fleet-index.sh (not found)"
+fi
+
+# --- PHI-safe MCP servers ---
+
+echo ""
+echo "--- Installing PHI-safe MCP servers ---"
+
+MCP_SERVERS_DIR="$SCRIPT_DIR/mcp-servers"
+
+# Print template path for reference
+OPERATIONS_TEMPLATE="$SCRIPT_DIR/templates/operations.md.template"
+if [ -f "$OPERATIONS_TEMPLATE" ]; then
+  echo "Template available: templates/operations.md.template (copy and customize for your project)"
+fi
+
+if [ ! -d "$MCP_SERVERS_DIR" ]; then
+  echo "SKIPPED: mcp-servers/ directory not found"
+else
+  for server_dir in "$MCP_SERVERS_DIR"/*/; do
+    name="$(basename "$server_dir")"
+    if [ -f "$server_dir/package.json" ]; then
+      if [ "$DRY_RUN" = true ]; then
+        echo "[DRY RUN] Would run: npm install in mcp-servers/$name/"
+      else
+        echo "Installing dependencies for mcp-servers/$name/ ..."
+        (cd "$server_dir" && npm install --silent 2>&1 | tail -1) || echo "  WARNING: npm install failed for $name"
+        echo "INSTALLED: mcp-servers/$name/ dependencies"
+      fi
+    else
+      echo "SKIPPED: mcp-servers/$name/ (no package.json)"
+    fi
+  done
 fi
 
 # --- MCP Server Registry ---

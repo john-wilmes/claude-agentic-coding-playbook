@@ -180,7 +180,7 @@ process.stdin.on("end", () => {
 
     if (messages.length > 0) {
       process.stdout.write(JSON.stringify({
-        hookSpecificOutput: { additionalContext: messages.join("\n\n") },
+        hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: messages.join("\n\n") },
       }));
     } else {
       process.stdout.write(JSON.stringify({}));

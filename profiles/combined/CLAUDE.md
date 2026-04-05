@@ -182,3 +182,11 @@ When the `presidio` MCP server is also enabled, it supplements the hook with NLP
 
 - Every project must have a `.gitignore` before first commit. At minimum: `node_modules/`, `dist/`, `.env*`, `*.log`, OS files.
 - Never commit files over 5MB. Host large files externally and reference by URL.
+
+## Supplemental Rules
+
+Additional rules are loaded from `~/.claude/rules/`:
+- `hooks.md` — hook authoring conventions
+- `testing.md` — test authoring conventions
+- `operations.md` — MCP tool reference and data access policy (MongoDB, Datadog, Snowflake, ClickUp)
+- `codebase-reference.md` — repo ownership, collection discriminators, data layer conventions

@@ -19,8 +19,8 @@ const SESSION_DIR = path.join(os.tmpdir(), "claude-tool-failures");
 // ─── Session failure tracking ───────────────────────────────────────────────
 
 function getSessionFile(sessionId) {
-  try { fs.mkdirSync(SESSION_DIR, { recursive: true }); } catch {}
-  return path.join(SESSION_DIR, `${sessionId || "unknown"}.json`);
+  try { fs.mkdirSync(SESSION_DIR, { recursive: true, mode: 0o700 }); } catch {}
+  return path.join(SESSION_DIR, `${path.basename(sessionId || "unknown")}.json`);
 }
 
 function loadSessionCounts(sessionId) {

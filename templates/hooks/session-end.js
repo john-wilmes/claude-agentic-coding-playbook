@@ -18,6 +18,14 @@ try { knowledgeDb = require("./knowledge-db"); } catch { knowledgeDb = null; }
 const LOG_DIR = path.join(os.homedir(), ".claude");
 const LOG_FILE = path.join(LOG_DIR, "hooks.log");
 
+function respond(payload = {}) {
+  try {
+    process.stdout.write(JSON.stringify(payload), () => process.exit(0));
+  } catch {
+    process.stdout.write("{}", () => process.exit(0));
+  }
+}
+
 // ─── Retrieval miss detection ─────────────────────────────────────────────────
 
 function extractSalientTerms(text, maxTerms = 8) {
@@ -82,8 +90,9 @@ function detectRetrievalMisses(sessionId, cwd) {
           // Direct LIKE fallback: find active entries matching at least one term in context
           // (FTS5 cross-connection returns empty without error on some SQLite versions)
           try {
-            const likeClause = queryTerms.map(() => "(context_text LIKE ? OR fix_text LIKE ?)").join(" OR ");
-            const params = queryTerms.flatMap(t => [`%${t}%`, `%${t}%`]);
+            const likeClause = queryTerms.map(() => "(context_text LIKE ? ESCAPE '\\' OR fix_text LIKE ? ESCAPE '\\')").join(" OR ");
+            const escapeLike = (t) => t.replace(/[\\%_]/g, c => `\\${c}`);
+            const params = queryTerms.flatMap(t => { const e = escapeLike(t); return [`%${e}%`, `%${e}%`]; });
             const toolFilter = candidateTool ? "tool = ? AND " : "";
             const toolParams = candidateTool ? [candidateTool] : [];
             const stmt = db.prepare(
@@ -125,6 +134,95 @@ function detectRetrievalMisses(sessionId, cwd) {
   }
 }
 
+// ─── Auto-promote staged candidates ──────────────────────────────────────────
+
+function _generateEntryId(title) {
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, "")
+    .replace(/\s+/g, "-")
+    .slice(0, 40)
+    .replace(/-+$/, "");
+  return `${date}-${slug}`;
+}
+
+function _mapStagedToEntry(row) {
+  const summary = (row.summary || "").trim();
+  const snippet = (row.context_snippet || "").trim();
+  if (!snippet) return null;
+  const title = summary ? summary.slice(0, 120) : snippet.slice(0, 120);
+  let body = snippet;
+  if (row.trigger) body = `Trigger: ${row.trigger}. ${body}`;
+  const tags = [];
+  if (row.category && row.category.trim()) tags.push(row.category.trim());
+  if (row.trigger && row.trigger.trim()) {
+    const t = row.trigger.trim();
+    if (!tags.includes(t)) tags.push(t);
+  }
+  if (row.confidence && row.confidence.trim() && row.confidence.trim() !== "medium") {
+    tags.push(row.confidence.trim());
+  }
+  return { title, body, tags, project: row.source_project || "", source: row.cwd || "", tool: row.tool || "", category: row.category || "pattern", confidence: row.confidence || "medium" };
+}
+
+function autoPromoteStagedCandidates(db, sessionId) {
+  try {
+    if (!db || !knowledgeDb) return 0;
+    const candidates = knowledgeDb.readStagedCandidates(db, sessionId);
+    if (!candidates || candidates.length === 0) return 0;
+    const existingTitles = new Set(
+      db.prepare("SELECT context_text FROM entries WHERE status = 'active'").all()
+        .map(r => (r.context_text || "").split("\n")[0])
+        .filter(Boolean)
+    );
+    let promoted = 0;
+    const promotedIds = [];
+    db.exec("BEGIN");
+    try {
+      for (const row of candidates) {
+        const mapped = _mapStagedToEntry(row);
+        if (!mapped) continue;
+        const firstLine = mapped.title.split("\n")[0];
+        if (existingTitles.has(firstLine)) continue;
+        existingTitles.add(firstLine);
+        let id = _generateEntryId(mapped.title);
+        let suffix = 1;
+        while (db.prepare("SELECT id FROM entries WHERE id = ?").get(id)) {
+          id = `${_generateEntryId(mapped.title)}-${suffix++}`;
+        }
+        knowledgeDb.insertEntry(db, {
+          id,
+          created: new Date().toISOString(),
+          source_project: mapped.project,
+          tool: mapped.tool,
+          category: mapped.category,
+          tags: JSON.stringify(mapped.tags),
+          confidence: mapped.confidence,
+          visibility: "global",
+          status: "active",
+          context_text: `${mapped.title}\n\n${mapped.body}`,
+          evidence_text: mapped.source,
+        });
+        promotedIds.push(row.id);
+        promoted++;
+      }
+      if (promotedIds.length > 0) {
+        const placeholders = promotedIds.map(() => "?").join(", ");
+        db.prepare(`DELETE FROM staged_candidates WHERE id IN (${placeholders})`).run(...promotedIds);
+      }
+      db.exec("COMMIT");
+    } catch (txErr) {
+      try { db.exec("ROLLBACK"); } catch {}
+      throw txErr;
+    }
+    return promoted;
+  } catch (e) {
+    process.stderr.write(`[session-end] auto-promote error: ${e && e.message}\n`);
+    return 0;
+  }
+}
+
 function logEntry(msg) {
   try {
     if (logModule) {
@@ -135,6 +233,11 @@ function logEntry(msg) {
       fs.appendFileSync(LOG_FILE, line);
     }
   } catch {}
+}
+
+// Export helpers for unit testing (guarded so this file still works as a hook)
+if (typeof module !== "undefined") {
+  module.exports = { _mapStagedToEntry, _generateEntryId };
 }
 
 let input = "";
@@ -224,6 +327,20 @@ process.stdin.on("end", () => {
       try { capture.pruneStagedFiles(7); } catch {}
     }
 
+    // Auto-promote staged knowledge candidates to entries
+    if (knowledgeDb) {
+      try {
+        const promoteDb = knowledgeDb.openDb();
+        if (promoteDb) {
+          const promoted = autoPromoteStagedCandidates(promoteDb, sessionId);
+          if (promoted > 0) logEntry(`knowledge auto-promote: ${promoted} candidate(s) promoted`);
+          promoteDb.close();
+        }
+      } catch (e) {
+        process.stderr.write(`[session-end] auto-promote error: ${e && e.message}\n`);
+      }
+    }
+
     // Run stale archive once per day
     try {
       const archiveStateFile = path.join(os.tmpdir(), "claude-knowledge-archive-last.txt");
@@ -252,19 +369,17 @@ process.stdin.on("end", () => {
     } catch {}
 
     if (pushFailureMsg) {
-      process.stdout.write(JSON.stringify({
+      return respond({
         hookSpecificOutput: {
           hookEventName: "SessionEnd",
           additionalContext: `WARNING: memory auto-push failed: ${pushFailureMsg}`,
         },
-      }));
+      });
     } else {
-      process.stdout.write("{}");
+      return respond();
     }
   } catch (err) {
     logEntry(`error: ${err.message}`);
-    process.stdout.write("{}");
+    return respond();
   }
-
-  process.exit(0);
 });

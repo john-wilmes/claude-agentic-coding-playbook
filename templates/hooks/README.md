@@ -37,12 +37,13 @@ Claude Code hook scripts that run automatically during sessions. These are insta
 | `sycophancy-detector.js` | all tools | Detects behavioral patterns indicating sycophancy — rubber-stamping, compliance without investigation, shallow reviews. Warns via PostToolUse advisory. |
 | `context-guard.js` | all tools | Reads transcript token usage and advises at 35%/50%, warns at 60%, writes failsafe sentinel at 75% for claude-loop restart. |
 | `subagent-recovery.js` | `Task` | Detects truncated subagent output and writes recovery state for the parent agent to act on. |
+| `mcp-result-advisor.js` | `mcp__mongodb__\|mcp__datadog__\|mcp__snowflake__` | Injects cheat sheet on first MCP data call per session and troubleshooting tips on zero-result queries. |
 
 ## PostToolUseFailure Hooks
 
 | File | Matcher | Description |
 |------|---------|-------------|
-| `tool-failure-logger.js` | all tools | Logs tool errors to `~/.claude/logs/tool-failures.jsonl` for post-session analysis. |
+| `tool-failure-logger.js` | all tools | Logs tool errors to the shared `~/.claude/logs/YYYY-MM-DD.jsonl` log and warns the agent when the same tool fails repeatedly within a session. |
 
 ## TaskCompleted Hooks
 

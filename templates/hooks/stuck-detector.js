@@ -16,6 +16,10 @@
 //
 // On any error: outputs {} and exits 0 — never blocks unexpectedly.
 
+function respond(payload = {}) {
+  process.stdout.write(JSON.stringify(payload), () => process.exit(0));
+}
+
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
@@ -53,7 +57,7 @@ const WHITELISTED_PREFIXES = [
 
 function getStateDir() {
   const dir = path.join(os.tmpdir(), "claude-stuck-detector");
-  try { fs.mkdirSync(dir, { recursive: true }); } catch {}
+  try { fs.mkdirSync(dir, { mode: 0o700, recursive: true }); } catch {}
   return dir;
 }
 
@@ -63,7 +67,8 @@ function getStateKey(sessionId) {
 }
 
 function getStateFile(sessionId) {
-  return path.join(getStateDir(), `${getStateKey(sessionId)}.json`);
+  const safeKey = (getStateKey(sessionId) || "default").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
+  return path.join(getStateDir(), `${safeKey}.json`);
 }
 
 const STATE_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
@@ -147,8 +152,7 @@ process.stdin.on("end", () => {
 
     // Subagents have disposable context — skip stuck detection.
     if (hookInput.agent_id) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     const sessionId = hookInput.session_id || "unknown";
@@ -159,8 +163,7 @@ process.stdin.on("end", () => {
     if (toolName === "Bash" && toolInput.command) {
       const cmd = toolInput.command.trim();
       if (WHITELISTED_PREFIXES.some((prefix) => cmd.startsWith(prefix))) {
-        process.stdout.write(JSON.stringify({}));
-        process.exit(0);
+        return respond();
       }
     }
 
@@ -223,7 +226,7 @@ process.stdin.on("end", () => {
         project: hookInput.cwd,
         context: { consecutive, tool: toolName },
       });
-      process.stdout.write(JSON.stringify({
+      return respond({
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
           permissionDecision: "deny",
@@ -231,8 +234,7 @@ process.stdin.on("end", () => {
             "Stuck detector: 5 identical actions in a row. You appear to be stuck. " +
             "Try a completely different approach or ask the user for help.",
         },
-      }));
-      process.exit(0);
+      });
     }
 
     if (consecutive >= WARN_THRESHOLD) {
@@ -245,15 +247,14 @@ process.stdin.on("end", () => {
         project: hookInput.cwd,
         context: { consecutive, tool: toolName },
       });
-      process.stdout.write(JSON.stringify({
+      return respond({
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
           additionalContext:
             "Stuck detector: you have repeated the same action 3 times. " +
             "Try a different approach or ask the user.",
         },
-      }));
-      process.exit(0);
+      });
     }
 
     // Cycle detection: look for repeating patterns of length 2–6
@@ -269,7 +270,7 @@ process.stdin.on("end", () => {
           project: hookInput.cwd,
           context: { cycle_length: cycle.length, repetitions: cycle.repetitions, tool: toolName },
         });
-        process.stdout.write(JSON.stringify({
+        return respond({
           hookSpecificOutput: {
             hookEventName: "PreToolUse",
             permissionDecision: "deny",
@@ -278,8 +279,7 @@ process.stdin.on("end", () => {
               `repeated ${cycle.repetitions} times. You are in a loop. ` +
               "Try a completely different approach or ask the user for help.",
           },
-        }));
-        process.exit(0);
+        });
       }
       if (cycle.repetitions >= CYCLE_WARN_REPS) {
         log.writeLog({
@@ -291,7 +291,7 @@ process.stdin.on("end", () => {
           project: hookInput.cwd,
           context: { cycle_length: cycle.length, repetitions: cycle.repetitions, tool: toolName },
         });
-        process.stdout.write(JSON.stringify({
+        return respond({
           hookSpecificOutput: {
             hookEventName: "PreToolUse",
             additionalContext:
@@ -299,15 +299,12 @@ process.stdin.on("end", () => {
               `repeated ${cycle.repetitions} times. You may be in a loop. ` +
               "Try a different approach or ask the user.",
           },
-        }));
-        process.exit(0);
+        });
       }
     }
 
-    process.stdout.write(JSON.stringify({}));
-    process.exit(0);
+    return respond();
   } catch {
-    process.stdout.write(JSON.stringify({}));
-    process.exit(0);
+    return respond();
   }
 });

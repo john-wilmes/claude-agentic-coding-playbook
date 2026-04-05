@@ -1,5 +1,37 @@
 sanitization:
   enabled: true
+  entities:
+    # Regex-based (always available, no extra dependencies)
+    - US_SSN
+    - EMAIL
+    - PHONE_US
+    - CREDIT_CARD
+    - IP_ADDRESS
+    - MRN
+    - DOB
+    - IBAN_CODE
+    - US_ITIN
+    - US_PASSPORT
+    - CRYPTO
+    - UK_NHS
+    - SG_NRIC_FIN
+    - AU_ABN
+    - AU_TFN
+    - IN_PAN
+    - IN_AADHAAR
+    - AU_MEDICARE
+    - IN_VEHICLE_REGISTRATION
+    - DATE_TIME
+    - URL
+    # NLP-based: set PRESIDIO_AVAILABLE=1 env var to enable these
+    # Requires Presidio MCP server configured in ~/.claude.json
+    # - PERSON
+    # - LOCATION
+    # - NRP
+    # - PHONE_NUMBER
+    # - MEDICAL_LICENSE
+    # - US_DRIVER_LICENSE
+    # - AU_ACN
   exclude_paths:
     - "tests/fixtures/**"
     - "test/fixtures/**"

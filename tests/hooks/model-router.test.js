@@ -57,7 +57,7 @@ test("1. Explore subagent_type -> haiku", (env) => {
 
   assert.strictEqual(result.status, 0);
   assert.ok(result.json, "Should output valid JSON");
-  assert.strictEqual(result.json.decision, undefined);
+  assert.ok(!result.json?.hookSpecificOutput?.permissionDecision || result.json.hookSpecificOutput.permissionDecision !== "deny");
   assert.strictEqual(result.json.hookSpecificOutput.updatedInput.model, "haiku");
   assert.ok(result.json.hookSpecificOutput.additionalContext.includes("haiku"));
 });
@@ -108,7 +108,7 @@ test("6. Explicit model set -> no override", (env) => {
     prompt: "Design the architecture for the new auth system",
   }, env);
 
-  assert.strictEqual(result.json.decision, undefined);
+  assert.ok(!result.json?.hookSpecificOutput?.permissionDecision || result.json.hookSpecificOutput.permissionDecision !== "deny");
   assert.strictEqual(result.json.hookSpecificOutput, undefined, "Should not set hookSpecificOutput when model is explicit");
 });
 
@@ -147,7 +147,7 @@ test("10. Non-Task tool -> allow without changes", (env) => {
   }, { HOME: env.home, USERPROFILE: env.home });
 
   assert.strictEqual(result.status, 0);
-  assert.strictEqual(result.json.decision, undefined);
+  assert.ok(!result.json?.hookSpecificOutput?.permissionDecision || result.json.hookSpecificOutput.permissionDecision !== "deny");
   assert.strictEqual(result.json.hookSpecificOutput, undefined);
 });
 

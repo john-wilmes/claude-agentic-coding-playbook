@@ -30,7 +30,7 @@ function test(name, fn) {
 
 // Helper: clean up warning flag for a session
 function cleanFlag(sessionId) {
-  const p = path.join(os.tmpdir(), `claude-mcp-warned-${sessionId}`);
+  const p = path.join(os.tmpdir(), "claude-mcp-server-guard", `claude-mcp-warned-${sessionId}`);
   try { fs.unlinkSync(p); } catch {}
 }
 

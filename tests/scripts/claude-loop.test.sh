@@ -641,8 +641,8 @@ t_auto_commit_commits() {
   touch "${tmpdir}/initial.txt"
   git -C "${tmpdir}" add -A
   git -C "${tmpdir}" commit -q -m "initial"
-  # Create an uncommitted file
-  echo "new content" > "${tmpdir}/work.txt"
+  # Modify a tracked file (auto_commit_task uses git add -u, not -A)
+  echo "new content" >> "${tmpdir}/initial.txt"
   # Run auto_commit_task from inside the repo
   (cd "${tmpdir}" && auto_commit_task "Test task")
   # Verify the commit was created
@@ -1376,6 +1376,74 @@ EOF
     || { echo "dry-run did not show success pattern; output: ${out}"; return 1; }
 }
 run_test "--dry-run shows --output-dir and --success-pattern" t_dry_run_new_flags
+
+# ─── Test: --investigation flag in --help ─────────────────────────────────────
+
+t_help_investigation() {
+  local out
+  out="$(bash "${SCRIPT}" --help 2>&1)"
+  echo "${out}" | grep -q "\-\-investigation" \
+    || { echo "--help output did not contain '--investigation'"; return 1; }
+}
+run_test "--help lists --investigation flag" t_help_investigation
+
+# ─── Test: --investigation requires argument ──────────────────────────────────
+
+t_investigation_requires_arg() {
+  local out rc=0
+  out="$(bash "${SCRIPT}" --investigation 2>&1)" || rc=$?
+  [[ ${rc} -ne 0 ]] \
+    || { echo "--investigation without arg should fail"; return 1; }
+  echo "${out}" | grep -q "requires an ID" \
+    || { echo "expected 'requires an ID' error; got: ${out}"; return 1; }
+}
+run_test "--investigation requires an ID argument" t_investigation_requires_arg
+
+# ─── Test: --investigation validates ID characters ────────────────────────────
+
+t_investigation_validates_id() {
+  local out rc=0
+  out="$(bash "${SCRIPT}" --investigation "../bad/id" 2>&1)" || rc=$?
+  [[ ${rc} -ne 0 ]] \
+    || { echo "--investigation with invalid chars should fail"; return 1; }
+  echo "${out}" | grep -q "alphanumeric" \
+    || { echo "expected validation error; got: ${out}"; return 1; }
+}
+run_test "--investigation rejects invalid ID characters" t_investigation_validates_id
+
+# ─── Test: --investigation scopes lock file differently ───────────────────────
+
+t_investigation_scopes_lock() {
+  local out_default out_inv1 out_inv2
+  out_default="$(bash "${SCRIPT}" --dry-run 2>&1)"
+  out_inv1="$(bash "${SCRIPT}" --investigation TEST-001 --dry-run 2>&1)"
+  out_inv2="$(bash "${SCRIPT}" --investigation TEST-002 --dry-run 2>&1)"
+
+  # Extract lock file paths
+  local lock_default lock_inv1 lock_inv2
+  lock_default="$(echo "${out_default}" | grep "Lock file" | awk '{print $NF}')"
+  lock_inv1="$(echo "${out_inv1}" | grep "Lock file" | awk '{print $NF}')"
+  lock_inv2="$(echo "${out_inv2}" | grep "Lock file" | awk '{print $NF}')"
+
+  [[ -n "${lock_default}" && -n "${lock_inv1}" && -n "${lock_inv2}" ]] \
+    || { echo "failed to parse lock file path(s) from dry-run output"; return 1; }
+
+  [[ "${lock_default}" != "${lock_inv1}" ]] \
+    || { echo "investigation lock should differ from default; both: ${lock_default}"; return 1; }
+  [[ "${lock_inv1}" != "${lock_inv2}" ]] \
+    || { echo "different investigation IDs should produce different locks; both: ${lock_inv1}"; return 1; }
+}
+run_test "--investigation scopes lock file by ID" t_investigation_scopes_lock
+
+# ─── Test: --investigation appears in dry-run output ─────────────────────────
+
+t_investigation_in_dry_run() {
+  local out
+  out="$(bash "${SCRIPT}" --investigation MY-INV --dry-run 2>&1)"
+  echo "${out}" | grep -q "MY-INV" \
+    || { echo "dry-run should show investigation ID; got: ${out}"; return 1; }
+}
+run_test "--investigation ID appears in dry-run output" t_investigation_in_dry_run
 
 # ─── Summary ──────────────────────────────────────────────────────────────────
 

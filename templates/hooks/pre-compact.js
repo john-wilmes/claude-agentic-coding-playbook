@@ -8,10 +8,14 @@
 //
 // On any error, outputs {} and exits 0 — never blocks compaction.
 
+function respond(payload = {}) {
+  process.stdout.write(JSON.stringify(payload), () => process.exit(0));
+}
+
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { execSync } = require("child_process");
+const { execFileSync } = require("child_process");
 
 function getStateDir() {
   const dir = path.join(os.tmpdir(), "claude-pre-compact");
@@ -20,15 +24,15 @@ function getStateDir() {
 }
 
 function alreadySnapshotted(sessionId) {
-  const stateFile = path.join(getStateDir(), `${sessionId}.done`);
+  const stateFile = path.join(getStateDir(), `${path.basename(sessionId)}.done`);
   if (fs.existsSync(stateFile)) return true;
   try { fs.writeFileSync(stateFile, "1"); } catch {}
   return false;
 }
 
-function runGit(cmd, cwd) {
+function runGit(args, cwd) {
   try {
-    return execSync(cmd, { cwd, encoding: "utf8", timeout: 5000 }).trim();
+    return execFileSync("git", args, { cwd, encoding: "utf8", timeout: 5000 }).trim();
   } catch {
     return "";
   }
@@ -101,12 +105,11 @@ process.stdin.on("end", () => {
 
     // Deduplicate: one snapshot per session is enough
     if (alreadySnapshotted(sessionId)) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
-    const branch = runGit("git rev-parse --abbrev-ref HEAD", cwd);
-    const statusRaw = runGit("git status --porcelain", cwd);
+    const branch = runGit(["rev-parse", "--abbrev-ref", "HEAD"], cwd);
+    const statusRaw = runGit(["status", "--porcelain"], cwd);
     const modifiedFiles = statusRaw
       .split("\n")
       .map((l) => l.trim())
@@ -116,16 +119,14 @@ process.stdin.on("end", () => {
     const snapshotSection = buildSnapshotSection(trigger, branch, modifiedFiles);
     upsertSnapshot(memFile, snapshotSection);
 
-    process.stdout.write(JSON.stringify({
+    return respond({
       hookSpecificOutput: {
         hookEventName: "PreCompact",
         additionalContext:
           "Pre-compact snapshot saved. SessionStart will restore memory context on the next session.",
       },
-    }));
-    process.exit(0);
+    });
   } catch {
-    process.stdout.write(JSON.stringify({}));
-    process.exit(0);
+    return respond();
   }
 });

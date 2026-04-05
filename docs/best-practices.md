@@ -2249,7 +2249,7 @@ different names — no existing file is touched (design principle).
 
 ### Taxonomy
 
-Six flat categories — no hierarchy deeper than one level. Hierarchical classifiers
+Nine flat categories — no hierarchy deeper than one level. Hierarchical classifiers
 show error cascade: wrong classification at level 1 propagates to all sublevels.
 A flat taxonomy with clear definitions achieves >90% accuracy on auto-classification (operational finding from dogfood testing).
 
@@ -2261,6 +2261,9 @@ A flat taxonomy with clear definitions achieves >90% accuracy on auto-classifica
 | `config` | Configuration requirement or setting |
 | `security` | Security-related finding |
 | `performance` | Optimization or bottleneck insight |
+| `convention` | Project-specific conventions or coding standards |
+| `reference` | Factual reference: API endpoints, config keys, schema details |
+| `decision` | Architectural/design decisions with rationale |
 
 Tags provide the second dimension for cross-cutting concerns (e.g., `windows`,
 `ci`, `typescript`).
@@ -2326,7 +2329,7 @@ Defenses:
 
 **macOS / Linux:**
 ```bash
-git clone https://github.com/john-wilmes/claude-agentic-coding-playbook.git
+git clone https://github.com/YOUR_ORG/claude-agentic-coding-playbook.git
 cd claude-agentic-coding-playbook
 chmod +x install.sh
 ./install.sh

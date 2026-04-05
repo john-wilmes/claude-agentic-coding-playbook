@@ -10,6 +10,18 @@ All templates use these placeholders:
 
 ---
 
+## Data Access Rules (all specialists)
+
+**Never use Bash to query databases or external APIs.** Use MCP tools:
+- MongoDB: `mcp__mongodb__find`, `mcp__mongodb__aggregate`
+- Datadog logs: `mcp__datadog__get_logs`
+- Snowflake: `mcp__snowflake__run_sql`
+- ClickUp: `mcp__clickup__get_task`, `mcp__clickup__search_tasks`
+
+Direct CLI tools (`mongosh`, `curl datadoghq.com`) are blocked and will fail.
+
+---
+
 ## code-archaeologist
 
 ```
@@ -121,6 +133,8 @@ Investigation ID: {ID}
 Investigation question: {QUESTION}
 Repository: {REPO_PATH}
 Your evidence range: 150–199
+
+**Data access:** use `mcp__mongodb__find`/`mcp__datadog__get_logs` for live data queries — never `mongosh` or `curl datadoghq.com`.
 
 Tasks:
 1. Read $INVESTIGATIONS_DIR/{ID}/BRIEF.md for full context.

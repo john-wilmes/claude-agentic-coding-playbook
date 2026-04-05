@@ -34,7 +34,7 @@ For automated E2E testing using `claude -p` (headless mode), see [`scripts/dogfo
 | 2.2 | Verify CLAUDE.md | `grep "Development Workflow" $TEST_HOME/.claude/CLAUDE.md` | Match found |
 | 2.3 | Verify combined workflows | `grep "Research Workflow" $TEST_HOME/.claude/CLAUDE.md` | Match found |
 | 2.4 | Verify all skills | `ls $TEST_HOME/.claude/skills/` | checkpoint, create-project, investigate, learn, playbook, promote |
-| 2.5 | Verify hooks | `ls $TEST_HOME/.claude/hooks/` | session-start.js, session-end.js, model-router.js (among 26 total hooks) |
+| 2.5 | Verify hooks | `ls $TEST_HOME/.claude/hooks/` | session-start.js, session-end.js, model-router.js (among 35 total hooks) |
 | 2.6 | Verify templates | `ls $TEST_HOME/.claude/templates/` | hooks/, investigation/, knowledge/, project-CLAUDE.md |
 | 2.7 | Verify research dir | `ls $TEST_HOME/Documents/research/` | Directory exists |
 | 2.8 | Smoke-test session-start | `echo '{"session_id":"test","cwd":"/tmp"}' \| node $TEST_HOME/.claude/hooks/session-start.js` | Valid JSON with `hookEventName: "SessionStart"` |

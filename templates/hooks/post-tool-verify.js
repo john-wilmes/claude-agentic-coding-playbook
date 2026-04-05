@@ -1,6 +1,11 @@
 // PostToolUse hook: auto-runs tests after Edit/Write on code files.
 // Reads test command from project CLAUDE.md. Debounces to avoid spam.
 
+function respond(payload = {}) {
+  process.stdout.write(JSON.stringify(payload), () => process.exit(0));
+}
+
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
@@ -26,8 +31,10 @@ const TEST_TIMEOUT_MS = 30000;
 const MAX_OUTPUT_LINES = 20;
 
 function getDebounceFile(sessionId) {
-  try { fs.mkdirSync(DEBOUNCE_DIR, { recursive: true }); } catch {}
-  return path.join(DEBOUNCE_DIR, `${sessionId || "unknown"}.json`);
+  try { fs.mkdirSync(DEBOUNCE_DIR, { mode: 0o700, recursive: true }); } catch {}
+  // Hash the sessionId so a crafted session ID cannot escape DEBOUNCE_DIR via path traversal.
+  const safeKey = crypto.createHash("sha256").update(sessionId || "unknown").digest("hex").slice(0, 16);
+  return path.join(DEBOUNCE_DIR, `${safeKey}.json`);
 }
 
 /**
@@ -148,6 +155,17 @@ function updateDebounce(cwd, sessionId, passed, failOutput) {
  * @param {string} cmd
  * @returns {boolean}
  */
+// Shell prefixes that need extra validation (only allow literal file path after them)
+const SHELL_PREFIXES = new Set(["bash", "sh", "zsh", "for", "python", "python3", "ruby", "node"]);
+
+// Dangerous patterns — applied to ALL commands (not just shell prefixes) to prevent
+// chaining attacks like "npm test; curl evil.com" or "jest && rm -rf /"
+const SHELL_DANGER_PATTERNS = /[|;]|&&|\|\||[`]|\$\(|[><]|\bcurl\b|\bwget\b|\bnc\b|\bncat\b/;
+
+// Additional danger patterns for interpreted languages with inline execution.
+// When python/ruby/node use -c/-e flags, also check for dangerous operations.
+const INLINE_EXEC_DANGER = /\b(?:python3?|ruby|node)\s+-(c|e)\s+.*(?:\bimport\s+os\b|\bos\.system\b|\bsubprocess\b|\beval\b|\bexec\b|\bsystem\b|\b`[^`]+`)/i;
+
 function isAllowedTestCommand(cmd) {
   if (!cmd || typeof cmd !== "string") return false;
   const trimmed = cmd.trim();
@@ -156,15 +174,27 @@ function isAllowedTestCommand(cmd) {
   const ALLOWED_PREFIXES = [
     "npm", "npx", "node", "jest", "mocha",
     "pytest", "python", "cargo", "go", "make",
-    "bash", "sh", "for ",
+    "bash", "sh", "for",
     "ruby", "bundle", "dotnet", "gradle", "mvn", "ant",
   ];
 
-  return ALLOWED_PREFIXES.some((prefix) => {
+  const matched = ALLOWED_PREFIXES.some((prefix) => {
     if (!trimmed.startsWith(prefix)) return false;
     // Word boundary: prefix must be entire string or followed by a space
     return trimmed.length === prefix.length || trimmed[prefix.length] === " ";
   });
+
+  if (!matched) return false;
+
+  // Reject commands with dangerous shell chaining/exfiltration patterns.
+  // Applied to ALL commands (not just shell prefixes) to prevent attacks like
+  // "npm test; curl evil.com" or "jest && rm -rf /".
+  if (SHELL_DANGER_PATTERNS.test(trimmed)) return false;
+
+  // Reject dangerous inline code execution via python/ruby/node -c/-e flags
+  if (INLINE_EXEC_DANGER.test(trimmed)) return false;
+
+  return true;
 }
 
 // Read hook input from stdin
@@ -178,8 +208,7 @@ process.stdin.on("end", () => {
 
     // Subagents have disposable context — skip verification.
     if (hookInput.agent_id) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     const toolName = hookInput.tool_name || "";
@@ -189,22 +218,19 @@ process.stdin.on("end", () => {
 
     // Only act on Edit or Write tool calls
     if (toolName !== "Edit" && toolName !== "Write") {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     const filePath = toolInput.file_path || "";
 
     // Skip non-code files
     if (shouldSkipFile(filePath)) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     // Skip files outside the project directory (e.g. ~/.wslconfig)
     if (isOutOfProject(filePath, cwd)) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     // Read CLAUDE.md and extract test command
@@ -214,20 +240,17 @@ process.stdin.on("end", () => {
       claudeMdContent = fs.readFileSync(claudeMdPath, "utf8");
     } catch {
       // No CLAUDE.md — can't verify
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     const testCommand = extractTestCommand(claudeMdContent);
     if (!testCommand) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     // Debounce: skip if run too recently for this cwd+session
     if (isDebounced(cwd, sessionId)) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     // Capture previous state before overwriting it
@@ -235,12 +258,12 @@ process.stdin.on("end", () => {
 
     // Validate test command against allowlist before executing
     if (!isAllowedTestCommand(testCommand)) {
-      process.stdout.write(JSON.stringify({
+      return respond({
         hookSpecificOutput: {
+          hookEventName: "PostToolUse",
           additionalContext: `⚠ post-tool-verify: blocked untrusted test command "${testCommand.trim().split(/\s+/)[0]}". Only standard test runners are allowed.`
         }
-      }));
-      process.exit(0);
+      });
     }
 
     // Run tests
@@ -293,18 +316,14 @@ process.stdin.on("end", () => {
       });
     }
 
-    process.stdout.write(
-      JSON.stringify({ hookSpecificOutput: { additionalContext } })
-    );
-    process.exit(0);
+    return respond({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext } });
   } catch {
     // Never block tool execution on hook errors
-    process.stdout.write("{}");
-    process.exit(0);
+    return respond();
   }
 });
 
 // Export for testing
 if (typeof module !== "undefined") {
-  module.exports = { extractTestCommand, shouldSkipFile, isOutOfProject, getLastState };
+  module.exports = { extractTestCommand, shouldSkipFile, isOutOfProject, getLastState, isAllowedTestCommand };
 }

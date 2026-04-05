@@ -1,4 +1,4 @@
-[![Test Install Script](https://github.com/john-wilmes/claude-agentic-coding-playbook/actions/workflows/test-install.yml/badge.svg)](https://github.com/john-wilmes/claude-agentic-coding-playbook/actions/workflows/test-install.yml)
+[![Test Install Script](https://github.com/YOUR_ORG/claude-agentic-coding-playbook/actions/workflows/test-install.yml/badge.svg)](https://github.com/YOUR_ORG/claude-agentic-coding-playbook/actions/workflows/test-install.yml)
 
 # Agentic Coding Playbook
 
@@ -28,7 +28,7 @@ Full details with citations: [docs/best-practices.md](docs/best-practices.md)
 Most Claude Code setups rely on CLAUDE.md instructions alone. Instructions are advisory — compliance ranges from ~50-90% in our testing (published research reports lower rates for complex instruction sets). This playbook takes a different approach:
 
 - **Designed for bypass mode.** The biggest productivity gains come from running Claude Code autonomously (`--dangerously-skip-permissions` or `bypassPermissions` in settings). Without guardrails, bypass mode means no safety net — destructive commands, runaway file creation, and context exhaustion go unchecked. With this playbook's hooks, you get deterministic enforcement of safety rules even when the agent has full permissions: prompt injection is blocked, context limits are enforced, destructive git operations are caught, and PII is redacted — all without permission prompts interrupting flow.
-- **Hooks enforce rules deterministically.** 26 hooks run on every tool call, catching context exhaustion, prompt injection, sycophantic compliance patterns, and file bloat before they cause problems. Hooks achieve near-100% enforcement for deny rules and >95% for advisory rules — where instructions alone cannot.
+- **Hooks enforce rules deterministically.** 26 hooks — each fires on the relevant tool calls (not all on every call) — catching context exhaustion, prompt injection, sycophantic compliance patterns, and file bloat before they cause problems. Hooks achieve near-100% enforcement for deny rules and >95% for advisory rules — where instructions alone cannot.
 - **Structured logging makes agent behavior observable.** Every hook decision is logged to JSONL. Analysis tools (`analyze-logs.js`) report context usage, stuck loops, model routing, and hook effectiveness per session — so you can measure what's working and what isn't.
 - **Practices are validated by running them.** The playbook is [dogfooded](docs/dogfooding.md) against real codebases with a 100-task framework. Bugs found during dogfooding (context guard effectiveness, task queue edge cases, implicit completion detection) feed directly back into the hooks and scripts.
 - **Zero npm dependencies.** All hooks use Node.js stdlib only. No `node_modules`, no build step, no supply chain risk.
@@ -39,8 +39,8 @@ Want to test the waters before a full install? Copy `context-guard.js` (context 
 
 ```bash
 mkdir -p ~/.claude/hooks
-curl -fsSL https://raw.githubusercontent.com/john-wilmes/claude-agentic-coding-playbook/master/templates/hooks/context-guard.js -o ~/.claude/hooks/context-guard.js
-curl -fsSL https://raw.githubusercontent.com/john-wilmes/claude-agentic-coding-playbook/master/templates/hooks/log.js -o ~/.claude/hooks/log.js
+curl -fsSL https://raw.githubusercontent.com/YOUR_ORG/claude-agentic-coding-playbook/master/templates/hooks/context-guard.js -o ~/.claude/hooks/context-guard.js
+curl -fsSL https://raw.githubusercontent.com/YOUR_ORG/claude-agentic-coding-playbook/master/templates/hooks/log.js -o ~/.claude/hooks/log.js
 chmod +x ~/.claude/hooks/context-guard.js ~/.claude/hooks/log.js
 ```
 
@@ -61,7 +61,7 @@ This gives you context window warnings after every tool call. The full install a
 ## Quick Install
 
 ```bash
-git clone https://github.com/john-wilmes/claude-agentic-coding-playbook.git
+git clone https://github.com/YOUR_ORG/claude-agentic-coding-playbook.git
 cd claude-agentic-coding-playbook
 chmod +x install.sh
 ./install.sh
@@ -70,7 +70,7 @@ chmod +x install.sh
 ### Prerequisites
 
 - **Bash on Linux or macOS** (Windows requires [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) — native CMD/PowerShell is not supported. The install script, hooks, and test suite all assume a POSIX environment.)
-- **Node.js 18+** (18 reaches EOL April 2025; 20+ recommended) (for hooks and test scripts)
+- **Node.js 20+** (for hooks and test scripts)
 - **git** (for version control and install script)
 
 ### Install Options
@@ -305,6 +305,20 @@ bash scripts/swe-bench.sh --full
 
 See [docs/swe-bench-methodology.md](docs/swe-bench-methodology.md) for task selection, scoring, and limitations.
 
+## MCP Servers
+
+PHI-sanitizing MCP servers for safe AI-assisted queries against healthcare data stores. See [`mcp-servers/`](mcp-servers/) for setup and configuration.
+
+| Server | Data store | PHI protection |
+|--------|-----------|----------------|
+| `mongodb-sanitizer` | MongoDB | Drops PHI fields, redacts string values, Presidio NLP second pass |
+| `snowflake-sanitizer` | Snowflake | Drops PHI columns from SELECT results, read-only enforcement |
+| `datadog-sanitizer` | Datadog Logs | Strips names, emails, SSNs, tokens from log output |
+| `clickup-sanitizer` | ClickUp | Regex + Presidio redaction of emails, phones, SSNs, tokens; read-only |
+| `slack-sanitizer` | Slack | Regex + Presidio redaction of emails, phones, SSNs, tokens; read-only |
+
+MongoDB, Snowflake, and Datadog use a shared `phi-config.yaml` to define which columns and tables are PHI — no code changes required to adapt to your data model. ClickUp and Slack apply string-level redaction (no field blocklist, as they are not PHI databases).
+
 ## Roadmap
 
 - **Subagent overflow recovery (claude-loop)** -- When a subagent runs out of turns or context, detect the truncation via a PostToolUse hook on Task, write a state file with remaining work, and have claude-loop inject it as the prompt for a fresh session to finish the job.
@@ -315,7 +329,7 @@ See [docs/swe-bench-methodology.md](docs/swe-bench-methodology.md) for task sele
 - **Claude Code only**: All hooks, skills, and scripts target Claude Code. The principles in `best-practices.md` are conceptually portable to Cursor, Copilot, etc., but the tooling is not.
 - **Hook startup overhead**: 26 hooks are installed, but not all fire on every call — active hooks add ~50-100ms per tool call. Negligible for most workflows, noticeable in rapid-fire operations.
 - **CLAUDE.md budget**: The combined profile's CLAUDE.md consumes instruction budget. Projects with large existing CLAUDE.md files may hit the ~150-200 instruction line ceiling.
-- **Node.js 18+ required**: Hooks use modern Node.js APIs (ESM-style imports, `fs.promises`, etc.).
+- **Node.js 20+ required**: Hooks use modern Node.js APIs (ESM-style imports, `fs.promises`, etc.).
 - **Single maintainer**: This is a personal project, not backed by a company or large team.
 
 ## Contributing

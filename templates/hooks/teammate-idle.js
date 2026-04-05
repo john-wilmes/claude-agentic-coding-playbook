@@ -16,6 +16,7 @@ function processHookInput(hookInput) {
       exitCode: 2,
       output: {
         hookSpecificOutput: {
+          hookEventName: "TeammateIdle",
           additionalContext: NUDGE_MESSAGE,
         },
       },
@@ -32,11 +33,9 @@ process.stdin.on("end", () => {
   try {
     const hookInput = JSON.parse(input);
     const { exitCode, output } = processHookInput(hookInput);
-    process.stdout.write(JSON.stringify(output));
-    process.exit(exitCode);
+    process.stdout.write(JSON.stringify(output), () => process.exit(exitCode));
   } catch {
-    process.stdout.write(JSON.stringify({}));
-    process.exit(0);
+    process.stdout.write(JSON.stringify({}), () => process.exit(0));
   }
 });
 

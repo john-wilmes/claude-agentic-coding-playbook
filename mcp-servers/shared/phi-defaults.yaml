@@ -1,0 +1,201 @@
+# PHI-Safe MCP Servers — Unified PHI Defaults
+# ============================================
+# This file is the authoritative union of PHI column/table defaults across all
+# MCP servers (Node mongodb/snowflake/slack + Python datadog).
+#
+# phi-config-loader.js loads this file before falling back to hardcoded arrays.
+# datadog/server.py reads phi-config.yaml from PHI_CONFIG_PATH or CWD.
+#
+# To override: copy this file to phi-config.yaml in your server's working
+# directory or set PHI_CONFIG_PATH to an absolute path.
+#
+# Column name matching is case-insensitive and underscore/hyphen-insensitive:
+#   first_name, firstName, FIRST_NAME → all match "firstname".
+# All entries below are lowercase with no underscores (canonical form).
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Tables where the `name` column is a person's full name (PHI).
+# In all other tables (facilities, appointmenttypes, etc.) the `name` column
+# is an entity label and passes through.
+person_tables:
+  - users
+  - patients
+  - providers
+
+# Tables whose string values are entity labels, not person data.
+# Free-text string redaction (Presidio / regex) is skipped for these tables to
+# avoid false positives. PHI column names are still dropped even here.
+entity_tables:
+  - facilities
+  - appointmenttypes
+  - procedures
+  - diagnoses
+  - departments
+  - insurancepayors
+
+# Columns that are PHI only when a person_table appears in the query.
+# Example: SELECT name FROM facilities → allowed (facility name)
+#          SELECT name FROM patients   → blocked (patient name)
+contextual_phi:
+  - name
+
+# Column names that are always PHI/sensitive regardless of table.
+# Union of Node phi-config-loader.js DEFAULT_PHI_COLUMNS and Python
+# datadog/server.py _PHI_ATTR_KEYS + _SENSITIVE_ATTR_KEYS.
+phi_columns:
+
+  # ── Person names ─────────────────────────────────────────────────────────────
+  - firstname
+  - lastname
+  - middlename
+  # 'name' is handled contextually via contextual_phi above
+  - fullname           # Python: common log attribute for full patient name
+  - patientname        # Python: explicit patient name attribute
+  - legalname          # Python: legal name on record
+  - normalizedname     # Node: normalized/deduped name variant
+  - alternativename    # Node: alias/maiden name
+  - preferredname      # Node + Python: preferred/display name
+  - membername         # Node: insurance subscriber name on card
+  - referringprovider  # Node: stored as a name string, not an ID
+
+  # ── Contact information ───────────────────────────────────────────────────────
+  - email
+  - emailaddress       # Python: alternate key for email address
+  - phone
+  - phonenumber        # Python: explicit phone number attribute
+  - telephone          # Python: generic telephone field
+  - mobile             # Python: mobile/cell phone
+  - cellphone          # Python: cell phone
+  - displayphone       # Node: formatted display version of phone
+  - sms                # Node: SMS channel extracted from contact array
+  - voice              # Node: voice channel extracted from contact array
+  - fax                # Python: fax number attribute in logs
+  - faxnumber          # Python: explicit fax number field
+  - contact            # Node: array with type/value contact entries
+  - from               # Node: message sender (phone/email value)
+  - to                 # Node: message recipient (phone/email value)
+  - homephone          # Node: home phone number
+  - homeemailaddress   # Node: home email address
+  - donotcontactmessage  # Node: do-not-contact reason (free text)
+
+  # ── Date of birth / age ───────────────────────────────────────────────────────
+  - dob
+  - dateofbirth
+  - birthdate          # Python: alternative DOB attribute name
+  - age                # Python: direct age is a quasi-identifier
+  - dateofbirthyear
+  - dobyear
+  - dateofbirthmonth
+  - dobmonth
+  - dateofbirthday
+  - dobday
+
+  # ── Demographics ─────────────────────────────────────────────────────────────
+  - gender
+  - sex                # Python: biological sex attribute
+  - birthsex           # Node: birth sex recorded at registration
+  - race
+  - ethnicity
+  - ethnicitygroup     # Node: ethnicity grouping
+  - maritalstatus      # Node: marital status
+  - veteran            # Node: veteran status
+  - deceased           # Node: deceased flag/date
+
+  # ── Address ──────────────────────────────────────────────────────────────────
+  - address
+  - address1           # Python: street address line 1
+  - address2
+  - streetaddress      # Python: generic street address attribute
+  - city
+  - state
+  - zip                # Python: ZIP code (short form)
+  - zipcode            # Python: ZIP code (long form)
+  - postalcode         # Python: international postal code
+  - postcode           # Node: UK/AU-style postal code
+  - county             # Python: county/parish
+  - country
+  - previousaddress    # Node: prior address (still PHI)
+
+  # ── National identifiers ──────────────────────────────────────────────────────
+  - ssn
+  - socialsecuritynumber  # Python: spelled-out SSN key
+  - mrn                   # Python: medical record number
+  - patientid             # Python: patient identifier
+  - memberid              # Python: insurance member ID
+  - insuranceid           # Python: insurance ID
+  - membershipid          # Python: membership/plan ID
+  - policyid              # Python: insurance policy ID
+  - npi                   # Python: National Provider Identifier
+  - ein                   # Python: Employer Identification Number
+  - driverslicense        # Python: driver's license number
+  - passportnumber        # Python: passport number
+
+  # ── Free-text fields that may contain patient-identifying content ─────────────
+  - notes              # appointment/clinical notes — staff-entered free text
+  - staffnotes         # Node: staff-only notes
+  - clinicalnotes      # Python: explicit clinical notes attribute
+  - providernotes      # Python: provider-authored notes
+  - chiefcomplaint     # Python: patient's chief complaint (free text)
+  - reasonforvisit     # Python: reason for visit (free text)
+  - text               # Node: message body text
+  - body               # Node: message body
+  - alerts             # Node: patient alerts (subject + description)
+  - statusreason       # Node: cancellation/status reason (may contain PII)
+
+  # ── Clinical / medical data ───────────────────────────────────────────────────
+  - medications
+  - medication         # Python: singular medication field
+  - rxname             # Python: prescription name
+  - drugname           # Python: drug/medication name
+  - immunizationhistory
+  - immunizations      # Python: immunization list
+  - immunization       # Python: single immunization record
+  - vaccine            # Python: vaccine name/record
+  - surgicalhistory    # Node: surgical history
+  - allergies
+  - allergy            # Python: singular allergy entry
+  - familyhistory
+  - socialhistory      # Node: social history (smoking, alcohol, etc.)
+  - medicalhistory
+  - problems           # Node: problem list
+  - diagnosis          # Python: diagnosis entry
+  - diagnoses          # Python: diagnosis list
+  - icd10              # Python: ICD-10 code (can identify condition+patient)
+  - icdcode            # Python: ICD code (generic)
+  - vitals             # Python: vital signs bundle
+  - weight             # Python: patient weight
+  - height             # Python: patient height
+  - bloodpressure      # Python: blood pressure reading
+  - labresult          # Python: laboratory result
+  - labresults         # Python: laboratory results list
+  - labvalue           # Python: individual lab value
+
+  # ── Insurance subscriber (may contain name + DOB) ─────────────────────────────
+  - subscriber         # Node: insurance subscriber record
+
+  # ── Auth / credential fields (not PHI but sensitive) ──────────────────────────
+  # Dropped from results regardless of table type.
+  - password
+  - passwordhash
+  - passcode           # Python: numeric passcode
+  - pin                # Python: PIN number
+  - resetpasswordtoken
+  - token
+  - authtoken
+  - accesstoken
+  - refreshtoken
+  - twofactorauthsecret
+  - apikey             # Python: API key in log attributes
+  - appkey             # Python: application key
+  - clientsecret       # Python: OAuth client secret
+  - secret             # Python: generic secret value
+  - sharedsecret       # Python: shared HMAC/signing secret
+  - jwt                # Python: JSON Web Token value
+  - bearer             # Python: Bearer token value
+  - authorization      # Python: Authorization header value
+  - cookie             # Python: session cookie value
+  - setcookie          # Python: Set-Cookie header value
+  - privatekey         # Python: private key material
+  - mongodburi         # Python: MongoDB connection URI (contains credentials)
+  - dburl              # Python: database URL (contains credentials)
+  - connectionstring   # Python: generic connection string

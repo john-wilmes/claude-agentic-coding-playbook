@@ -213,7 +213,30 @@ def call_api(messages):
 # ---------------------------------------------------------------------------
 # Tool executors
 # ---------------------------------------------------------------------------
+DANGER_PATTERNS = [
+    (r"\b(?:curl|wget|nc|ncat)\b.*\|", "network exfiltration via pipe"),
+    (r"\b(?:curl|wget)\b.*https?://(?!localhost)", "network request to external host"),
+    (r"\b(?:curl|wget)\b.*--data", "network data exfiltration via --data"),
+    (r"\b(?:curl|wget)\b.*-[dFT]\b", "network data exfiltration via upload flag"),
+    (r"\b(?:nc|ncat)\b", "netcat network access"),
+    (r">\s*~/\.(?:ssh|config|aws)", "redirect to sensitive config path"),
+    (r"\brm\s+-rf\s+/", "destructive rm -rf /"),
+    (r"\beval\b", "eval execution"),
+    (r"\bpython3?\s+-c\b", "inline Python code execution"),
+    (r"\bruby\s+-e\b", "inline Ruby code execution"),
+    (r"\bperl\s+-e\b", "inline Perl code execution"),
+    (r"\bnode\s+-e\b", "inline Node code execution"),
+    (r"\bbase64\s+-[dD]\b.*\|", "base64 decode pipe execution"),
+]
+import re as _re
+_DANGER_RES = [(_re.compile(p), label) for p, label in DANGER_PATTERNS]
+
+
 def execute_bash(command):
+    for pat, label in _DANGER_RES:
+        if pat.search(command):
+            return f"[blocked: dangerous pattern detected: {label}]"
+
     if not AUTO_YES:
         print(f"\n[qa] bash: {command}", file=sys.stderr)
         try:
@@ -250,6 +273,10 @@ def execute_str_replace_editor(inputs):
     # Resolve relative to CWD
     if not os.path.isabs(path):
         path = os.path.join(CWD, path)
+    resolved = os.path.realpath(path)
+    if not resolved.startswith(os.path.realpath(CWD) + os.sep) and resolved != os.path.realpath(CWD):
+        return f"[error: path escapes working directory]"
+    path = resolved
 
     if cmd == "view":
         print(f"\n[qa] str_replace_editor: view {path}", file=sys.stderr)

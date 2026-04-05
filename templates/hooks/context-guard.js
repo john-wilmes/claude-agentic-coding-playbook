@@ -12,6 +12,10 @@
 // Primary: reads actual token counts from the session transcript JSONL.
 // Fallback: estimates from tool I/O sizes when transcript is unavailable.
 
+function respond(payload = {}) {
+  process.stdout.write(JSON.stringify(payload), () => process.exit(0));
+}
+
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
@@ -25,15 +29,28 @@ const CHARS_PER_TOKEN = 4;
 const CONTEXT_WINDOW = 200000;
 
 const SUBAGENT_THRESHOLD = 0.35;
-const WARN_THRESHOLD = 0.50;
+const PERSIST_THRESHOLD = 0.42; // One-shot: persist unsaved findings before pressure hits
+const WARN_THRESHOLD = 0.57;
 const BLOCK_THRESHOLD = 0.60;
 const FAILSAFE_THRESHOLD = 0.75; // Last resort: write sentinel directly under claude-loop
+
+// Minimum tool calls before BLOCK/FAILSAFE can trigger.
+// At claude-loop wakeup, SessionStart injects a large context (memory, CLAUDE.md,
+// lessons) that can push usage past 60% before any real work is done — causing an
+// immediate checkpoint that restarts the loop endlessly. This grace period lets the
+// agent do at least a few turns of work before being forced to checkpoint.
+// WARN thresholds still fire immediately so the agent is aware.
+const MIN_CALLS_BEFORE_BLOCK = 5;
+// When baseline context at session start is already above BLOCK_THRESHOLD,
+// only block when context grows this many percentage points above the baseline.
+// Prevents infinite restart loops when SessionStart injects large context.
+const BASELINE_HEADROOM = 0.08;
 
 // State file tracks warning flags and fallback accumulator across invocations
 function getStateFile(sessionId) {
   const dir = path.join(os.tmpdir(), "claude-context-guard");
-  try { fs.mkdirSync(dir, { recursive: true }); } catch {}
-  return path.join(dir, `${sessionId}.json`);
+  try { fs.mkdirSync(dir, { mode: 0o700, recursive: true }); } catch {}
+  return path.join(dir, `${path.basename(sessionId)}.json`);
 }
 
 function loadState(stateFile) {
@@ -41,13 +58,15 @@ function loadState(stateFile) {
     const raw = JSON.parse(fs.readFileSync(stateFile, "utf8"));
     return {
       subagentWarned: raw.subagentWarned || false,
+      persistWarned: raw.persistWarned || false,
       warned: raw.warned || false,
       warnedAtCall: raw.warnedAtCall || 0,
       cumulativeEstimatedTokens: raw.cumulativeEstimatedTokens || 0,
       toolCalls: raw.toolCalls || 0,
+      baselineRatio: raw.baselineRatio || 0,
     };
   } catch {
-    return { subagentWarned: false, warned: false, warnedAtCall: 0, cumulativeEstimatedTokens: 0, toolCalls: 0 };
+    return { subagentWarned: false, persistWarned: false, warned: false, warnedAtCall: 0, cumulativeEstimatedTokens: 0, toolCalls: 0, baselineRatio: 0 };
   }
 }
 
@@ -157,8 +176,7 @@ process.stdin.on("end", () => {
     // agent_id is present only when the hook fires inside a subagent.
     if (hookInput.agent_id) {
       log.writeLog({ hook: "context-guard", event: "skip", details: "Subagent call skipped", session_id: hookInput.session_id, tool_use_id: hookInput.tool_use_id, agent_id: hookInput.agent_id, project: hookInput.cwd });
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     // Mode detection: PreToolUse has no tool_response field.
@@ -170,8 +188,7 @@ process.stdin.on("end", () => {
     // ── PreToolUse pass-through ─────────────────────────────────────────
     // No hard blocks. All enforcement is advisory via PostToolUse.
     if (isPreToolUse) {
-      process.stdout.write(JSON.stringify({}));
-      process.exit(0);
+      return respond();
     }
 
     // ── PostToolUse path ──────────────────────────────────────────────────
@@ -179,12 +196,16 @@ process.stdin.on("end", () => {
     state.toolCalls += 1;
 
     const ctx = getContextUsage(hookInput, state);
+
+    if (state.toolCalls === 1) {
+      state.baselineRatio = ctx.ratio;
+    }
     const pct = Math.round(ctx.ratio * 100);
 
     // Per-call size warning: flag individual large tool results
     const responseStr = JSON.stringify(hookInput.tool_response || {});
     const responseChars = responseStr.length;
-    const PER_CALL_WARN_CHARS = 10000;
+    const PER_CALL_WARN_CHARS = 25000;
     const perCallWarning = responseChars > PER_CALL_WARN_CHARS
       ? ` Large tool output (~${Math.round(responseChars / CHARS_PER_TOKEN)} tokens this call). Delegate multi-file work to subagents.`
       : "";
@@ -194,13 +215,23 @@ process.stdin.on("end", () => {
     // This fires if Claude ignored the 60% checkpoint instruction.
     // We lose the handoff (no memory update/commit), but it's better
     // than hitting 80% auto-compaction which destroys context entirely.
-    if (ctx.ratio >= FAILSAFE_THRESHOLD && process.env.CLAUDE_LOOP === "1") {
+    if (ctx.ratio >= FAILSAFE_THRESHOLD && process.env.CLAUDE_LOOP === "1" && state.toolCalls >= MIN_CALLS_BEFORE_BLOCK) {
       try {
         // Use CLAUDE_LOOP_PID to compute sentinel path — Claude Code may override
         // CLAUDE_LOOP_SENTINEL after changing process.cwd() to the project directory.
-        const sentinelPath = process.env.CLAUDE_LOOP_PID
-          ? path.join(os.tmpdir(), `claude-checkpoint-exit-${process.env.CLAUDE_LOOP_PID}`)
-          : (process.env.CLAUDE_LOOP_SENTINEL || path.join(os.tmpdir(), "claude-checkpoint-exit"));
+        // Validate PID is numeric to prevent path traversal.
+        const rawPid = process.env.CLAUDE_LOOP_PID;
+        const validPid = rawPid && /^\d+$/.test(rawPid) ? rawPid : null;
+        // Validate CLAUDE_LOOP_SENTINEL path to prevent path traversal.
+        // Resolve to canonical path before checking prefix to defeat /tmp/../../ attacks.
+        const rawSentinel = process.env.CLAUDE_LOOP_SENTINEL;
+        const resolvedSentinel = rawSentinel ? path.resolve(rawSentinel) : null;
+        const tmpDir = path.resolve(os.tmpdir());
+        const validSentinel = resolvedSentinel && resolvedSentinel.startsWith(tmpDir + path.sep)
+          ? resolvedSentinel : null;
+        const sentinelPath = validPid
+          ? path.join(os.tmpdir(), `claude-checkpoint-exit-${validPid}`)
+          : (validSentinel || path.join(os.tmpdir(), "claude-checkpoint-exit"));
         fs.writeFileSync(
           sentinelPath,
           JSON.stringify({ reason: "failsafe", ratio: ctx.ratio, timestamp: Date.now() })
@@ -222,53 +253,33 @@ process.stdin.on("end", () => {
             `FAILSAFE: ${pct}% context used. Sentinel written directly — claude-loop will restart. Run /exit NOW.`,
         },
       };
-    } else if (ctx.ratio >= BLOCK_THRESHOLD) {
-      // Write the context-high flag so /checkpoint can decide EXIT vs STAY.
-      // This is NOT the sentinel — claude-loop does NOT watch this file.
-      try {
-        const flagPath = process.env.CLAUDE_LOOP_PID
-          ? path.join(os.tmpdir(), `claude-context-high-${process.env.CLAUDE_LOOP_PID}`)
-          : path.join(os.tmpdir(), "claude-context-high");
-        fs.writeFileSync(
-          flagPath,
-          JSON.stringify({ reason: "context-high", ratio: ctx.ratio, timestamp: Date.now() })
-        );
-      } catch {}
-      log.writeLog({
-        hook: "context-guard",
-        event: "block",
-        session_id: hookInput.session_id,
-        tool_use_id: hookInput.tool_use_id,
-        details: `PostToolUse block: ${pct}% context used`,
-        project: hookInput.cwd,
-        context: { mode: "post", ratio: ctx.ratio, pct, tokens: ctx.tokens },
-      });
-      output = {
-        hookSpecificOutput: {
-          hookEventName: "PostToolUse",
-          additionalContext:
-            `CRITICAL: ${pct}% context used ${ctx.stats}. ` +
-            `Invoke the /checkpoint skill NOW — do not ask the user, do not read new files, do not start new work. ` +
-            `After checkpoint completes, stop all output immediately.`,
-        },
-      };
-    } else if (ctx.ratio >= WARN_THRESHOLD) {
-      // Re-fire every WARN_REFIRE_INTERVAL calls after first warning to maintain pressure.
-      // One-shot warnings have 0% effectiveness — agents ignore and forget them.
-      const WARN_REFIRE_INTERVAL = 5;
-      const shouldFire = !state.warned || (state.toolCalls - (state.warnedAtCall || 0)) % WARN_REFIRE_INTERVAL === 0;
-      if (!state.warned) {
-        state.warned = true;
-        state.warnedAtCall = state.toolCalls;
-      }
-      state.subagentWarned = true; // 50% implies 35% already passed
-      if (shouldFire) {
+    } else {
+      // Compute effective block threshold: if baseline was already above 60%,
+      // only block when context grows 8pp above that baseline (avoids infinite
+      // restart loops when SessionStart injects large context).
+      const effectiveBlockThreshold = (state.baselineRatio >= BLOCK_THRESHOLD)
+        ? state.baselineRatio + BASELINE_HEADROOM
+        : BLOCK_THRESHOLD;
+      if (ctx.ratio >= effectiveBlockThreshold && state.toolCalls >= MIN_CALLS_BEFORE_BLOCK) {
+        // Write the context-high flag so /checkpoint can decide EXIT vs STAY.
+        // This is NOT the sentinel — claude-loop does NOT watch this file.
+        try {
+          const rawFlagPid = process.env.CLAUDE_LOOP_PID;
+          const validFlagPid = rawFlagPid && /^\d+$/.test(rawFlagPid) ? rawFlagPid : null;
+          const flagPath = validFlagPid
+            ? path.join(os.tmpdir(), `claude-context-high-${validFlagPid}`)
+            : path.join(os.tmpdir(), "claude-context-high");
+          fs.writeFileSync(
+            flagPath,
+            JSON.stringify({ reason: "context-high", ratio: ctx.ratio, session_id: hookInput.session_id, timestamp: Date.now() })
+          );
+        } catch {}
         log.writeLog({
           hook: "context-guard",
-          event: "warn",
+          event: "block",
           session_id: hookInput.session_id,
           tool_use_id: hookInput.tool_use_id,
-          details: `PostToolUse warn: ${pct}% context used`,
+          details: `PostToolUse block: ${pct}% context used`,
           project: hookInput.cwd,
           context: { mode: "post", ratio: ctx.ratio, pct, tokens: ctx.tokens },
         });
@@ -276,50 +287,89 @@ process.stdin.on("end", () => {
           hookSpecificOutput: {
             hookEventName: "PostToolUse",
             additionalContext:
-              `Context warning: ${pct}% used ${ctx.stats}. ` +
-              `Finish your current subtask, then invoke /checkpoint automatically — do not ask the user.` + perCallWarning,
+              `CRITICAL: ${pct}% context used ${ctx.stats}. ` +
+              `Invoke the /checkpoint skill NOW — do not ask the user, do not read new files, do not start new work. ` +
+              `After checkpoint completes, stop all output immediately.`,
+          },
+        };
+      } else if (ctx.ratio >= WARN_THRESHOLD) {
+        // Re-fire every WARN_REFIRE_INTERVAL calls after first warning to maintain pressure.
+        // One-shot warnings have 0% effectiveness — agents ignore and forget them.
+        const WARN_REFIRE_INTERVAL = 15;
+        const shouldFire = !state.warned || (state.toolCalls - (state.warnedAtCall || 0)) % WARN_REFIRE_INTERVAL === 0;
+        if (!state.warned) {
+          state.warned = true;
+          state.warnedAtCall = state.toolCalls;
+        }
+        state.subagentWarned = true; // 50% implies 35% already passed
+        if (shouldFire) {
+          log.writeLog({
+            hook: "context-guard",
+            event: "warn",
+            session_id: hookInput.session_id,
+            tool_use_id: hookInput.tool_use_id,
+            details: `PostToolUse warn: ${pct}% context used`,
+            project: hookInput.cwd,
+            context: { mode: "post", ratio: ctx.ratio, pct, tokens: ctx.tokens },
+          });
+          output = {
+            hookSpecificOutput: {
+              hookEventName: "PostToolUse",
+              additionalContext:
+                `Context warning: ${pct}% used ${ctx.stats}. ` +
+                `Finish your current subtask, then invoke /checkpoint automatically — do not ask the user.` + perCallWarning,
+            },
+          };
+        } else {
+          output = perCallWarning ? {
+            hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: `Context note:${perCallWarning}` },
+          } : {};
+        }
+      } else if (ctx.ratio >= PERSIST_THRESHOLD && !state.persistWarned) {
+        state.persistWarned = true;
+        state.subagentWarned = true; // 42% implies 35% already passed
+        output = {
+          hookSpecificOutput: {
+            hookEventName: "PostToolUse",
+            additionalContext:
+              `Context at ${pct}% ${ctx.stats}. If you have unsaved findings from this session, ` +
+              `write them to topic files now while you have comfortable headroom — before checkpoint pressure hits.` + perCallWarning,
+          },
+        };
+      } else if (ctx.ratio >= SUBAGENT_THRESHOLD && !state.subagentWarned) {
+        state.subagentWarned = true;
+        log.writeLog({
+          hook: "context-guard",
+          event: "warn",
+          session_id: hookInput.session_id,
+          tool_use_id: hookInput.tool_use_id,
+          details: `PostToolUse note: ${pct}% context used — delegate to subagents`,
+          project: hookInput.cwd,
+          context: { mode: "post", ratio: ctx.ratio, pct, tokens: ctx.tokens },
+        });
+        output = {
+          hookSpecificOutput: {
+            hookEventName: "PostToolUse",
+            additionalContext:
+              `Context note: usage is ${pct}% ${ctx.stats}. ` +
+              `If remaining work touches 3+ files, delegate to a subagent to protect parent context.` + perCallWarning,
+          },
+        };
+      } else if (perCallWarning) {
+        output = {
+          hookSpecificOutput: {
+            hookEventName: "PostToolUse",
+            additionalContext: `Context note:${perCallWarning}`,
           },
         };
       } else {
-        output = perCallWarning ? {
-          hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: `Context note:${perCallWarning}` },
-        } : {};
+        output = {};
       }
-    } else if (ctx.ratio >= SUBAGENT_THRESHOLD && !state.subagentWarned) {
-      state.subagentWarned = true;
-      log.writeLog({
-        hook: "context-guard",
-        event: "warn",
-        session_id: hookInput.session_id,
-        tool_use_id: hookInput.tool_use_id,
-        details: `PostToolUse note: ${pct}% context used — delegate to subagents`,
-        project: hookInput.cwd,
-        context: { mode: "post", ratio: ctx.ratio, pct, tokens: ctx.tokens },
-      });
-      output = {
-        hookSpecificOutput: {
-          hookEventName: "PostToolUse",
-          additionalContext:
-            `Context note: usage is ${pct}% ${ctx.stats}. ` +
-            `If remaining work touches 3+ files, delegate to a subagent to protect parent context.` + perCallWarning,
-        },
-      };
-    } else if (perCallWarning) {
-      output = {
-        hookSpecificOutput: {
-          hookEventName: "PostToolUse",
-          additionalContext: `Context note:${perCallWarning}`,
-        },
-      };
-    } else {
-      output = {};
     }
 
     saveState(stateFile, state);
-    process.stdout.write(JSON.stringify(output));
-    process.exit(0);
+    return respond(output);
   } catch {
-    process.stdout.write(JSON.stringify({}));
-    process.exit(0);
+    return respond();
   }
 });

@@ -103,6 +103,20 @@ function runGuardPre(sessionId, opts = {}) {
   return runHook(CONTEXT_GUARD, input);
 }
 
+/**
+ * Pre-populate the state file for a session so toolCalls >= MIN_CALLS_BEFORE_BLOCK.
+ * Tests that expect BLOCK/FAILSAFE behavior need this since the grace period
+ * suppresses those thresholds for the first few calls (to avoid claude-loop wakeup loops).
+ */
+function primeSession(sessionId, toolCalls = 5) {
+  fs.mkdirSync(STATE_DIR, { recursive: true });
+  const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
+  fs.writeFileSync(stateFile, JSON.stringify({
+    subagentWarned: false, warned: false, warnedAtCall: 0,
+    cumulativeEstimatedTokens: 0, toolCalls,
+  }));
+}
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 console.log("\ncontext-guard.js:");
@@ -116,7 +130,7 @@ test("1. Transcript below thresholds: no output", () => {
     const result = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(result.status, 0, "Should exit 0");
     assert.ok(result.json, "Should output valid JSON");
-    assert.strictEqual(result.json.decision, undefined, "Should not block");
+    assert.ok(!result.json?.hookSpecificOutput?.permissionDecision || result.json.hookSpecificOutput.permissionDecision !== "deny", "Should not block");
     assert.strictEqual(result.json.hookSpecificOutput, undefined, "Should not warn");
   } finally {
     cleanupSession(sessionId);
@@ -174,7 +188,7 @@ test("3. Transcript at 50%: checkpoint warning fires once", () => {
     const result2 = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(result2.status, 0);
     assert.strictEqual(result2.json.hookSpecificOutput, undefined, "Should not warn twice");
-    assert.strictEqual(result2.json.decision, undefined, "Should not block");
+    assert.ok(!result2.json?.hookSpecificOutput?.permissionDecision || result2.json.hookSpecificOutput.permissionDecision !== "deny", "Should not block");
   } finally {
     cleanupSession(sessionId);
     try { fs.rmSync(transcript); } catch {}
@@ -184,12 +198,13 @@ test("3. Transcript at 50%: checkpoint warning fires once", () => {
 // Test 4: Transcript at 60% → critical advisory (PostToolUse can't hard-block)
 test("4. Transcript at 60%: critical advisory via hookSpecificOutput", () => {
   const sessionId = newSessionId();
+  primeSession(sessionId); // bypass wakeup grace period
   // 60% of 200k = 120,000 tokens
   const transcript = createFakeTranscript([makeAssistantMessage(120000)]);
   try {
     const result = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(result.status, 0);
-    assert.strictEqual(result.json.decision, undefined, "PostToolUse should not use decision:block");
+    assert.ok(!result.json?.hookSpecificOutput?.permissionDecision || result.json.hookSpecificOutput.permissionDecision !== "deny", "PostToolUse should not use decision:block");
     assert.ok(result.json.hookSpecificOutput, "Should have hookSpecificOutput");
     assert.ok(
       result.json.hookSpecificOutput.additionalContext.includes("CRITICAL"),
@@ -227,6 +242,7 @@ test("5. Cache tokens counted correctly (input + cache_read + cache_creation)", 
 // Test 6: Multiple assistant messages → uses most recent
 test("6. Multiple assistant messages: uses most recent", () => {
   const sessionId = newSessionId();
+  primeSession(sessionId); // bypass wakeup grace period
   const transcript = createFakeTranscript([
     makeAssistantMessage(60000),   // 30% — below threshold
     { type: "user", message: { content: "do something" } },
@@ -275,7 +291,7 @@ test("8. Transcript path doesn't exist: graceful fallback", () => {
     assert.strictEqual(result.status, 0, "Should exit 0");
     assert.ok(result.json, "Should output valid JSON");
     // With small response, should not trigger any threshold
-    assert.strictEqual(result.json.decision, undefined, "Should not block");
+    assert.ok(!result.json?.hookSpecificOutput?.permissionDecision || result.json.hookSpecificOutput.permissionDecision !== "deny", "Should not block");
   } finally {
     cleanupSession(sessionId);
   }
@@ -295,7 +311,7 @@ test("9. Transcript with no assistant messages: fallback", () => {
     });
     assert.strictEqual(result.status, 0);
     assert.ok(result.json, "Should output valid JSON");
-    assert.strictEqual(result.json.decision, undefined, "Should not block with small fallback");
+    assert.ok(!result.json?.hookSpecificOutput?.permissionDecision || result.json.hookSpecificOutput.permissionDecision !== "deny", "Should not block with small fallback");
   } finally {
     cleanupSession(sessionId);
     try { fs.rmSync(transcript); } catch {}
@@ -378,7 +394,7 @@ test("13. Just below 35% threshold (69999 tokens): no warning", () => {
     const result = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(result.status, 0, "Should exit 0");
     assert.ok(result.json, "Should output valid JSON");
-    assert.strictEqual(result.json.decision, undefined, "Should not block");
+    assert.ok(!result.json?.hookSpecificOutput?.permissionDecision || result.json.hookSpecificOutput.permissionDecision !== "deny", "Should not block");
     assert.strictEqual(result.json.hookSpecificOutput, undefined, "Should not warn below 35%");
   } finally {
     cleanupSession(sessionId);
@@ -411,7 +427,7 @@ test("15. PreToolUse below threshold (50%): allow", () => {
     });
     assert.strictEqual(result.status, 0, "Should exit 0");
     assert.ok(result.json, "Should output valid JSON");
-    assert.strictEqual(result.json.decision, undefined, "Should not block below 60%");
+    assert.ok(!result.json?.hookSpecificOutput?.permissionDecision || result.json.hookSpecificOutput.permissionDecision !== "deny", "Should not block below 60%");
   } finally {
     cleanupSession(sessionId);
   }
@@ -465,7 +481,7 @@ test("19. PreToolUse with no state file: allow (safe default)", () => {
     });
     assert.strictEqual(result.status, 0, "Should exit 0");
     assert.ok(result.json, "Should output valid JSON");
-    assert.strictEqual(result.json.decision, undefined, "Should allow when no state exists");
+    assert.ok(!result.json?.hookSpecificOutput?.permissionDecision || result.json.hookSpecificOutput.permissionDecision !== "deny", "Should allow when no state exists");
   } finally {
     cleanupSession(sessionId);
   }
@@ -476,7 +492,9 @@ test("19. PreToolUse with no state file: allow (safe default)", () => {
 // Test 27: PostToolUse block at 60% writes context-high flag but NOT sentinel
 test("27. PostToolUse block at 60% writes context-high flag, not sentinel", () => {
   const sessionId = newSessionId();
-  const fakePid = `test-${sessionId}`;
+  primeSession(sessionId); // bypass wakeup grace period
+  // Use a numeric PID — context-guard validates PID is digits-only (M3 fix)
+  const fakePid = String(process.pid);
   const sentinelFile = path.join(os.tmpdir(), `claude-checkpoint-exit-${fakePid}`);
   const contextHighFile = path.join(os.tmpdir(), `claude-context-high-${fakePid}`);
   // 65% of 200k = 130,000 tokens — above block threshold
@@ -530,7 +548,7 @@ test("28. PostToolUse warn (50%) does not write checkpoint-exit flag", () => {
     }, { CLAUDE_LOOP_SENTINEL: flagFile });
     assert.strictEqual(result.status, 0);
     assert.ok(result.json.hookSpecificOutput, "Should warn at 55%");
-    assert.strictEqual(result.json.decision, undefined, "Should not block");
+    assert.ok(!result.json?.hookSpecificOutput?.permissionDecision || result.json.hookSpecificOutput.permissionDecision !== "deny", "Should not block");
     assert.ok(!fs.existsSync(flagFile), "Should NOT write flag file below block threshold");
   } finally {
     cleanupSession(sessionId);
@@ -542,6 +560,7 @@ test("28. PostToolUse warn (50%) does not write checkpoint-exit flag", () => {
 // Test 29: PostToolUse block writes JSONL log entry
 test("29. PostToolUse block writes JSONL log entry", () => {
   const sessionId = newSessionId();
+  primeSession(sessionId); // bypass wakeup grace period
   const env = require("./test-helpers").createTempHome();
   const transcript = createFakeTranscript([makeAssistantMessage(130000)]);
   try {
@@ -572,6 +591,7 @@ test("29. PostToolUse block writes JSONL log entry", () => {
 // Test 30: Failsafe at 75% under claude-loop writes sentinel with reason "failsafe"
 test("30. Failsafe at 75% under CLAUDE_LOOP=1 writes sentinel directly", () => {
   const sessionId = newSessionId();
+  primeSession(sessionId); // bypass wakeup grace period
   const sentinelFile = path.join(os.tmpdir(), `claude-failsafe-test-${sessionId}`);
   // 76% of 200k = 152,000 tokens — above failsafe threshold
   const transcript = createFakeTranscript([makeAssistantMessage(152000)]);
@@ -602,6 +622,7 @@ test("30. Failsafe at 75% under CLAUDE_LOOP=1 writes sentinel directly", () => {
 // Test 31: At 75% without CLAUDE_LOOP, no failsafe — normal BLOCK behavior
 test("31. At 75% without CLAUDE_LOOP, normal CRITICAL block (no failsafe)", () => {
   const sessionId = newSessionId();
+  primeSession(sessionId); // bypass wakeup grace period
   const sentinelFile = path.join(os.tmpdir(), `claude-failsafe-test-${sessionId}`);
   const transcript = createFakeTranscript([makeAssistantMessage(152000)]);
   try {
@@ -673,6 +694,82 @@ test("33. 50% warning re-fires every 5 calls after first", () => {
     const r6 = runGuard(sessionId, { transcriptPath: transcript });
     assert.ok(r6.json.hookSpecificOutput, "Call 6 should fire warning");
     assert.ok(r6.json.hookSpecificOutput.additionalContext.includes("Context warning"), "Call 6: re-fired context warning");
+  } finally {
+    cleanupSession(sessionId);
+    try { fs.rmSync(transcript); } catch {}
+  }
+});
+
+// ─── BASELINE_HEADROOM tests ──────────────────────────────────────────────────
+
+// Test 34: Baseline at 62%, current at 65% — effective block threshold is 62%+8%=70%, so no block
+test("34. BASELINE_HEADROOM: baseline 62%, ratio 65% — no block (threshold=70%)", () => {
+  const sessionId = newSessionId();
+  // Prime with 5 calls so grace period is satisfied, and set baselineRatio to 0.62
+  fs.mkdirSync(STATE_DIR, { recursive: true });
+  const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
+  fs.writeFileSync(stateFile, JSON.stringify({
+    subagentWarned: true, warned: true, warnedAtCall: 1,
+    cumulativeEstimatedTokens: 0, toolCalls: 5, baselineRatio: 0.62,
+  }));
+  // 65% of 200k = 130,000 tokens
+  const transcript = createFakeTranscript([makeAssistantMessage(130000)]);
+  try {
+    const result = runGuard(sessionId, { transcriptPath: transcript });
+    assert.strictEqual(result.status, 0);
+    // With effective threshold at 70%, 65% should NOT trigger CRITICAL block
+    const ctx = result.json.hookSpecificOutput && result.json.hookSpecificOutput.additionalContext;
+    assert.ok(!ctx || !ctx.includes("CRITICAL"),
+      `Should not CRITICAL block at 65% when baseline is 62% (effective threshold 70%), got: ${ctx}`);
+  } finally {
+    cleanupSession(sessionId);
+    try { fs.rmSync(transcript); } catch {}
+  }
+});
+
+// Test 35: Baseline at 62%, current at 71% — 71% > 62%+8%=70%, should trigger block
+test("35. BASELINE_HEADROOM: baseline 62%, ratio 71% — block (exceeds threshold=70%)", () => {
+  const sessionId = newSessionId();
+  fs.mkdirSync(STATE_DIR, { recursive: true });
+  const stateFile = path.join(STATE_DIR, `${sessionId}.json`);
+  fs.writeFileSync(stateFile, JSON.stringify({
+    subagentWarned: true, warned: true, warnedAtCall: 1,
+    cumulativeEstimatedTokens: 0, toolCalls: 5, baselineRatio: 0.62,
+  }));
+  // 71% of 200k = 142,000 tokens
+  const transcript = createFakeTranscript([makeAssistantMessage(142000)]);
+  try {
+    const result = runGuard(sessionId, { transcriptPath: transcript });
+    assert.strictEqual(result.status, 0);
+    assert.ok(result.json.hookSpecificOutput, "Should have hookSpecificOutput");
+    assert.ok(
+      result.json.hookSpecificOutput.additionalContext.includes("CRITICAL"),
+      `Should CRITICAL block at 71% when baseline is 62% (effective threshold 70%), got: ${result.json.hookSpecificOutput.additionalContext}`
+    );
+  } finally {
+    cleanupSession(sessionId);
+    try { fs.rmSync(transcript); } catch {}
+  }
+});
+
+// ─── MIN_CALLS_BEFORE_BLOCK grace period test ─────────────────────────────────
+
+// Test 36: Context at 65% with only 2 tool calls — grace period prevents CRITICAL block
+test("36. MIN_CALLS_BEFORE_BLOCK: 65% with 2 tool calls — no CRITICAL block (grace period)", () => {
+  // Do NOT use primeSession — the point is to verify the grace period with few calls.
+  // We make 2 real calls via runGuard so toolCalls=2 in state.
+  const sessionId = newSessionId();
+  // 65% of 200k = 130,000 tokens — above block threshold
+  const transcript = createFakeTranscript([makeAssistantMessage(130000)]);
+  try {
+    // First call: toolCalls becomes 1 in state
+    runGuard(sessionId, { transcriptPath: transcript });
+    // Second call: toolCalls becomes 2 — still below MIN_CALLS_BEFORE_BLOCK=5
+    const result = runGuard(sessionId, { transcriptPath: transcript });
+    assert.strictEqual(result.status, 0);
+    const ctx = result.json.hookSpecificOutput && result.json.hookSpecificOutput.additionalContext;
+    assert.ok(!ctx || !ctx.includes("CRITICAL"),
+      `Grace period should prevent CRITICAL block at 2 tool calls, got: ${ctx}`);
   } finally {
     cleanupSession(sessionId);
     try { fs.rmSync(transcript); } catch {}

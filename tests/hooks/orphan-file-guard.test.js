@@ -72,7 +72,7 @@ test("existing files pass through", () => {
 test("exempt basenames pass through", () => {
   const proj = createTempProject();
   const exemptFiles = [
-    ".gitignore", "package.json", "README.md", "CLAUDE.md",
+    ".gitignore", "package.json", "README.md", "CLAUDE.md", "AGENTS.md",
     "Dockerfile", "LICENSE", "MEMORY.md",
   ];
 
