@@ -103,10 +103,19 @@ function checkBareObjectId(toolName, toolInput) {
   let json;
   if (toolName === "mcp__mongodb__find") {
     if (!toolInput.filter) return null;
-    try { json = JSON.stringify(toolInput.filter); } catch { return null; }
+    // Claude Code may serialize object parameters as JSON strings; use directly to avoid double-stringify
+    if (typeof toolInput.filter === "string") {
+      json = toolInput.filter;
+    } else {
+      try { json = JSON.stringify(toolInput.filter); } catch { return null; }
+    }
   } else if (toolName === "mcp__mongodb__aggregate") {
     if (!toolInput.pipeline) return null;
-    try { json = JSON.stringify(toolInput.pipeline); } catch { return null; }
+    if (typeof toolInput.pipeline === "string") {
+      json = toolInput.pipeline;
+    } else {
+      try { json = JSON.stringify(toolInput.pipeline); } catch { return null; }
+    }
   } else {
     return null;
   }

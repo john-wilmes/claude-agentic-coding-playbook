@@ -240,6 +240,28 @@ unitTest("U14. externalId hex -> null (string exception)", () => {
   assert.strictEqual(r, null, `Expected null (externalId is string field), got: ${JSON.stringify(r)}`);
 });
 
+unitTest("U14b. filter passed as JSON string with $oid -> null (allow)", () => {
+  // Claude Code serializes object parameters as JSON strings; hook must not double-stringify
+  const r = checkBareObjectId("mcp__mongodb__find", {
+    filter: `{"user":{"$oid":"${SAMPLE_HEX}"},"type":"customaction"}`,
+  });
+  assert.strictEqual(r, null, `Expected null (filter is a JSON string with $oid), got: ${JSON.stringify(r)}`);
+});
+
+unitTest("U14c. pipeline passed as JSON string with $oid -> null (allow)", () => {
+  const r = checkBareObjectId("mcp__mongodb__aggregate", {
+    pipeline: `[{"$match":{"user":{"$oid":"${SAMPLE_HEX}"}}}]`,
+  });
+  assert.strictEqual(r, null, `Expected null (pipeline is a JSON string with $oid), got: ${JSON.stringify(r)}`);
+});
+
+unitTest("U14d. filter passed as JSON string with bare hex -> deny", () => {
+  const r = checkBareObjectId("mcp__mongodb__find", {
+    filter: `{"_id":"${SAMPLE_HEX}"}`,
+  });
+  assert.ok(r && r.action === "deny", `Expected deny for bare hex in string filter, got: ${JSON.stringify(r)}`);
+});
+
 // ─── Unit tests: checkEmptyFilter ────────────────────────────────────────────
 
 console.log("\nmcp-data-guard.js (unit: checkEmptyFilter):");
