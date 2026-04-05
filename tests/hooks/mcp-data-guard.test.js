@@ -312,14 +312,14 @@ unitTest("U26. case insensitive SELECT -> deny", () => {
 
 console.log("\nmcp-data-guard.js (unit: checkDatadogRange):");
 
-unitTest("U27. time_range: 7d -> deny", () => {
+unitTest("U27. time_range: 7d -> null (allow)", () => {
   const r = checkDatadogRange("mcp__datadog__get_logs", { time_range: "7d" });
-  assert.ok(r && r.action === "deny", `Expected deny, got: ${JSON.stringify(r)}`);
+  assert.strictEqual(r, null);
 });
 
-unitTest("U28. time_range: 30d -> deny", () => {
+unitTest("U28. time_range: 30d -> null (allow)", () => {
   const r = checkDatadogRange("mcp__datadog__get_logs", { time_range: "30d" });
-  assert.ok(r && r.action === "deny", `Expected deny, got: ${JSON.stringify(r)}`);
+  assert.strictEqual(r, null);
 });
 
 unitTest("U29. time_range: 1h -> null (allow)", () => {
@@ -762,21 +762,20 @@ test("I25. case insensitive SELECT -> deny", (env) => {
 
 console.log("\nmcp-data-guard.js (Datadog range):");
 
-test("I26. time_range: 7d -> deny", (env) => {
+test("I26. time_range: 7d -> allow", (env) => {
   const result = runGuard("mcp__datadog__get_logs", {
     filters: { service: "integrator" },
     time_range: "7d",
   }, env);
-  assertBlocked(result, "7d");
-  assert.ok(getDenyReason(result).includes("7d"), "Range in reason");
+  assertAllowed(result, "7d");
 });
 
-test("I27. time_range: 30d -> deny", (env) => {
+test("I27. time_range: 30d -> allow", (env) => {
   const result = runGuard("mcp__datadog__get_logs", {
     filters: { service: "foo" },
     time_range: "30d",
   }, env);
-  assertBlocked(result, "30d");
+  assertAllowed(result, "30d");
 });
 
 test("I28. time_range: 1h -> allow", (env) => {

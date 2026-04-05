@@ -196,11 +196,11 @@ function checkDatadogRange(toolName, toolInput) {
   if (toolName !== "mcp__datadog__get_logs") return null;
   const range = toolInput.time_range || "1h";
 
-  const WIDE_RANGES = ["7d", "14d", "30d"];
-  if (WIDE_RANGES.includes(range)) {
+  const BLOCKED_RANGES = ["14d"];
+  if (BLOCKED_RANGES.includes(range)) {
     return {
       action: "deny",
-      reason: `Query range "${range}" is too wide. Use 1h, 4h, 8h, or 1d to reduce cost and timeout risk.`,
+      reason: `Query range "${range}" is too wide. Use 1h, 4h, 8h, 1d, 7d, or 30d.`,
     };
   }
   return null;
