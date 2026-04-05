@@ -1445,6 +1445,15 @@ Three controls address this:
    `command` and `args` fields; a legitimate database server does not need
    `--exec` flags or network egress to arbitrary hosts.
 
+4. **Add hook-layer validation for data-access servers.** The playbook includes
+   three PreToolUse/PostToolUse hooks targeting MongoDB, Datadog, and Snowflake
+   MCP calls: `mcp-data-guard` (blocks malformed queries and empty filters before
+   they silently fail), `mcp-query-interceptor` (formats queries for manual
+   execution in air-gapped environments), and `mcp-result-advisor` (injects
+   troubleshooting tips on zero-result responses). These complement `dedicated-tool-guard`,
+   which blocks CLI file-reading tools (`cat`, `grep`, `find`, `head`, `tail`, `sed`, `awk`) in Bash commands where Claude Code's dedicated Read/Grep/Glob tools should be used instead, and also blocks direct database CLI access to enforce the MCP safety layer. See
+   [Hook Reference](hooks.md#mcp-data-guardjs--pretooluse) for details.
+
 To reset previously granted approvals:
 
 ```bash

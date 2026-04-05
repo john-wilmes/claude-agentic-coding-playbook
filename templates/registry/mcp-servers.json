@@ -182,7 +182,7 @@
       "disabled": true
     },
     "env_required": [],
-    "notes": "PHI-sanitizing server available in mcp-servers/clickup/server.js. Launch via a shell script that injects CLICKUP_API_TOKEN from your keychain. Register the script in ~/.claude.json mcpServers. Strictly read-only (GET-only), redacts strings via Presidio (or regex fallback). Exposes get_task, get_tasks, search_tasks. See mcp-servers/clickup/README.md."
+    "notes": "Remote HTTP server hosted by ClickUp (Public Beta). No local PHI-sanitizing wrapper is provided in this repo."
   },
   "mongodb": {
     "description": "MongoDB queries and collection inspection",

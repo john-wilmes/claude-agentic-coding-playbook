@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Sycophancy-detector PostToolUse hook with three behavioral signals (rubber-stamping, compliance without investigation, shallow reviews)
+- 10 new hooks from internal fork sync (88b1dd6):
+  - **MCP safety**: `mcp-data-guard`, `mcp-query-interceptor`, `mcp-result-advisor` — PHI blocking and injection safety for MCP tool calls
+  - **Evidence/reasoning**: `evidence-gate`, `rejection-advisor` — gate synthesis on evidence completeness, surface alternative interpretations
+  - **Resource discipline**: `dedicated-tool-guard`, `memory-accumulation-guard`, `memory-index-guard`, `checkpoint-discipline`
+  - **Git safety**: `protect-main` — block direct pushes/commits to protected branches
+- Updated in the same sync: `mcp-server-guard`, `subagent-context`, `subagent-recovery`, `task-completed-gate`, `model-router`, `multi-image-guard`, `post-tool-verify`, `bloat-guard`, `prompt-injection-guard`, `read-once-dedup`, `context-guard`, `checkpoint-gate`, `session-end`, `session-start`, `skill-guard`, `sanitize-guard`, `pii-detector`, `stuck-detector`
+- PHI-sanitizing MCP servers: `mongodb-sanitizer`, `snowflake-sanitizer`, `slack-sanitizer` (Node.js), `datadog-sanitizer` (Python)
+- Shared MCP modules in `mcp-servers/shared/`: `sanitizer-core.js`, `phi-config-loader.js`, `phi-defaults.yaml`
+- `sanitize.sh` script: regex + Presidio PII/PHI redaction for investigation files, with `--check` mode
+- `claude-loop --auto-mode` for fully automated session management
+- Rule templates `codebase-reference.md` and `operations.md` in `profiles/combined/rules/` for org-specific customization
+- Tests for all new hooks
 - `--status-json` flag for claude-loop programmatic status checks
 - Implicit task completion in claude-loop (exit 0 + uncommitted changes = success)
 - `--version` flag, `--report` task queue section, and `[FAIL]` recovery for claude-loop
@@ -17,10 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Access tracking and decay for knowledge entries
 - Retrieval miss detection at session end (knowledge system)
 - Enriched knowledge retrieval with Current Work terms from MEMORY.md
-- Read-once deduplication hook for 38-40% file-read context savings
 - Block 6 additional credential directories per Trail of Bits recommendations
 - Close readiness gaps: --uninstall flag, Node v18+ version check, session-end tests, analyze-logs tests, sanitize tests
-- Sycophancy-detector PostToolUse hook with three behavioral signals
 - Session timeline (`--timeline`) and aggregate metrics (`--aggregate`) for analyze-logs
 
 ### Fixed

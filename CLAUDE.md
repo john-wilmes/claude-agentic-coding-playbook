@@ -24,15 +24,6 @@ No type-check or lint commands — this is a bash + Node scripting project.
 - `tests/skills/smoke/` — Smoke tests using `claude` CLI (gated behind `SKILL_SMOKE=1` env var)
 - `docs/` — Best practices guide, case studies, methodology docs
 
-## MCP Server Shared Modules
-
-The PHI-safe MCP servers at `~/.mcp/` share two zero-dependency Node modules:
-
-- `~/.mcp/shared/audit-logger.js` — append-only JSONL audit log for every tool call (`~/.mcp/audit-logs/`)
-- `~/.mcp/shared/rate-limiter.js` — in-memory per-resource rate limiter (high-PHI collections: 30/30min, others: 100/30min)
-
-All Node MCP servers (`mongodb`, `snowflake`, `slack`) import both modules. The Python Datadog server has an inline equivalent.
-
 ## Dependencies and Build
 
 - Install: `./install.sh` (symlinks hooks, skills, and config to `~/.claude/`)

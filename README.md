@@ -28,7 +28,7 @@ Full details with citations: [docs/best-practices.md](docs/best-practices.md)
 Most Claude Code setups rely on CLAUDE.md instructions alone. Instructions are advisory — compliance ranges from ~50-90% in our testing (published research reports lower rates for complex instruction sets). This playbook takes a different approach:
 
 - **Designed for bypass mode.** The biggest productivity gains come from running Claude Code autonomously (`--dangerously-skip-permissions` or `bypassPermissions` in settings). Without guardrails, bypass mode means no safety net — destructive commands, runaway file creation, and context exhaustion go unchecked. With this playbook's hooks, you get deterministic enforcement of safety rules even when the agent has full permissions: prompt injection is blocked, context limits are enforced, destructive git operations are caught, and PII is redacted — all without permission prompts interrupting flow.
-- **Hooks enforce rules deterministically.** 26 hooks — each fires on the relevant tool calls (not all on every call) — catching context exhaustion, prompt injection, sycophantic compliance patterns, and file bloat before they cause problems. Hooks achieve near-100% enforcement for deny rules and >95% for advisory rules — where instructions alone cannot.
+- **Hooks enforce rules deterministically.** 35+ hooks — each fires on the relevant tool calls (not all on every call) — catching context exhaustion, prompt injection, sycophantic compliance patterns, and file bloat before they cause problems. Hooks achieve near-100% enforcement for deny rules and >95% for advisory rules — where instructions alone cannot.
 - **Structured logging makes agent behavior observable.** Every hook decision is logged to JSONL. Analysis tools (`analyze-logs.js`) report context usage, stuck loops, model routing, and hook effectiveness per session — so you can measure what's working and what isn't.
 - **Practices are validated by running them.** The playbook is [dogfooded](docs/dogfooding.md) against real codebases with a 100-task framework. Bugs found during dogfooding (context guard effectiveness, task queue edge cases, implicit completion detection) feed directly back into the hooks and scripts.
 - **Zero npm dependencies.** All hooks use Node.js stdlib only. No `node_modules`, no build step, no supply chain risk.
@@ -97,10 +97,12 @@ chmod +x install.sh
     learn/SKILL.md                    #   /learn - capture knowledge entries
     playbook/SKILL.md                 #   /playbook - analyze and improve config
     promote/SKILL.md                  #   /promote - promote lessons to global scope
-  hooks/                               #   26 hooks — safety, quality, resource management (see docs/hooks.md)
+  hooks/                               #   35+ hooks — safety, quality, resource management (see docs/hooks.md)
   rules/
     hooks.md                          #   Hook development conventions (globs: templates/hooks/**)
     testing.md                        #   Test conventions (globs: tests/**)
+    codebase-reference.md             #   Template: org-specific repo ownership (populate for your team)
+    operations.md                     #   Template: MCP tool/data access policy (populate for your org)
   templates/
     project-CLAUDE.md                 #   Template for project-level CLAUDE.md
     knowledge/
@@ -141,6 +143,7 @@ CLAUDE.md rules are advisory (~50-90% compliance in our testing; published resea
 - **Prompt injection guard** -- Blocks high-confidence injection patterns in Bash commands (designed for zero false positives).
 - **Sanitize guard** -- Runtime PII/PHI detection and redaction. Scans tool output (PostToolUse) and blocks writes containing PII (PreToolUse). Opt-in per repo via `.claude/sanitize.yaml`.
 - **Skill guard** -- Validates skill invocations and prevents unauthorized skill execution.
+- **MCP safety** -- `mcp-data-guard` blocks PHI field access in MCP tool calls; `mcp-query-interceptor` intercepts and sanitizes MCP queries before execution; `mcp-result-advisor` scans MCP results for PHI leakage and advises on safe handling.
 
 **Quality:**
 - **Post-tool verify** -- Auto-runs project tests after Edit/Write on code files with debouncing.
@@ -148,6 +151,7 @@ CLAUDE.md rules are advisory (~50-90% compliance in our testing; published resea
 - **Context guard** -- Dual-mode context window monitoring. Warns at 35%/50%, advisory block at 60% (informational, not hard-blocking), failsafe sentinel at 75%.
 - **Stuck detector** -- Detects and breaks agent loops when the same action repeats.
 - **Sycophancy detector** -- Detects behavioral patterns indicating sycophancy — rubber-stamping, compliance without investigation, shallow reviews. Warns via PostToolUse advisory.
+- **Evidence/reasoning** -- `evidence-gate` blocks research synthesis steps if supporting evidence is insufficient; `rejection-advisor` surfaces alternative interpretations when the agent accepts a framing without challenge.
 
 **Resource management:**
 - **Model router** -- Auto-selects Haiku/Sonnet/Opus for Task and Agent tool calls based on prompt signals. Warns when allowed-tools exceeds 10.
@@ -155,6 +159,10 @@ CLAUDE.md rules are advisory (~50-90% compliance in our testing; published resea
 - **Bloat guard** -- Detects runaway file creation and flags unexpected project growth.
 - **Markdown size guard** -- Warns when CLAUDE.md or MEMORY.md approach size thresholds.
 - **Read-once dedup** -- Blocks re-reads of unchanged files (38-40% context savings, observed in author testing).
+- **Dedicated tool guard** -- Warns when a general-purpose tool (Bash) is used where a dedicated tool (Glob, Grep, Read) would be more efficient.
+- **Memory guards** -- `memory-accumulation-guard` warns when MEMORY.md grows faster than expected; `memory-index-guard` enforces structural conventions on the memory index to keep it navigable.
+- **Checkpoint discipline** -- Enforces periodic checkpointing; warns when a long session has no checkpoint.
+- **Protect main** -- Blocks direct commits and force-pushes to main/master.
 
 **Enforcement:**
 - **Checkpoint gate** -- Enforces checkpoint-exit and context-critical boundaries. Blocks sessions from continuing past failsafe thresholds without checkpointing.
@@ -176,6 +184,8 @@ CLAUDE.md rules are advisory (~50-90% compliance in our testing; published resea
 Utility modules (`log.js`, `bm25.js`, `pii-detector.js`, `knowledge-capture.js`, `knowledge-db.js`) are shared libraries used by the hooks above. See [Hook Reference](docs/hooks.md) for details on every hook.
 
 ### CLAUDE.md Rules
+
+The `rules/` directory contains four files installed to `~/.claude/rules/`. `hooks.md` and `testing.md` are pre-populated conventions for this playbook. `codebase-reference.md` and `operations.md` are starter templates for org-specific customization: populate `codebase-reference.md` with your repo ownership map and key contacts, and `operations.md` with your MCP tool access policy and approved data sources. These files are included via Claude Code's glob-based rules system.
 
 The combined CLAUDE.md includes:
 
@@ -226,6 +236,7 @@ Standalone tools installed to `~/.local/bin/`:
 | `claude-loop` | Auto-restart wrapper for Claude Code sessions. Supports `--task-queue`, `--status-json`, `--log-file`, and `--report`. |
 | `knowledge-consolidate` | Deduplicate and consolidate knowledge entries using the claude CLI for pairwise overlap analysis. |
 | `repo-fleet-index` | CLI wrapper for the repo fleet indexer and MCP server. Builds manifests and a digest across your repos. |
+| `sanitize.sh` | Redact PII/PHI from files using regex patterns (SSN, email, phone, credit card). Supports `--check` mode (detect without modifying) and falls back from Presidio to regex if Presidio is unavailable. |
 
 ## Log Analysis
 
@@ -313,11 +324,12 @@ PHI-sanitizing MCP servers for safe AI-assisted queries against healthcare data 
 |--------|-----------|----------------|
 | `mongodb-sanitizer` | MongoDB | Drops PHI fields, redacts string values, Presidio NLP second pass |
 | `snowflake-sanitizer` | Snowflake | Drops PHI columns from SELECT results, read-only enforcement |
-| `datadog-sanitizer` | Datadog Logs | Strips names, emails, SSNs, tokens from log output |
-| `clickup-sanitizer` | ClickUp | Regex + Presidio redaction of emails, phones, SSNs, tokens; read-only |
+| `datadog-sanitizer` | Datadog Logs | Strips names, emails, SSNs, tokens from log output (Python server) |
 | `slack-sanitizer` | Slack | Regex + Presidio redaction of emails, phones, SSNs, tokens; read-only |
 
-MongoDB, Snowflake, and Datadog use a shared `phi-config.yaml` to define which columns and tables are PHI — no code changes required to adapt to your data model. ClickUp and Slack apply string-level redaction (no field blocklist, as they are not PHI databases).
+MongoDB, Snowflake, and Datadog use a shared `phi-config.yaml` to define which columns and tables are PHI — no code changes required to adapt to your data model. Slack applies string-level redaction (no field blocklist, as it is not a PHI database).
+
+The Node.js servers (MongoDB, Slack, Snowflake) share modules in `mcp-servers/shared/`: `sanitizer-core.js`, `phi-config-loader.js`, and `phi-defaults.yaml` (with `phi-config.example.yaml` and `phi-defaults.json` for config scaffolding). These handle PHI config loading and sanitization centrally.
 
 ## Roadmap
 
@@ -327,7 +339,7 @@ MongoDB, Snowflake, and Datadog use a shared `phi-config.yaml` to define which c
 ## Limitations
 
 - **Claude Code only**: All hooks, skills, and scripts target Claude Code. The principles in `best-practices.md` are conceptually portable to Cursor, Copilot, etc., but the tooling is not.
-- **Hook startup overhead**: 26 hooks are installed, but not all fire on every call — active hooks add ~50-100ms per tool call. Negligible for most workflows, noticeable in rapid-fire operations.
+- **Hook startup overhead**: 35+ hooks are installed, but not all fire on every call — active hooks add ~50-100ms per tool call. Negligible for most workflows, noticeable in rapid-fire operations.
 - **CLAUDE.md budget**: The combined profile's CLAUDE.md consumes instruction budget. Projects with large existing CLAUDE.md files may hit the ~150-200 instruction line ceiling.
 - **Node.js 20+ required**: Hooks use modern Node.js APIs (ESM-style imports, `fs.promises`, etc.).
 - **Single maintainer**: This is a personal project, not backed by a company or large team.
