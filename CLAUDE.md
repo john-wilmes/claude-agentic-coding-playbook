@@ -14,7 +14,7 @@ No type-check or lint commands — this is a bash + Node scripting project.
 
 - `templates/hooks/` — Hook scripts installed to `~/.claude/hooks/` by `install.sh`
 - `profiles/combined/` — CLAUDE.md, skills, and settings for the combined dev+research profile
-- `scripts/` — CLI tools (`q`, `qa`, `claude-loop.sh`, `analyze-logs.js`)
+- `scripts/` — CLI tools (`q`, `qa`, `claude-loop.sh`, `analyze-logs.js`, `knowledge-to-vault.js`); tested by `tests/scripts/knowledge-to-vault.test.js`
 - `templates/fleet/` — Fleet index scripts (`fleet-index.js`)
 - `templates/mcp/` — MCP server scripts (`fleet-index-server.js`)
 - `tests/hooks/` — Node.js integration tests for each hook (zero deps, stdlib only)
