@@ -14,6 +14,25 @@ const { execSync } = require("child_process");
 let log;
 try { log = require("./log"); } catch { log = { writeLog() {} }; }
 
+// Detect session type from CWD and environment signals.
+// Returns { type, reason } where type is one of:
+//   "research"   — CWD is inside ~/.claude/investigations/
+//   "autonomous"  — CLAUDE_LOOP env var is set (claude-loop task queue)
+//   "coding"      — default: interactive coding session
+function detectSessionType(cwd, env = process.env) {
+  // Research: CWD inside investigations directory
+  const investigationsDir = path.join(os.homedir(), ".claude", "investigations");
+  if (cwd.startsWith(investigationsDir)) {
+    return { type: "research", reason: "cwd inside ~/.claude/investigations/" };
+  }
+  // Autonomous: claude-loop is driving
+  if (env.CLAUDE_LOOP) {
+    return { type: "autonomous", reason: "CLAUDE_LOOP env var set" };
+  }
+  // Default: interactive coding
+  return { type: "coding", reason: "default" };
+}
+
 // Detect project context from working directory
 function detectProjectContext(cwd) {
   const context = { tools: new Set(), tags: new Set() };
@@ -227,6 +246,7 @@ process.stdin.on("end", () => {
     const hookInput = JSON.parse(input);
     const sessionId = hookInput.session_id || "";
     const cwd = hookInput.cwd || process.cwd();
+    const sessionType = detectSessionType(cwd);
 
     // Clear stale hook state directories — only delete files older than 2 hours
     // to preserve state for concurrent sessions.
@@ -353,19 +373,26 @@ process.stdin.on("end", () => {
       }
     } catch {}
 
-    // Inject recent git commits for context
+    // Inject recent git commits for context (skip for research sessions — no repo)
     let recentCommits = "";
-    try {
-      recentCommits = execSync("git log --oneline -5", {
-        cwd,
-        timeout: 3000,
-        encoding: "utf8",
-        stdio: ["pipe", "pipe", "ignore"],
-      }).trim();
-    } catch {}
+    if (sessionType.type !== "research") {
+      try {
+        recentCommits = execSync("git log --oneline -5", {
+          cwd,
+          timeout: 3000,
+          encoding: "utf8",
+          stdio: ["pipe", "pipe", "ignore"],
+        }).trim();
+      } catch {}
+    }
 
     // Build context string
     const parts = [];
+
+    // Session type header for non-default types
+    if (sessionType.type !== "coding") {
+      parts.push(`Session type: ${sessionType.type} (${sessionType.reason})`);
+    }
 
     if (recentCommits) {
       parts.push(`Recent commits:\n${recentCommits}`);
@@ -392,8 +419,10 @@ process.stdin.on("end", () => {
     }
 
     // Inject relevant knowledge entries, enriched with Current Work terms
+    // Research sessions get fewer entries (investigation context is primary)
+    const maxKnowledgeEntries = sessionType.type === "research" ? 3 : 5;
     const currentWorkTerms = extractSalientTerms(currentWork);
-    const relevantEntries = getRelevantKnowledge(cwd, 5, currentWorkTerms);
+    const relevantEntries = getRelevantKnowledge(cwd, maxKnowledgeEntries, currentWorkTerms);
 
     // Write injected IDs state file for retrieval-miss detection at session end
     try {
@@ -432,7 +461,7 @@ process.stdin.on("end", () => {
       event: "init",
       session_id: sessionId,
       project: cwd,
-      details: `Injected ${parts.length} context sections, ${relevantEntries.length} knowledge entries (fleet digest included if available)`,
+      details: `[${sessionType.type}] Injected ${parts.length} context sections, ${relevantEntries.length} knowledge entries`,
     });
 
     // Output JSON that Claude Code injects into agent context
@@ -452,5 +481,5 @@ process.stdin.on("end", () => {
 
 // Export for testing
 if (typeof module !== "undefined") {
-  module.exports = { detectProjectContext, parseFrontmatter, scoreEntry, getRelevantKnowledge, parseEnvYaml, extractSalientTerms, BLOCKED_ENV_VARS };
+  module.exports = { detectSessionType, detectProjectContext, parseFrontmatter, scoreEntry, getRelevantKnowledge, parseEnvYaml, extractSalientTerms, BLOCKED_ENV_VARS };
 }

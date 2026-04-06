@@ -132,6 +132,37 @@ test("5. detectProjectContext with empty dir returns empty tools and tags", () =
   }
 });
 
+// Test 5a: detectSessionType — default → coding
+test("5a. detectSessionType default returns coding", () => {
+  const { detectSessionType } = requireModule();
+  const result = detectSessionType("/some/project", {});
+  assert.strictEqual(result.type, "coding", "default type should be coding");
+});
+
+// Test 5b: detectSessionType — investigations dir → research
+test("5b. detectSessionType in investigations dir returns research", () => {
+  const { detectSessionType } = requireModule();
+  const investigationsDir = path.join(os.homedir(), ".claude", "investigations", "test-inv");
+  const result = detectSessionType(investigationsDir, {});
+  assert.strictEqual(result.type, "research", "investigations dir should be research");
+  assert.ok(result.reason.includes("investigations"), "reason should mention investigations");
+});
+
+// Test 5c: detectSessionType — CLAUDE_LOOP set → autonomous
+test("5c. detectSessionType with CLAUDE_LOOP returns autonomous", () => {
+  const { detectSessionType } = requireModule();
+  const result = detectSessionType("/some/project", { CLAUDE_LOOP: "1" });
+  assert.strictEqual(result.type, "autonomous", "CLAUDE_LOOP should trigger autonomous");
+});
+
+// Test 5d: detectSessionType — investigations dir takes priority over CLAUDE_LOOP
+test("5d. detectSessionType research takes priority over autonomous", () => {
+  const { detectSessionType } = requireModule();
+  const investigationsDir = path.join(os.homedir(), ".claude", "investigations", "test-inv");
+  const result = detectSessionType(investigationsDir, { CLAUDE_LOOP: "1" });
+  assert.strictEqual(result.type, "research", "research should take priority over autonomous");
+});
+
 // Test 6: parseFrontmatter — valid entry → returns parsed fields
 test("6. parseFrontmatter with valid frontmatter returns parsed fields", () => {
   const { parseFrontmatter } = requireModule();
