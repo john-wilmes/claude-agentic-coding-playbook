@@ -32,6 +32,13 @@ Investigation question: {QUESTION}
 Repository: {REPO_PATH}
 Your evidence range: 001–049
 
+**Data access:** Never use Bash to query databases or external APIs. Use MCP tools only:
+- MongoDB: `mcp__mongodb__find`, `mcp__mongodb__aggregate`
+- Datadog logs: `mcp__datadog__get_logs`
+- Snowflake: `mcp__snowflake__run_sql`
+- ClickUp: `mcp__clickup__get_task`, `mcp__clickup__search_tasks`
+Direct CLI tools (`mongosh`, `curl datadoghq.com`) are blocked and will fail.
+
 Tasks:
 1. Read $INVESTIGATIONS_DIR/{ID}/BRIEF.md for full context.
 2. Use Glob and Grep to find the 3–5 source files most relevant to the question.
@@ -65,6 +72,13 @@ Investigation ID: {ID}
 Investigation question: {QUESTION}
 Repository: {REPO_PATH}
 Your evidence range: 050–099
+
+**Data access:** Never use Bash to query databases or external APIs. Use MCP tools only:
+- MongoDB: `mcp__mongodb__find`, `mcp__mongodb__aggregate`
+- Datadog logs: `mcp__datadog__get_logs`
+- Snowflake: `mcp__snowflake__run_sql`
+- ClickUp: `mcp__clickup__get_task`, `mcp__clickup__search_tasks`
+Direct CLI tools (`mongosh`, `curl datadoghq.com`) are blocked and will fail.
 
 Tasks:
 1. Read $INVESTIGATIONS_DIR/{ID}/BRIEF.md for full context.
@@ -100,6 +114,13 @@ Investigation question: {QUESTION}
 Repository: {REPO_PATH}
 Your evidence range: 100–149
 
+**Data access:** Never use Bash to query databases or external APIs. Use MCP tools only:
+- MongoDB: `mcp__mongodb__find`, `mcp__mongodb__aggregate`
+- Datadog logs: `mcp__datadog__get_logs`
+- Snowflake: `mcp__snowflake__run_sql`
+- ClickUp: `mcp__clickup__get_task`, `mcp__clickup__search_tasks`
+Direct CLI tools (`mongosh`, `curl datadoghq.com`) are blocked and will fail.
+
 Tasks:
 1. Read $INVESTIGATIONS_DIR/{ID}/BRIEF.md for full context.
 2. Run: git -C "{REPO_PATH}" log --oneline -50
@@ -134,7 +155,12 @@ Investigation question: {QUESTION}
 Repository: {REPO_PATH}
 Your evidence range: 150–199
 
-**Data access:** use `mcp__mongodb__find`/`mcp__datadog__get_logs` for live data queries — never `mongosh` or `curl datadoghq.com`.
+**Data access:** Never use Bash to query databases or external APIs. Use MCP tools only:
+- MongoDB: `mcp__mongodb__find`, `mcp__mongodb__aggregate`
+- Datadog logs: `mcp__datadog__get_logs`
+- Snowflake: `mcp__snowflake__run_sql`
+- ClickUp: `mcp__clickup__get_task`, `mcp__clickup__search_tasks`
+Direct CLI tools (`mongosh`, `curl datadoghq.com`) are blocked and will fail.
 
 Tasks:
 1. Read $INVESTIGATIONS_DIR/{ID}/BRIEF.md for full context.
@@ -169,6 +195,13 @@ Investigation ID: {ID}
 Investigation question: {QUESTION}
 Your evidence range: 001–099
 
+**Data access:** Never use Bash to query databases or external APIs. Use MCP tools only:
+- MongoDB: `mcp__mongodb__find`, `mcp__mongodb__aggregate`
+- Datadog logs: `mcp__datadog__get_logs`
+- Snowflake: `mcp__snowflake__run_sql`
+- ClickUp: `mcp__clickup__get_task`, `mcp__clickup__search_tasks`
+Direct CLI tools (`mongosh`, `curl datadoghq.com`) are blocked and will fail.
+
 Tasks:
 1. Read $INVESTIGATIONS_DIR/{ID}/BRIEF.md for full context.
 2. Identify 6–10 distinct aspects of the question: mechanisms, failure modes, trade-offs, known patterns, architectural principles.
@@ -202,6 +235,13 @@ You are a synthesis gap-filling specialist. A multi-agent investigation has been
 Investigation ID: {ID}
 Investigation question: {QUESTION}
 Uncited evidence files: {LIST OF NNN-SLUG}
+
+**Data access:** Never use Bash to query databases or external APIs. Use MCP tools only:
+- MongoDB: `mcp__mongodb__find`, `mcp__mongodb__aggregate`
+- Datadog logs: `mcp__datadog__get_logs`
+- Snowflake: `mcp__snowflake__run_sql`
+- ClickUp: `mcp__clickup__get_task`, `mcp__clickup__search_tasks`
+Direct CLI tools (`mongosh`, `curl datadoghq.com`) are blocked and will fail.
 
 Tasks:
 1. Read $INVESTIGATIONS_DIR/{ID}/BRIEF.md
