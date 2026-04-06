@@ -15,9 +15,17 @@ input=$(cat)
 
 # Parse fields with fallbacks for null/missing values
 model=$(echo "$input" | jq -r '.model.display_name // "Unknown"' 2>/dev/null)
+project_dir=$(echo "$input" | jq -r '.workspace.current_dir // empty' 2>/dev/null)
 ctx_pct=$(echo "$input" | jq -r '.context_window.used_percentage // empty' 2>/dev/null)
 cost=$(echo "$input" | jq -r '.cost.total_cost_usd // empty' 2>/dev/null)
 duration_ms=$(echo "$input" | jq -r '.cost.total_duration_ms // empty' 2>/dev/null)
+
+# Extract project name from directory path
+if [ -n "$project_dir" ]; then
+  project="${project_dir##*/}"
+else
+  project="~"
+fi
 
 # Format context percentage with color thresholds matching context-guard:
 #   green  = < 57%
@@ -54,7 +62,7 @@ else
   duration_fmt="?m ?s"
 fi
 
-# Output single line: [Model] ctx% | $cost | duration
-printf "[%s] " "$model"
+# Output single line: project [Model] ctx% | $cost | duration
+printf "%s [%s] " "$project" "$model"
 printf "%b" "$ctx_display"
 printf " | %s | %s\n" "$cost_fmt" "$duration_fmt"
