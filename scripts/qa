@@ -215,7 +215,7 @@ def call_api(messages):
 # ---------------------------------------------------------------------------
 DANGER_PATTERNS = [
     (r"\b(?:curl|wget|nc|ncat)\b.*\|", "network exfiltration via pipe"),
-    (r"\b(?:curl|wget)\b.*https?://(?!localhost(?:[:/]|$))", "network request to external host"),
+    (r"\b(?:curl|wget)\b.*https?://(?!(?:localhost|127(?:\.\d{1,3}){3}|\[::1\])(?:[:/]|$))", "network request to external host"),
     (r"\b(?:curl|wget)\b.*--data", "network data exfiltration via --data"),
     (r"\b(?:curl|wget)\b.*-[dFT]\b", "network data exfiltration via upload flag"),
     (r"\b(?:nc|ncat)\b", "netcat network access"),
