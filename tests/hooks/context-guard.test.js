@@ -166,11 +166,11 @@ test("2. Transcript at 35%: subagent warning fires once", () => {
   }
 });
 
-// Test 3: Transcript at 50% → checkpoint warning fires once
-test("3. Transcript at 50%: checkpoint warning fires once", () => {
+// Test 3: Transcript at 57% → checkpoint warning fires once
+test("3. Transcript at 57%: checkpoint warning fires once", () => {
   const sessionId = newSessionId();
-  // 50% of 200k = 100,000 tokens
-  const transcript = createFakeTranscript([makeAssistantMessage(100000)]);
+  // 57% of 200k = 114,000 tokens
+  const transcript = createFakeTranscript([makeAssistantMessage(114000)]);
   try {
     const result1 = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(result1.status, 0);
@@ -184,11 +184,13 @@ test("3. Transcript at 50%: checkpoint warning fires once", () => {
       "Should mention /checkpoint"
     );
 
-    // Second call — should not warn again
+    // Second call — should not warn again (interval=15, so next fire at call 16)
     const result2 = runGuard(sessionId, { transcriptPath: transcript });
     assert.strictEqual(result2.status, 0);
-    assert.strictEqual(result2.json.hookSpecificOutput, undefined, "Should not warn twice");
-    assert.ok(!result2.json?.hookSpecificOutput?.permissionDecision || result2.json.hookSpecificOutput.permissionDecision !== "deny", "Should not block");
+    const hasWarning2 = result2.json.hookSpecificOutput &&
+      result2.json.hookSpecificOutput.additionalContext &&
+      result2.json.hookSpecificOutput.additionalContext.includes("Context warning");
+    assert.ok(!hasWarning2, "Should not warn on call 2 (re-fire interval is 15)");
   } finally {
     cleanupSession(sessionId);
     try { fs.rmSync(transcript); } catch {}
@@ -324,8 +326,8 @@ test("10. Per-call large-output warning fires independently", () => {
   // Transcript at 30% — below all thresholds
   const transcript = createFakeTranscript([makeAssistantMessage(60000)]);
   try {
-    // Large tool_response > 10000 chars
-    const bigResponse = "x".repeat(15000);
+    // Large tool_response > 25000 chars (PER_CALL_WARN_CHARS = 25000)
+    const bigResponse = "x".repeat(30000);
     const result = runGuard(sessionId, {
       transcriptPath: transcript,
       toolResponse: { data: bigResponse },
@@ -647,11 +649,11 @@ test("31. At 75% without CLAUDE_LOOP, normal CRITICAL block (no failsafe)", () =
 // Test 32: Combined per-call large-output warning + threshold warning in same invocation
 test("32. Combined per-call large-output + threshold warning in same invocation", () => {
   const sessionId = newSessionId();
-  // Transcript at 50% — triggers threshold warning
-  const transcript = createFakeTranscript([makeAssistantMessage(100000)]);
+  // Transcript at 57% — triggers WARN_THRESHOLD (0.57)
+  const transcript = createFakeTranscript([makeAssistantMessage(114000)]);
   try {
-    // Large tool_response > 10000 chars — also triggers per-call warning
-    const bigResponse = "x".repeat(15000);
+    // Large tool_response > 25000 chars — also triggers per-call warning
+    const bigResponse = "x".repeat(30000);
     const result = runGuard(sessionId, {
       transcriptPath: transcript,
       toolResponse: { data: bigResponse },
@@ -662,8 +664,8 @@ test("32. Combined per-call large-output + threshold warning in same invocation"
     assert.ok(ctx, "Should have additionalContext");
     // Both warnings should appear in the combined output
     assert.ok(
-      ctx.includes("Large tool output") || ctx.includes("Context warning") || ctx.includes("100000"),
-      `Should mention either large output or context threshold, got: ${ctx}`
+      ctx.includes("Large tool output") && ctx.includes("Context warning"),
+      `Should mention both large output and context warning, got: ${ctx}`
     );
   } finally {
     cleanupSession(sessionId);
@@ -671,18 +673,18 @@ test("32. Combined per-call large-output + threshold warning in same invocation"
   }
 });
 
-// Test 33: 50% warning re-fires every 5 tool calls instead of once
-test("33. 50% warning re-fires every 5 calls after first", () => {
+// Test 33: 57% warning re-fires every 15 tool calls instead of once
+test("33. 57% warning re-fires every 15 calls after first", () => {
   const sessionId = newSessionId();
-  const transcript = createFakeTranscript([makeAssistantMessage(100000)]); // 50%
+  const transcript = createFakeTranscript([makeAssistantMessage(114000)]); // 57%
   try {
     // Call 1: fires (first warning)
     const r1 = runGuard(sessionId, { transcriptPath: transcript });
     assert.ok(r1.json.hookSpecificOutput, "Call 1 should fire warning");
     assert.ok(r1.json.hookSpecificOutput.additionalContext.includes("Context warning"), "Call 1: context warning");
 
-    // Calls 2-5: should NOT fire (interval=5, so next fire at call 6)
-    for (let i = 2; i <= 5; i++) {
+    // Calls 2-15: should NOT fire (interval=15, so next fire at call 16)
+    for (let i = 2; i <= 15; i++) {
       const r = runGuard(sessionId, { transcriptPath: transcript });
       const hasWarning = r.json.hookSpecificOutput &&
         r.json.hookSpecificOutput.additionalContext &&
@@ -690,10 +692,10 @@ test("33. 50% warning re-fires every 5 calls after first", () => {
       assert.ok(!hasWarning, `Call ${i} should NOT fire context warning`);
     }
 
-    // Call 6: should re-fire (5 calls after first)
-    const r6 = runGuard(sessionId, { transcriptPath: transcript });
-    assert.ok(r6.json.hookSpecificOutput, "Call 6 should fire warning");
-    assert.ok(r6.json.hookSpecificOutput.additionalContext.includes("Context warning"), "Call 6: re-fired context warning");
+    // Call 16: should re-fire (15 calls after first)
+    const r16 = runGuard(sessionId, { transcriptPath: transcript });
+    assert.ok(r16.json.hookSpecificOutput, "Call 16 should fire warning");
+    assert.ok(r16.json.hookSpecificOutput.additionalContext.includes("Context warning"), "Call 16: re-fired context warning");
   } finally {
     cleanupSession(sessionId);
     try { fs.rmSync(transcript); } catch {}

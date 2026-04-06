@@ -166,6 +166,31 @@ do_uninstall() {
     done
   fi
 
+  # Statusline script
+  echo ""
+  echo "--- Removing statusline ---"
+  if [ -f "$CLAUDE_DIR/statusline.sh" ] || [ -L "$CLAUDE_DIR/statusline.sh" ]; then
+    rm -f "$CLAUDE_DIR/statusline.sh"
+    echo "REMOVED: $CLAUDE_DIR/statusline.sh"
+  fi
+
+  # Settings.json: remove statusLine key if present
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  if [ -f "$SETTINGS_FILE" ]; then
+    node -e "
+      const fs = require('fs');
+      const settingsPath = process.argv[1];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (settings.statusLine) {
+        delete settings.statusLine;
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+        console.log('REMOVED: statusLine from settings.json');
+      } else {
+        console.log('SKIPPED: statusLine not in settings.json');
+      }
+    " "$SETTINGS_FILE"
+  fi
+
   # CLI symlinks: remove only if symlink target is inside SCRIPT_DIR
   echo ""
   echo "--- Removing CLI script symlinks ---"
@@ -549,6 +574,37 @@ if [ -d "$RULES_SRC" ]; then
   done
 else
   echo "SKIPPED: rules/ (not found in profile)"
+fi
+
+echo ""
+echo "--- Installing statusline ---"
+install_symlink "$SCRIPT_DIR/templates/statusline.sh" "$CLAUDE_DIR/statusline.sh" "statusline script"
+if [ "$DRY_RUN" != true ] && [ -f "$CLAUDE_DIR/statusline.sh" ]; then
+  chmod +x "$CLAUDE_DIR/statusline.sh"
+fi
+
+SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+if [ "$DRY_RUN" = true ]; then
+  echo "[DRY RUN] Would configure statusLine in settings.json"
+else
+  if [ ! -f "$SETTINGS_FILE" ]; then
+    echo "{}" > "$SETTINGS_FILE"
+  fi
+  node -e "
+    const fs = require('fs');
+    const settingsPath = process.argv[1];
+    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    if (settings.statusLine) {
+      console.log('ALREADY CONFIGURED: statusLine in settings.json');
+    } else {
+      settings.statusLine = {
+        type: 'command',
+        command: '~/.claude/statusline.sh'
+      };
+      fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      console.log('CONFIGURED: statusLine in settings.json');
+    }
+  " "$SETTINGS_FILE"
 fi
 
 echo ""
@@ -2479,6 +2535,7 @@ done
 echo "  CLI scripts      -> $LOCAL_BIN/ (q, qa, claude-loop, knowledge-consolidate)"
 echo "  Session hooks    -> $CLAUDE_DIR/hooks/ (auto-run on session start/end)"
 echo "  Rules            -> $CLAUDE_DIR/rules/ (path-specific coding conventions)"
+echo "  Status line      -> $CLAUDE_DIR/statusline.sh (model, context, cost, time)"
 echo "  Templates        -> $CLAUDE_DIR/templates/"
 if [[ "$EXTRAS" == true ]]; then
   REGISTRY_FILE="$SCRIPT_DIR/templates/registry/mcp-servers.json"
