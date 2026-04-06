@@ -762,6 +762,182 @@ test("28. queryRelevant returns error status on exception (entries table dropped
   assert.deepStrictEqual(result.results, [], "results should be empty array on exception");
 });
 
+// ─── querySubgraph tests ─────────────────────────────────────────────────────
+
+const { querySubgraph } = knowledgeDb;
+
+// Test 29: querySubgraph returns primary + related entries via shared tags
+test("29. querySubgraph returns related entries via shared tags", () => {
+  const db = openDb(":memory:");
+  // Primary: will match query "rebase"
+  insertEntry(db, makeEntry({
+    id: "sg-primary-1",
+    tags: ["rebase", "history"],
+    context_text: "Rebase rewrites commit history and can cause conflicts.",
+  }));
+  // Related: shares "rebase" tag but won't match query directly
+  insertEntry(db, makeEntry({
+    id: "sg-related-1",
+    tags: ["rebase", "merge"],
+    context_text: "Interactive rebase lets you squash commits.",
+  }));
+  // Related: shares "history" tag
+  insertEntry(db, makeEntry({
+    id: "sg-related-2",
+    tags: ["history", "log"],
+    context_text: "Git log shows commit history in various formats.",
+  }));
+  // Unrelated: no shared tags
+  insertEntry(db, makeEntry({
+    id: "sg-unrelated",
+    tool: "npm",
+    tags: ["packages"],
+    context_text: "NPM install downloads packages from the registry.",
+  }));
+
+  const result = querySubgraph(db, { queryTerms: ["rebase"] }, 1, 5);
+  assert.strictEqual(result.status, "ok");
+  assert.strictEqual(result.primary.length, 1, "should have 1 primary result");
+  assert.strictEqual(result.primary[0].id, "sg-primary-1");
+  assert.ok(result.related.length >= 1, "should have at least 1 related result");
+  const relatedIds = result.related.map(r => r.id);
+  assert.ok(relatedIds.includes("sg-related-1"), "related should include entry sharing 'rebase' tag");
+  assert.ok(!relatedIds.includes("sg-primary-1"), "related should not include primary results");
+  assert.ok(!relatedIds.includes("sg-unrelated"), "unrelated entry should not appear");
+  assert.ok(result.tags.length > 0, "tags array should be populated");
+});
+
+// Test 30: querySubgraph sorts related by overlap count
+test("30. querySubgraph sorts related by tag overlap count", () => {
+  const db = openDb(":memory:");
+  insertEntry(db, makeEntry({
+    id: "sg-p1",
+    tags: ["docker", "ci", "deploy"],
+    context_text: "Docker builds in CI deploy to staging.",
+  }));
+  // Shares 2 tags
+  insertEntry(db, makeEntry({
+    id: "sg-r-high",
+    tags: ["docker", "ci", "testing"],
+    context_text: "Docker containers in CI run integration tests.",
+  }));
+  // Shares 1 tag
+  insertEntry(db, makeEntry({
+    id: "sg-r-low",
+    tags: ["deploy", "aws"],
+    context_text: "AWS deployments use CodeDeploy.",
+  }));
+
+  const result = querySubgraph(db, { queryTerms: ["docker"] }, 1, 5);
+  assert.strictEqual(result.status, "ok");
+  assert.ok(result.related.length >= 2, "should have at least 2 related");
+  // Higher overlap should come first
+  const rIds = result.related.map(r => r.id);
+  assert.ok(rIds.indexOf("sg-r-high") < rIds.indexOf("sg-r-low"),
+    "entry with more tag overlap should rank higher");
+});
+
+// Test 31: querySubgraph includes tool as traversal link
+test("31. querySubgraph includes tool as traversal link", () => {
+  const db = openDb(":memory:");
+  insertEntry(db, makeEntry({
+    id: "sg-tool-p",
+    tool: "docker",
+    tags: ["containers"],
+    context_text: "Docker compose orchestrates multi-container apps.",
+  }));
+  // Same tool, different tags
+  insertEntry(db, makeEntry({
+    id: "sg-tool-r",
+    tool: "docker",
+    tags: ["networking"],
+    context_text: "Docker networks connect containers internally.",
+  }));
+
+  const result = querySubgraph(db, { queryTerms: ["compose"] }, 1, 5);
+  assert.strictEqual(result.status, "ok");
+  const relatedIds = result.related.map(r => r.id);
+  assert.ok(relatedIds.includes("sg-tool-r"), "entries sharing tool should be found via traversal");
+  assert.ok(result.tags.includes("docker"), "tool should appear in tags set");
+});
+
+// Test 32: querySubgraph returns empty related when no tags
+test("32. querySubgraph returns empty related when primary has no tags", () => {
+  const db = openDb(":memory:");
+  insertEntry(db, makeEntry({
+    id: "sg-notags",
+    tool: "",
+    tags: [],
+    context_text: "An entry with no tags at all for testing.",
+  }));
+
+  const result = querySubgraph(db, { queryTerms: ["entry"] }, 1, 5);
+  assert.strictEqual(result.status, "ok");
+  assert.deepStrictEqual(result.related, [], "related should be empty when no tags to follow");
+  assert.deepStrictEqual(result.tags, [], "tags should be empty");
+});
+
+// Test 33: querySubgraph respects relatedLimit
+test("33. querySubgraph respects relatedLimit", () => {
+  const db = openDb(":memory:");
+  insertEntry(db, makeEntry({
+    id: "sg-limit-p",
+    tags: ["shared-tag"],
+    context_text: "Primary entry with a shared tag for limit testing.",
+  }));
+  for (let i = 0; i < 10; i++) {
+    insertEntry(db, makeEntry({
+      id: `sg-limit-r${i}`,
+      tags: ["shared-tag"],
+      context_text: `Related entry number ${i} shares the tag.`,
+    }));
+  }
+
+  const result = querySubgraph(db, { queryTerms: ["primary"] }, 1, 3);
+  assert.strictEqual(result.status, "ok");
+  assert.ok(result.related.length <= 3, "related should respect relatedLimit of 3");
+});
+
+// Test 34: querySubgraph handles null db gracefully
+test("34. querySubgraph handles null db gracefully", () => {
+  const result = querySubgraph(null, { queryTerms: ["test"] });
+  assert.strictEqual(result.status, "error");
+  assert.deepStrictEqual(result.primary, []);
+  assert.deepStrictEqual(result.related, []);
+  assert.deepStrictEqual(result.tags, []);
+});
+
+// Test 35: querySubgraph returns empty when no primary results
+test("35. querySubgraph returns empty when no primary results", () => {
+  const db = openDb(":memory:");
+  const result = querySubgraph(db, { queryTerms: ["nonexistent-xyzzy"] }, 5, 5);
+  assert.strictEqual(result.status, "ok");
+  assert.deepStrictEqual(result.primary, []);
+  assert.deepStrictEqual(result.related, []);
+  assert.deepStrictEqual(result.tags, []);
+});
+
+// Test 36: querySubgraph excludes archived entries from related
+test("36. querySubgraph excludes archived entries from related", () => {
+  const db = openDb(":memory:");
+  insertEntry(db, makeEntry({
+    id: "sg-arch-p",
+    tags: ["shared"],
+    context_text: "Primary entry for archive test.",
+  }));
+  insertEntry(db, makeEntry({
+    id: "sg-arch-r",
+    tags: ["shared"],
+    context_text: "This related entry will be archived.",
+  }));
+  archiveEntry(db, "sg-arch-r");
+
+  const result = querySubgraph(db, { queryTerms: ["primary"] }, 1, 5);
+  assert.strictEqual(result.status, "ok");
+  const relatedIds = result.related.map(r => r.id);
+  assert.ok(!relatedIds.includes("sg-arch-r"), "archived entries should not appear in related");
+});
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
 console.log(`\n${"─".repeat(60)}`);

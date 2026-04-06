@@ -729,6 +729,94 @@ function _migrateIfNeeded(db) {
   }
 }
 
+// ─── querySubgraph ──────────────────────────────────────────────────────────
+
+/**
+ * Two-hop retrieval: get primary results, then follow their tags to find
+ * related entries, building a small knowledge subgraph.
+ *
+ * @param {object} db - DatabaseSync instance
+ * @param {object} opts - Same options as queryRelevant
+ * @param {number} [primaryLimit=5] - Max primary results
+ * @param {number} [relatedLimit=5] - Max related results
+ * @returns {{ primary: object[], related: object[], tags: string[], status: string, error?: string }}
+ */
+function querySubgraph(db, opts = {}, primaryLimit = 5, relatedLimit = 5) {
+  try {
+    if (!db) return { primary: [], related: [], tags: [], status: "error", error: "database unavailable" };
+
+    // Step 1: Get primary results via existing queryRelevant
+    const primaryResult = queryRelevant(db, opts, primaryLimit);
+    if (primaryResult.status !== "ok") {
+      return { primary: [], related: [], tags: [], status: primaryResult.status, error: primaryResult.error };
+    }
+
+    const primary = primaryResult.results;
+    if (primary.length === 0) {
+      return { primary: [], related: [], tags: [], status: "ok" };
+    }
+
+    // Step 2: Collect all unique tags from primary results
+    const primaryIds = new Set(primary.map(e => e.id));
+    const tagSet = new Set();
+    for (const entry of primary) {
+      let tags = [];
+      try { tags = JSON.parse(entry.tags || "[]"); } catch {}
+      for (const tag of tags) tagSet.add(String(tag).toLowerCase());
+      // Also include tool as a traversal link
+      if (entry.tool) tagSet.add(entry.tool.toLowerCase());
+    }
+
+    const allTags = Array.from(tagSet);
+    if (allTags.length === 0) {
+      return { primary, related: [], tags: [], status: "ok" };
+    }
+
+    // Step 3: Find entries sharing tags with primary results
+    const allStmt = db.prepare(`SELECT * FROM entries WHERE status = 'active'`);
+    const allRows = allStmt.all();
+
+    const candidates = [];
+    for (const row of allRows) {
+      if (primaryIds.has(row.id)) continue; // skip primary results
+
+      let entryTags = [];
+      try { entryTags = JSON.parse(row.tags || "[]"); } catch {}
+      const lcTags = entryTags.map(t => String(t).toLowerCase());
+      const entryTool = (row.tool || "").toLowerCase();
+
+      // Count tag overlap with primary result tag set
+      let overlap = 0;
+      for (const tag of lcTags) {
+        if (tagSet.has(tag)) overlap++;
+      }
+      if (entryTool && tagSet.has(entryTool)) overlap++;
+
+      if (overlap > 0) {
+        candidates.push({ ...row, _overlap: overlap });
+      }
+    }
+
+    // Step 4: Sort by overlap count (desc), take top relatedLimit
+    candidates.sort((a, b) => b._overlap - a._overlap);
+    const related = candidates.slice(0, relatedLimit);
+    for (const r of related) delete r._overlap;
+
+    // Update access tracking for related entries
+    const today = new Date().toISOString().slice(0, 10);
+    const updateStmt = db.prepare(
+      `UPDATE entries SET last_accessed = $last_accessed, access_count = COALESCE(access_count, 0) + 1 WHERE id = $id`
+    );
+    for (const entry of related) {
+      try { updateStmt.run({ $last_accessed: today, $id: entry.id }); } catch {}
+    }
+
+    return { primary, related, tags: allTags, status: "ok" };
+  } catch (e) {
+    return { primary: [], related: [], tags: [], status: "error", error: (e && e.message) || "subgraph query failed" };
+  }
+}
+
 // ─── CLI interface ────────────────────────────────────────────────────────────
 
 if (require.main === module) {
@@ -822,6 +910,7 @@ module.exports = {
   openDb,
   insertEntry,
   queryRelevant,
+  querySubgraph,
   captureProvenance,
   stageCandidate,
   readStagedCandidates,
