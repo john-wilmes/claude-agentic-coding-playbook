@@ -922,6 +922,44 @@ if [ -f "$SCRIPT_DIR/templates/hooks/pr-review-guard.js" ]; then
   fi
 fi
 
+# Pre-commit tests hook (PreToolUse -- blocks git commit when tests are known-failing)
+if [ -f "$SCRIPT_DIR/templates/hooks/pre-commit-tests.js" ]; then
+  install_symlink "$SCRIPT_DIR/templates/hooks/pre-commit-tests.js" "$CLAUDE_DIR/hooks/pre-commit-tests.js" "pre-commit tests: pre-commit-tests.js"
+
+  echo ""
+  echo "--- Configuring pre-commit-tests in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  PRECOMMIT_CMD="node $CLAUDE_DIR/hooks/pre-commit-tests.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add PreToolUse hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    if grep -q "pre-commit-tests" "$SETTINGS_FILE" 2>/dev/null; then
+      echo "ALREADY CONFIGURED: pre-commit-tests hook in settings.json"
+    else
+      node -e "
+        const fs = require('fs');
+        const path = require('path');
+        const settingsPath = path.resolve(process.argv[1]);
+        const hookCmd = process.argv[2];
+        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (!settings.hooks) settings.hooks = {};
+        if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+        settings.hooks.PreToolUse.push({
+          matcher: 'Bash',
+          hooks: [{ type: 'command', command: hookCmd }]
+        });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      " "$SETTINGS_FILE" "$PRECOMMIT_CMD"
+      echo "CONFIGURED: pre-commit-tests hook in settings.json"
+    fi
+  fi
+fi
+
 # Post-tool verify hook (PostToolUse -- auto-runs tests after Edit/Write on code files)
 if [ -f "$SCRIPT_DIR/templates/hooks/post-tool-verify.js" ]; then
   install_symlink "$SCRIPT_DIR/templates/hooks/post-tool-verify.js" "$CLAUDE_DIR/hooks/post-tool-verify.js" "post-tool verify: post-tool-verify.js"

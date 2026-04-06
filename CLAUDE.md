@@ -12,7 +12,7 @@ No type-check or lint commands — this is a bash + Node scripting project.
 
 ## Architecture
 
-- `templates/hooks/` — Hook scripts installed to `~/.claude/hooks/` by `install.sh`
+- `templates/hooks/` — Hook scripts installed to `~/.claude/hooks/` by `install.sh`; includes `pre-commit-tests.js` (PreToolUse: blocks git commit when tests are known-failing); tested by `tests/hooks/pre-commit-tests.test.js`
 - `profiles/combined/` — CLAUDE.md, skills, and settings for the combined dev+research profile
 - `scripts/` — CLI tools (`q`, `qa`, `claude-loop.sh`, `analyze-logs.js`, `knowledge-to-vault.js`, `investigation-to-vault.js`); tested by `tests/scripts/knowledge-to-vault.test.js`, `tests/scripts/investigation-to-vault.test.js`
 - `templates/fleet/` — Fleet index scripts (`fleet-index.js`)
