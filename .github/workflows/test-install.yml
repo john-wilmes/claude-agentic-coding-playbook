@@ -620,9 +620,15 @@ jobs:
         run: for t in tests/skills/*.test.js; do node "$t" || exit 1; done
 
   test-investigate:
-    runs-on: ubuntu-latest
-    name: Investigation scorer tests
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.os }} / investigation scorer tests
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - name: Run investigation scorer tests
-        run: node tests/investigate/score.test.js
+        run: for t in tests/investigate/*.test.js; do node "$t" || exit 1; done

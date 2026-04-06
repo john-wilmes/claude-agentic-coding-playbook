@@ -12,7 +12,7 @@ No type-check or lint commands — this is a bash + Node scripting project.
 
 ## Architecture
 
-- `templates/hooks/` — Hook scripts installed to `~/.claude/hooks/` by `install.sh`; includes `pre-commit-tests.js` (PreToolUse: blocks git commit when tests are known-failing); tested by `tests/hooks/pre-commit-tests.test.js`
+- `templates/hooks/` — Hook scripts installed to `~/.claude/hooks/` by `install.sh`; includes `pre-commit-tests.js` (PreToolUse: blocks git commit when tests are known-failing), `gitignore-guard.js` (PreToolUse: warns before git commit if .gitignore missing), `skip-comment-guard.js` (PostToolUse: warns when .skip added without documenting comment); tested by `tests/hooks/pre-commit-tests.test.js`, `tests/hooks/gitignore-guard.test.js`, `tests/hooks/skip-comment-guard.test.js`
 - `profiles/combined/` — CLAUDE.md, skills, and settings for the combined dev+research profile
 - `scripts/` — CLI tools (`q`, `qa`, `claude-loop.sh`, `analyze-logs.js`, `knowledge-to-vault.js`, `investigation-to-vault.js`); tested by `tests/scripts/knowledge-to-vault.test.js`, `tests/scripts/investigation-to-vault.test.js`
 - `templates/fleet/` — Fleet index scripts (`fleet-index.js`)
@@ -26,7 +26,7 @@ No type-check or lint commands — this is a bash + Node scripting project.
 
 ## Dependencies and Build
 
-- Install: `./install.sh` (symlinks hooks, skills, and config to `~/.claude/`)
+- Install: `./install.sh` (symlinks hooks, copies skills and config to `~/.claude/`)
 - No build step — all scripts run directly
 - No npm dependencies — Node stdlib only
 

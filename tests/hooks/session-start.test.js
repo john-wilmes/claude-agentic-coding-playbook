@@ -258,7 +258,7 @@ test("12. getRelevantKnowledge with matching entries returns sorted by score", (
     try {
       // Open DB and insert entries inside withFakeHome so _migrateIfNeeded
       // uses the fake home (empty entries dir → no real entries imported)
-      const entries = withFakeHome(home, () => {
+      const result = withFakeHome(home, () => {
         const db = knowledgeDb.openDb(dbPath);
         // High-scoring: tool 'git' match (+10) + category 'security' (+2) + confidence 'high' (+1) = 13
         knowledgeDb.insertEntry(db, {
@@ -284,9 +284,9 @@ test("12. getRelevantKnowledge with matching entries returns sorted by score", (
         });
         return mod.getRelevantKnowledge(dir);
       });
-      assert.ok(entries.length >= 1, "Should return at least one entry");
-      assert.ok(entries.length >= 2, "Should return both matching entries");
-      assert.strictEqual(entries[0].fm.id, "high-scorer", "High-scorer should be first");
+      assert.ok(result.primary.length >= 1, "Should return at least one entry");
+      assert.ok(result.primary.length >= 2, "Should return both matching entries");
+      assert.strictEqual(result.primary[0].fm.id, "high-scorer", "High-scorer should be first");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -295,17 +295,18 @@ test("12. getRelevantKnowledge with matching entries returns sorted by score", (
   }
 });
 
-// Test 13: getRelevantKnowledge — no knowledge DB → returns []
-test("13. getRelevantKnowledge with no knowledge DB returns empty array", () => {
+// Test 13: getRelevantKnowledge — no knowledge DB → returns empty result
+test("13. getRelevantKnowledge with no knowledge DB returns empty result", () => {
   const { home, cleanup } = createTempHome();
   try {
-    // No entries inserted — openDb creates empty DB, queryRelevant returns []
+    // No entries inserted — openDb creates empty DB, queryRelevant returns empty result
     // Open DB inside withFakeHome so _migrateIfNeeded uses fake home (no real entries)
     const mod = requireModule();
     const dir = createProjectDir({ git: true });
     try {
-      const entries = withFakeHome(home, () => mod.getRelevantKnowledge(dir));
-      assert.deepStrictEqual(entries, [], "Should return empty array when DB has no entries");
+      const result = withFakeHome(home, () => mod.getRelevantKnowledge(dir));
+      assert.deepStrictEqual(result.primary, [], "Should return empty primary when DB has no entries");
+      assert.deepStrictEqual(result.related, [], "Should return empty related when DB has no entries");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -314,8 +315,8 @@ test("13. getRelevantKnowledge with no knowledge DB returns empty array", () => 
   }
 });
 
-// Test 14: getRelevantKnowledge — no project context → returns []
-test("14. getRelevantKnowledge with no project context returns empty array", () => {
+// Test 14: getRelevantKnowledge — no project context → returns empty result
+test("14. getRelevantKnowledge with no project context returns empty result", () => {
   const { home, cleanup } = createTempHome();
   try {
     const knowledgeDb = require("../../templates/hooks/knowledge-db");
@@ -326,7 +327,7 @@ test("14. getRelevantKnowledge with no project context returns empty array", () 
     // Empty project dir — no context detected
     const dir = createProjectDir();
     try {
-      const entries = withFakeHome(home, () => {
+      const result = withFakeHome(home, () => {
         const db = knowledgeDb.openDb(dbPath);
         knowledgeDb.insertEntry(db, {
           id: "git-entry",
@@ -340,7 +341,8 @@ test("14. getRelevantKnowledge with no project context returns empty array", () 
         });
         return mod.getRelevantKnowledge(dir);
       });
-      assert.deepStrictEqual(entries, [], "Should return empty array when project context is empty");
+      assert.deepStrictEqual(result.primary, [], "Should return empty primary when project context is empty");
+      assert.deepStrictEqual(result.related, [], "Should return empty related when project context is empty");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -474,7 +476,7 @@ test("18. FTS5 boost surfaces entries matching query content", () => {
     const mod = requireModule();
     const dir = createProjectDir({ git: true });
     try {
-      const entries = withFakeHome(home, () => {
+      const result = withFakeHome(home, () => {
         const db = knowledgeDb.openDb(dbPath);
         // Entry whose content mentions "git" repeatedly (should get FTS5 boost)
         knowledgeDb.insertEntry(db, {
@@ -489,8 +491,8 @@ test("18. FTS5 boost surfaces entries matching query content", () => {
         });
         return mod.getRelevantKnowledge(dir);
       });
-      assert.ok(entries.length >= 1, "Should return at least one entry");
-      assert.strictEqual(entries[0].fm.id, "git-content-match", "Content-matched entry should be returned");
+      assert.ok(result.primary.length >= 1, "Should return at least one entry");
+      assert.strictEqual(result.primary[0].fm.id, "git-content-match", "Content-matched entry should be returned");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -513,7 +515,7 @@ test("19. FTS5 surfaces zero-tag-score entries via content match", () => {
 
     const mod = requireModule();
     try {
-      const entries = withFakeHome(home, () => {
+      const result = withFakeHome(home, () => {
         const db = knowledgeDb.openDb(dbPath);
         // Entry with tool "docker" — no match for a git-only project (tag score = 0)
         // but content mentions the project name multiple times for FTS5 boost
@@ -530,8 +532,8 @@ test("19. FTS5 surfaces zero-tag-score entries via content match", () => {
         return mod.getRelevantKnowledge(dir);
       });
       // FTS5 should boost this entry since project name appears in content
-      assert.ok(entries.length >= 1, "FTS5 boost should surface the zero-tag-score entry");
-      assert.strictEqual(entries[0].fm.id, "zero-tag-fts-match", "The content-matched entry should be returned");
+      assert.ok(result.primary.length >= 1, "FTS5 boost should surface the zero-tag-score entry");
+      assert.strictEqual(result.primary[0].fm.id, "zero-tag-fts-match", "The content-matched entry should be returned");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -553,7 +555,7 @@ test("20. knowledge retrieval works via SQLite (no bm25 dependency)", () => {
     const mod = requireModule();
     const dir = createProjectDir({ git: true });
     try {
-      const entries = withFakeHome(home, () => {
+      const result = withFakeHome(home, () => {
         const db = knowledgeDb.openDb(dbPath);
         knowledgeDb.insertEntry(db, {
           id: "sqlite-entry",
@@ -567,8 +569,8 @@ test("20. knowledge retrieval works via SQLite (no bm25 dependency)", () => {
         });
         return mod.getRelevantKnowledge(dir);
       });
-      assert.ok(entries.length >= 1, "Should return entries from SQLite DB");
-      assert.strictEqual(entries[0].fm.id, "sqlite-entry", "Should return the inserted entry");
+      assert.ok(result.primary.length >= 1, "Should return entries from SQLite DB");
+      assert.strictEqual(result.primary[0].fm.id, "sqlite-entry", "Should return the inserted entry");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -640,8 +642,8 @@ test("26. extractSalientTerms deduplicates repeated tokens", () => {
   assert.strictEqual(hookCount, 1, "should only include 'hook' once");
 });
 
-// Test 27: getRelevantKnowledge returns empty array when queryRelevant returns error status
-test("27. getRelevantKnowledge returns empty array when queryRelevant returns error status", () => {
+// Test 27: getRelevantKnowledge returns empty result when queryRelevant returns error status
+test("27. getRelevantKnowledge returns empty result when queryRelevant returns error status", () => {
   // Arrange: create a DB with a broken schema (drop entries table) so queryRelevant returns { status: "error" }
   const { home, cleanup } = createTempHome();
   try {
@@ -652,7 +654,7 @@ test("27. getRelevantKnowledge returns empty array when queryRelevant returns er
     const mod = requireModule();
     const dir = createProjectDir({ git: true });
     try {
-      const entries = withFakeHome(home, () => {
+      const result = withFakeHome(home, () => {
         // Open a valid DB first so the file exists
         const db = knowledgeDb.openDb(dbPath);
         // Drop the entries table to force queryRelevant to return { status: "error" }
@@ -662,7 +664,8 @@ test("27. getRelevantKnowledge returns empty array when queryRelevant returns er
         // Now call getRelevantKnowledge — it opens the DB file and queries it
         return mod.getRelevantKnowledge(dir);
       });
-      assert.deepStrictEqual(entries, [], "Should return empty array when queryRelevant returns error status");
+      assert.deepStrictEqual(result.primary, [], "Should return empty primary when queryRelevant returns error status");
+      assert.deepStrictEqual(result.related, [], "Should return empty related when queryRelevant returns error status");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

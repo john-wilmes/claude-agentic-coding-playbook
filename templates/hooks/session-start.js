@@ -190,15 +190,33 @@ function extractSalientTerms(text, maxTerms = 8) {
   return result;
 }
 
-// Read and score knowledge entries via SQLite DB, return top N
+// Map a DB row to the format expected by the output formatter
+function mapDbEntry(e) {
+  return {
+    fm: {
+      id: e.id,
+      tool: e.tool,
+      category: e.category,
+      tags: safeParseJson(e.tags, []),
+      confidence: e.confidence,
+      source_project: e.source_project,
+    },
+    score: 0, // scoring happens in queryRelevant/querySubgraph; individual scores not preserved
+    summary: (e.context_text || "").split("\n")[0] || e.id,
+    fix: (e.fix_text || "").split("\n")[0] || "",
+  };
+}
+
+// Read and score knowledge entries via SQLite DB using two-hop subgraph retrieval.
+// Returns { primary: entry[], related: entry[] }
 function getRelevantKnowledge(cwd, maxEntries = 5, extraTerms = []) {
   try {
     let knowledgeDb;
-    try { knowledgeDb = require("./knowledge-db"); } catch { return []; }
+    try { knowledgeDb = require("./knowledge-db"); } catch { return { primary: [], related: [] }; }
 
     const projectContext = detectProjectContext(cwd);
     if (projectContext.tools.length === 0 && projectContext.tags.length === 0 && extraTerms.length === 0) {
-      return [];
+      return { primary: [], related: [] };
     }
 
     // Compute DB path at call time so withFakeHome patches take effect
@@ -209,30 +227,30 @@ function getRelevantKnowledge(cwd, maxEntries = 5, extraTerms = []) {
     const queryTerms = [...projectContext.tools, ...projectContext.tags, projectContext.projectName, ...extraTerms]
       .filter(Boolean);
 
-    const result = knowledgeDb.queryRelevant(db, {
+    const opts = {
       projectTool: projectContext.tools,
       sourceProject: projectContext.projectName,
       queryTerms,
       cwd,
-    }, maxEntries);
-    const entries = result.results || [];
+    };
 
-    // Map DB results to the format expected by the output formatter
-    return entries.map(e => ({
-      fm: {
-        id: e.id,
-        tool: e.tool,
-        category: e.category,
-        tags: safeParseJson(e.tags, []),
-        confidence: e.confidence,
-        source_project: e.source_project,
-      },
-      score: e._score || 0,
-      summary: (e.context_text || "").split("\n")[0] || e.id,
-      fix: (e.fix_text || "").split("\n")[0] || "",
-    }));
+    // Use querySubgraph for two-hop retrieval if available, fall back to queryRelevant
+    if (typeof knowledgeDb.querySubgraph === "function") {
+      const result = knowledgeDb.querySubgraph(db, opts, maxEntries, maxEntries);
+      return {
+        primary: (result.primary || []).map(mapDbEntry),
+        related: (result.related || []).map(mapDbEntry),
+      };
+    }
+
+    // Fallback: queryRelevant only (no related entries)
+    const result = knowledgeDb.queryRelevant(db, opts, maxEntries);
+    return {
+      primary: (result.results || []).map(mapDbEntry),
+      related: [],
+    };
   } catch {
-    return [];
+    return { primary: [], related: [] };
   }
 }
 
@@ -422,7 +440,8 @@ process.stdin.on("end", () => {
     // Research sessions get fewer entries (investigation context is primary)
     const maxKnowledgeEntries = sessionType.type === "research" ? 3 : 5;
     const currentWorkTerms = extractSalientTerms(currentWork);
-    const relevantEntries = getRelevantKnowledge(cwd, maxKnowledgeEntries, currentWorkTerms);
+    const knowledgeResult = getRelevantKnowledge(cwd, maxKnowledgeEntries, currentWorkTerms);
+    const allEntries = [...knowledgeResult.primary, ...knowledgeResult.related];
 
     // Write injected IDs state file for retrieval-miss detection at session end
     try {
@@ -430,17 +449,23 @@ process.stdin.on("end", () => {
       fs.mkdirSync(stateDir, { recursive: true });
       if (sessionId) {
         const stateFile = path.join(stateDir, `${sessionId}.json`);
-        const injectedIds = relevantEntries.map(e => e.fm && e.fm.id).filter(Boolean);
+        const injectedIds = allEntries.map(e => e.fm && e.fm.id).filter(Boolean);
         fs.writeFileSync(stateFile, JSON.stringify({ injectedIds }));
       }
     } catch {}
 
-    if (relevantEntries.length > 0) {
-      const entryLines = relevantEntries.map((e) => {
+    if (knowledgeResult.primary.length > 0) {
+      const formatEntry = (e) => {
         const line = `  **[${e.fm.category}] ${e.fm.tool}:** ${e.summary}`;
         return e.fix ? `${line}\n    Fix: ${e.fix}` : line;
-      });
-      parts.push(`Relevant knowledge entries:\n${entryLines.join("\n")}`);
+      };
+      const entryLines = knowledgeResult.primary.map(formatEntry);
+      let knowledgeSection = `Relevant knowledge entries:\n${entryLines.join("\n")}`;
+      if (knowledgeResult.related.length > 0) {
+        const relatedLines = knowledgeResult.related.map(formatEntry);
+        knowledgeSection += `\n  Related (via shared tags):\n${relatedLines.join("\n")}`;
+      }
+      parts.push(knowledgeSection);
     }
 
     // Inject fleet digest if available
@@ -461,7 +486,7 @@ process.stdin.on("end", () => {
       event: "init",
       session_id: sessionId,
       project: cwd,
-      details: `[${sessionType.type}] Injected ${parts.length} context sections, ${relevantEntries.length} knowledge entries`,
+      details: `[${sessionType.type}] Injected ${parts.length} context sections, ${knowledgeResult.primary.length}+${knowledgeResult.related.length} knowledge entries`,
     });
 
     // Output JSON that Claude Code injects into agent context

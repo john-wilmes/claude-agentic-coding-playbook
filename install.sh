@@ -938,25 +938,25 @@ if [ -f "$SCRIPT_DIR/templates/hooks/pre-commit-tests.js" ]; then
       echo "{}" > "$SETTINGS_FILE"
     fi
 
-    if grep -q "pre-commit-tests" "$SETTINGS_FILE" 2>/dev/null; then
-      echo "ALREADY CONFIGURED: pre-commit-tests hook in settings.json"
-    else
-      node -e "
-        const fs = require('fs');
-        const path = require('path');
-        const settingsPath = path.resolve(process.argv[1]);
-        const hookCmd = process.argv[2];
-        const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-        if (!settings.hooks) settings.hooks = {};
-        if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
-        settings.hooks.PreToolUse.push({
-          matcher: 'Bash',
-          hooks: [{ type: 'command', command: hookCmd }]
-        });
-        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
-      " "$SETTINGS_FILE" "$PRECOMMIT_CMD"
-      echo "CONFIGURED: pre-commit-tests hook in settings.json"
-    fi
+    node -e "
+      const fs = require('fs');
+      const path = require('path');
+      const settingsPath = path.resolve(process.argv[1]);
+      const hookCmd = process.argv[2];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.hooks) settings.hooks = {};
+      if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+      // Upsert: remove any existing entry for this hook, then add the new one
+      settings.hooks.PreToolUse = settings.hooks.PreToolUse.filter(e =>
+        !(e.hooks && e.hooks.some(h => h.command && h.command.includes('pre-commit-tests')))
+      );
+      settings.hooks.PreToolUse.push({
+        matcher: 'Bash',
+        hooks: [{ type: 'command', command: hookCmd }]
+      });
+      fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      console.log('CONFIGURED: pre-commit-tests PreToolUse hook (matcher: Bash)');
+    " "$SETTINGS_FILE" "$PRECOMMIT_CMD"
   fi
 fi
 
@@ -2180,6 +2180,82 @@ if [ -f "$SCRIPT_DIR/templates/hooks/rejection-advisor.js" ]; then
         console.log("ALREADY CONFIGURED: rejection-advisor hook in settings.json");
       }
     ' "$SETTINGS_FILE" "$RA_CMD"
+  fi
+fi
+
+# Gitignore guard hook (PreToolUse:Bash -- warns when .gitignore is missing from a git repo)
+if [ -f "$SCRIPT_DIR/templates/hooks/gitignore-guard.js" ]; then
+  install_symlink "$SCRIPT_DIR/templates/hooks/gitignore-guard.js" "$CLAUDE_DIR/hooks/gitignore-guard.js" "gitignore guard: gitignore-guard.js"
+
+  echo ""
+  echo "--- Configuring gitignore-guard in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  GITIGNORE_GUARD_CMD="node $HOME/.claude/hooks/gitignore-guard.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add gitignore-guard PreToolUse:Bash hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    node -e "
+      const fs = require('fs');
+      const path = require('path');
+      const settingsPath = path.resolve(process.argv[1]);
+      const hookCmd = process.argv[2];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.hooks) settings.hooks = {};
+      if (!settings.hooks.PreToolUse) settings.hooks.PreToolUse = [];
+      // Upsert: remove any existing entry for this hook, then add the new one
+      settings.hooks.PreToolUse = settings.hooks.PreToolUse.filter(e =>
+        !(e.hooks && e.hooks.some(h => h.command && h.command.includes('gitignore-guard')))
+      );
+      settings.hooks.PreToolUse.push({
+        matcher: 'Bash',
+        hooks: [{ type: 'command', command: hookCmd, timeout: 5 }]
+      });
+      fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      console.log('CONFIGURED: gitignore-guard PreToolUse hook (matcher: Bash)');
+    " "$SETTINGS_FILE" "$GITIGNORE_GUARD_CMD"
+  fi
+fi
+
+# Skip comment guard hook (PostToolUse:Edit|Write -- detects .skip without explanatory comment)
+if [ -f "$SCRIPT_DIR/templates/hooks/skip-comment-guard.js" ]; then
+  install_symlink "$SCRIPT_DIR/templates/hooks/skip-comment-guard.js" "$CLAUDE_DIR/hooks/skip-comment-guard.js" "skip comment guard: skip-comment-guard.js"
+
+  echo ""
+  echo "--- Configuring skip-comment-guard in settings.json ---"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+  SKIP_COMMENT_GUARD_CMD="node $HOME/.claude/hooks/skip-comment-guard.js"
+
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY RUN] Would add skip-comment-guard PostToolUse Edit|Write hook to $SETTINGS_FILE"
+  else
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo "{}" > "$SETTINGS_FILE"
+    fi
+
+    node -e "
+      const fs = require('fs');
+      const path = require('path');
+      const settingsPath = path.resolve(process.argv[1]);
+      const hookCmd = process.argv[2];
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (!settings.hooks) settings.hooks = {};
+      if (!settings.hooks.PostToolUse) settings.hooks.PostToolUse = [];
+      // Upsert: remove any existing entry for this hook, then add the new one
+      settings.hooks.PostToolUse = settings.hooks.PostToolUse.filter(e =>
+        !(e.hooks && e.hooks.some(h => h.command && h.command.includes('skip-comment-guard')))
+      );
+      settings.hooks.PostToolUse.push({
+        matcher: 'Edit|Write',
+        hooks: [{ type: 'command', command: hookCmd, timeout: 5 }]
+      });
+      fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+      console.log('CONFIGURED: skip-comment-guard PostToolUse hook (matcher: Edit|Write)');
+    " "$SETTINGS_FILE" "$SKIP_COMMENT_GUARD_CMD"
   fi
 fi
 

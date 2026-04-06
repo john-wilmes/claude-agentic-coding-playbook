@@ -1,4 +1,4 @@
-[![Test Install Script](https://github.com/YOUR_ORG/claude-agentic-coding-playbook/actions/workflows/test-install.yml/badge.svg)](https://github.com/YOUR_ORG/claude-agentic-coding-playbook/actions/workflows/test-install.yml)
+[![Test Install Script](https://github.com/john-wilmes/claude-agentic-coding-playbook/actions/workflows/test-install.yml/badge.svg)](https://github.com/john-wilmes/claude-agentic-coding-playbook/actions/workflows/test-install.yml)
 
 # Agentic Coding Playbook
 
@@ -39,8 +39,8 @@ Want to test the waters before a full install? Copy `context-guard.js` (context 
 
 ```bash
 mkdir -p ~/.claude/hooks
-curl -fsSL https://raw.githubusercontent.com/YOUR_ORG/claude-agentic-coding-playbook/master/templates/hooks/context-guard.js -o ~/.claude/hooks/context-guard.js
-curl -fsSL https://raw.githubusercontent.com/YOUR_ORG/claude-agentic-coding-playbook/master/templates/hooks/log.js -o ~/.claude/hooks/log.js
+curl -fsSL https://raw.githubusercontent.com/john-wilmes/claude-agentic-coding-playbook/master/templates/hooks/context-guard.js -o ~/.claude/hooks/context-guard.js
+curl -fsSL https://raw.githubusercontent.com/john-wilmes/claude-agentic-coding-playbook/master/templates/hooks/log.js -o ~/.claude/hooks/log.js
 chmod +x ~/.claude/hooks/context-guard.js ~/.claude/hooks/log.js
 ```
 
@@ -61,7 +61,7 @@ This gives you context window warnings after every tool call. The full install a
 ## Quick Install
 
 ```bash
-git clone https://github.com/YOUR_ORG/claude-agentic-coding-playbook.git
+git clone https://github.com/john-wilmes/claude-agentic-coding-playbook.git
 cd claude-agentic-coding-playbook
 chmod +x install.sh
 ./install.sh
@@ -70,7 +70,7 @@ chmod +x install.sh
 ### Prerequisites
 
 - **Bash on Linux or macOS** (Windows requires [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) — native CMD/PowerShell is not supported. The install script, hooks, and test suite all assume a POSIX environment.)
-- **Node.js 20+** (for hooks and test scripts)
+- **Node.js 18+** (for hooks and test scripts; Node.js 22+ is required for the knowledge system — `knowledge-db.js` uses `node:sqlite`)
 - **git** (for version control and install script)
 
 ### Install Options
@@ -148,7 +148,7 @@ CLAUDE.md rules are advisory (~50-90% compliance in our testing; published resea
 **Quality:**
 - **Post-tool verify** -- Auto-runs project tests after Edit/Write on code files with debouncing.
 - **PR review guard** -- Enforces code review before merging. Blocks `gh pr merge` until CodeRabbit has reviewed the PR.
-- **Context guard** -- Dual-mode context window monitoring. Warns at 35%/50%, advisory block at 60% (informational, not hard-blocking), failsafe sentinel at 75%.
+- **Context guard** -- Dual-mode context window monitoring. Thresholds: 35% (suggest subagents), 42% (persist unsaved findings), 57% (warn user), 60% (advisory block, writes context-high flag), 75% (failsafe sentinel for claude-loop restart).
 - **Stuck detector** -- Detects and breaks agent loops when the same action repeats.
 - **Sycophancy detector** -- Detects behavioral patterns indicating sycophancy — rubber-stamping, compliance without investigation, shallow reviews. Warns via PostToolUse advisory.
 - **Evidence/reasoning** -- `evidence-gate` blocks research synthesis steps if supporting evidence is insufficient; `rejection-advisor` surfaces alternative interpretations when the agent accepts a framing without challenge.
@@ -284,7 +284,7 @@ The wizard will:
 
 ## Documentation
 
-- **[Best Practices Guide](docs/best-practices.md)** -- the full evidence-backed guide with 59 citations (58 with direct links, 1 via indirect reference)
+- **[Best Practices Guide](docs/best-practices.md)** -- the full evidence-backed guide with 58 citations (57 with direct links, 1 via indirect reference)
 - **[Project CLAUDE.md Template](templates/project-CLAUDE.md)** -- starting point for per-project instructions
 - **[Dogfooding Guide](docs/dogfooding.md)** -- how to design and run a sustained dogfood campaign against real codebases, with a 100-task worked example
 - **[Dogfood Playbook](docs/dogfood-playbook.md)** -- manual interactive testing checklist for verifying the full user experience
@@ -341,7 +341,7 @@ The Node.js servers (MongoDB, Slack, Snowflake) share modules in `mcp-servers/sh
 - **Claude Code only**: All hooks, skills, and scripts target Claude Code. The principles in `best-practices.md` are conceptually portable to Cursor, Copilot, etc., but the tooling is not.
 - **Hook startup overhead**: 35+ hooks are installed, but not all fire on every call — active hooks add ~50-100ms per tool call. Negligible for most workflows, noticeable in rapid-fire operations.
 - **CLAUDE.md budget**: The combined profile's CLAUDE.md consumes instruction budget. Projects with large existing CLAUDE.md files may hit the ~150-200 instruction line ceiling.
-- **Node.js 20+ required**: Hooks use modern Node.js APIs (ESM-style imports, `fs.promises`, etc.).
+- **Node.js 18+ required**: Hooks use Node.js built-in modules (`fs`, `path`, `os`, `crypto`, `child_process`) with CommonJS `require()`. Node.js 22+ is required for the knowledge system (`knowledge-db.js` uses `node:sqlite`).
 - **Single maintainer**: This is a personal project, not backed by a company or large team.
 
 ## Contributing

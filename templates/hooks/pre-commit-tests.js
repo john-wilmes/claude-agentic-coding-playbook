@@ -106,8 +106,9 @@ process.stdin.on("end", () => {
 
     return respond({
       hookSpecificOutput: {
-        decision: "block",
-        reason,
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: reason,
       },
     });
   } catch {

@@ -157,10 +157,10 @@ test("4. Blocks git commit when tests last failed (within 5 min)", () => {
     assert.ok(result.json, "valid JSON");
     const hso = result.json.hookSpecificOutput;
     assert.ok(hso, "hookSpecificOutput present");
-    assert.strictEqual(hso.decision, "block", "should block when tests failed");
-    assert.ok(hso.reason, "reason present");
-    assert.ok(hso.reason.includes("known-failing"), `reason should mention known-failing, got: ${hso.reason}`);
-    assert.ok(hso.reason.includes("AssertionError"), `reason should include failure snippet, got: ${hso.reason}`);
+    assert.strictEqual(hso.permissionDecision, "deny", "should deny when tests failed");
+    assert.ok(hso.permissionDecisionReason, "permissionDecisionReason present");
+    assert.ok(hso.permissionDecisionReason.includes("known-failing"), `reason should mention known-failing, got: ${hso.permissionDecisionReason}`);
+    assert.ok(hso.permissionDecisionReason.includes("AssertionError"), `reason should include failure snippet, got: ${hso.permissionDecisionReason}`);
   } finally {
     restoreStateFile(original);
   }

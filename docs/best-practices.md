@@ -2489,8 +2489,8 @@ by dropping redundant content while preserving exact text for anything reference
 These figures are vendor-reported (Morph marketing page) and have not been
 independently verified. Morph is a commercial service; Claude Code `/compact` uses
 LLM summarization, not deletion-based compaction. A PreCompact hook exists but cannot
-modify compaction output. A PostCompact hook does not yet exist (GitHub #17237, open
-as of March 2026).
+modify compaction output. A PostCompact hook is also supported; `post-compact.js` in
+this playbook implements one, re-injecting MEMORY.md context after auto-compaction.
 
 #### The MemGPT mental model
 
@@ -2780,6 +2780,8 @@ Last updated: 2026-03-23
 48. **Context Length Penalty (arXiv:2510.05381).** https://arxiv.org/abs/2510.05381 -- Isolated length effect from retrieval quality; 13.9-85% performance degradation from input length alone; adding only relevant files still imposes a processing penalty.
 
 49. **Sclar et al. -- Prompt Format Sensitivity (ICLR 2024).** https://arxiv.org/abs/2310.11324 -- Up to 76 percentage point accuracy variation across semantically equivalent prompt formats; sensitivity persists across model sizes and instruction tuning.
+
+50. *(Reserved — citation removed; no gap in body text.)*
 
 51. **AgentSpec -- Hook-Based Agent Enforcement (arXiv:2503.18666, ICSE 2026).** https://arxiv.org/abs/2503.18666 -- Prevents >90% of unsafe agent executions with millisecond overhead; hook-based enforcement framework; specification-driven safety guarantees.
 
